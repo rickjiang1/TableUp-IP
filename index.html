@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pantry Pilot MVP</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">P</div>
+          <div>
+            <h1>Pantry Pilot</h1>
+            <p>Cook from what you have</p>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Main">
+          <button class="tab active" data-tab="scan" type="button">Scan</button>
+          <button class="tab" data-tab="storage" type="button">Storage</button>
+          <button class="tab" data-tab="recipes" type="button">Recipes</button>
+          <button class="tab" data-tab="cookable" type="button">Can Cook</button>
+        </nav>
+        <div class="sidebar-footer">
+          <button id="resetDemo" class="ghost-button" type="button">Reset demo data</button>
+        </div>
+      </aside>
+
+      <main>
+        <section id="scan" class="view active-view">
+          <div class="scan-home">
+            <div class="scan-hero">
+              <p class="eyebrow">Pantry Pilot</p>
+              <h2>Add groceries</h2>
+              <p class="hero-copy">Snap what you bought and find dinner from what is already in your kitchen.</p>
+              <div class="food-strip" aria-hidden="true">
+                <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=500&q=80" alt="">
+                <img src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=500&q=80" alt="">
+                <img src="https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=500&q=80" alt="">
+              </div>
+              <label class="camera-action">
+                <input id="photoInput" type="file" accept="image/*" capture="environment">
+                <span class="camera-icon" aria-hidden="true"></span>
+                <span class="camera-title">Take or choose photo</span>
+                <small id="photoName">No photo selected</small>
+              </label>
+              <img id="photoPreview" class="photo-preview" alt="Selected grocery photo preview" hidden>
+              <p id="scanStatus" class="scan-status" aria-live="polite">Choose a photo before extracting.</p>
+              <button id="simulateScan" class="primary-button scan-primary" type="button">Extract ingredients</button>
+            </div>
+
+            <section class="panel manual-panel">
+              <h3>Manual add</h3>
+              <form id="manualItemForm" class="stacked-form">
+                <label>Name<input name="name" required placeholder="Chicken thigh"></label>
+                <div class="form-row">
+                  <label>Quantity<input name="quantity" required type="number" min="0" step="0.01" placeholder="2.3"></label>
+                  <label>Unit<input name="unit" required placeholder="lb"></label>
+                </div>
+                <label>Location
+                  <select name="location">
+                    <option>Fridge</option>
+                    <option>Freezer</option>
+                    <option>Pantry</option>
+                    <option>Counter</option>
+                  </select>
+                </label>
+                <label>Category
+                  <select name="category">
+                    <option value="Auto">Auto categorize</option>
+                    <option>Meat</option>
+                    <option>Seafood</option>
+                    <option>Vegetable</option>
+                    <option>Fruit</option>
+                    <option>Dairy</option>
+                    <option>Grain</option>
+                    <option>Sauce</option>
+                    <option>Spice</option>
+                    <option>Other</option>
+                  </select>
+                </label>
+                <div class="form-row">
+                  <label>Enter date<input name="enteredDate" type="date"></label>
+                  <label>Expire date<input name="expireDate" type="date"></label>
+                </div>
+                <button class="primary-button" type="submit">Save item</button>
+              </form>
+            </section>
+
+            <section class="panel detected-panel">
+              <div class="section-title">
+                <h3>Detected items</h3>
+                <button id="saveDetected" class="secondary-button" type="button">Save selected</button>
+              </div>
+              <div id="detectedItems" class="item-list empty-state">Nothing scanned yet.</div>
+            </section>
+          </div>
+        </section>
+
+        <section id="storage" class="view">
+          <div class="view-header">
+            <div>
+              <p class="eyebrow">Inventory</p>
+              <h2>Your storage</h2>
+            </div>
+            <div class="summary-pill"><span id="storageCount">0</span> items</div>
+          </div>
+          <div id="storageList" class="item-list"></div>
+        </section>
+
+        <section id="recipes" class="view">
+          <div class="view-header">
+            <div>
+              <p class="eyebrow">Recipe library</p>
+              <h2>Add recipes and videos</h2>
+            </div>
+          </div>
+          <div class="tool-grid recipes-grid">
+            <section class="panel">
+              <h3>Import recipe</h3>
+              <form id="recipeForm" class="stacked-form">
+                <label>Recipe name<input name="recipeName" required placeholder="Tomato beef stir fry"></label>
+                <label>Ingredients<textarea name="ingredients" required rows="7" placeholder="300 g beef&#10;2 piece tomato&#10;1 tbsp soy sauce"></textarea></label>
+                <label>Dish image URL<input name="imageUrl" placeholder="https://images.unsplash.com/..."></label>
+                <label>Video URL<input name="videoUrl" placeholder="https://..."></label>
+                <label>Cooking steps<textarea name="steps" rows="5" placeholder="Slice beef&#10;Cook tomatoes&#10;Combine and serve"></textarea></label>
+                <button class="primary-button" type="submit">Save recipe</button>
+              </form>
+            </section>
+            <section class="panel">
+              <h3>Recipes</h3>
+              <div id="recipeList" class="recipe-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="cookable" class="view">
+          <div class="view-header">
+            <div>
+              <p class="eyebrow">Decision helper</p>
+              <h2>Dishes you can cook</h2>
+            </div>
+          </div>
+          <div id="cookableList" class="cookable-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="cookDialog">
+      <div class="dialog-header">
+        <h3 id="cookTitle">Cook recipe</h3>
+        <button id="closeCook" class="icon-button" type="button" aria-label="Close">x</button>
+      </div>
+      <div id="cookContent"></div>
+      <div class="dialog-actions">
+        <button id="confirmCook" class="primary-button" type="button">Mark cooked and subtract</button>
+      </div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
