@@ -82,7 +82,7 @@ struct ScanView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Add")
+            .scrollIndicators(.hidden)
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
             }
