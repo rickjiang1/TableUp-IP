@@ -10,6 +10,7 @@ struct ScanView: View {
     @State private var detectedItems: [DetectedIngredient] = []
     @State private var showingManualAdd = false
     @State private var showingCamera = false
+    @State private var showingDetectedItems = false
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
 
@@ -69,12 +70,6 @@ struct ScanView: View {
                     }
                     .padding()
 
-                    if !detectedItems.isEmpty {
-                        DetectedItemsView(items: detectedItems) {
-                            saveDetectedItems()
-                        }
-                    }
-
                     DisclosureGroup("Add manually", isExpanded: $showingManualAdd) {
                         ManualIngredientForm { ingredient in
                             modelContext.insert(ingredient)
@@ -94,6 +89,12 @@ struct ScanView: View {
             .sheet(isPresented: $showingCamera) {
                 ImagePicker(sourceType: .camera, imageData: $selectedImageData)
                     .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showingDetectedItems) {
+                DetectedItemsReviewView(items: $detectedItems) {
+                    saveDetectedItems()
+                    showingDetectedItems = false
+                }
             }
             .onChange(of: selectedImageData) { _, newValue in
                 if newValue != nil {
@@ -124,6 +125,7 @@ struct ScanView: View {
             let response = try await GroceryPhotoExtractor().extract(from: selectedImageData)
             detectedItems = response.items.map(\.detectedIngredient)
             scanMessage = detectedItems.isEmpty ? "No ingredients found. Try another photo." : "Review and save the detected items."
+            showingDetectedItems = !detectedItems.isEmpty
         } catch {
             detectedItems = []
             scanMessage = "Extraction failed. Make sure the backend is running."
@@ -179,37 +181,53 @@ struct DetectedIngredient: Identifiable {
     }
 }
 
-struct DetectedItemsView: View {
-    let items: [DetectedIngredient]
+struct DetectedItemsReviewView: View {
+    @Binding var items: [DetectedIngredient]
+    @Environment(\.dismiss) private var dismiss
     let save: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Detected items")
-                    .font(.headline)
-                Spacer()
-                Button("Save all", action: save)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-            }
+        NavigationStack {
+            Form {
+                ForEach($items) { $item in
+                    Section {
+                        TextField("Name", text: $item.name)
 
-            ForEach(items) { item in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .fontWeight(.semibold)
-                    Text("\(item.quantity.formatted()) \(item.unit) - \(item.location.rawValue) - \(item.category.rawValue)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        HStack {
+                            TextField("Quantity", value: $item.quantity, format: .number)
+                                .keyboardType(.decimalPad)
+                            TextField("Unit", text: $item.unit)
+                        }
+
+                        Picker("Category", selection: $item.category) {
+                            ForEach(IngredientCategory.allCases) { category in
+                                Text(category.rawValue).tag(category)
+                            }
+                        }
+
+                        Picker("Location", selection: $item.location) {
+                            ForEach(StorageLocation.allCases) { location in
+                                Text(location.rawValue).tag(location)
+                            }
+                        }
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onDelete { indexSet in
+                    items.remove(atOffsets: indexSet)
+                }
+            }
+            .navigationTitle("Review items")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .disabled(items.isEmpty)
+                }
             }
         }
-        .padding()
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
