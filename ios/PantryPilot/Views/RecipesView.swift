@@ -1,5 +1,7 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct RecipesView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,13 +15,17 @@ struct RecipesView: View {
                     NavigationLink {
                         RecipeDetailView(recipe: recipe)
                     } label: {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(recipe.name)
-                                .fontWeight(.semibold)
-                            Text(recipe.ingredients.map { "\($0.quantity.formatted()) \($0.unit) \($0.name)" }.joined(separator: " - "))
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                        HStack(spacing: 12) {
+                            RecipeThumbnail(imageData: recipe.imageData)
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(recipe.name)
+                                    .fontWeight(.semibold)
+                                Text(recipe.ingredients.map { "\($0.quantity.formatted()) \($0.unit) \($0.name)" }.joined(separator: " - "))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
                         }
                         .padding(.vertical, 4)
                     }
@@ -52,14 +58,29 @@ struct AddRecipeView: View {
     @State private var ingredientsText = "1 lb chicken thigh\n2 piece tomato\n1 tbsp soy sauce"
     @State private var stepsText = ""
     @State private var videoURL = ""
-    @State private var imageURL = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var selectedImageData: Data?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Recipe name", text: $name)
-                TextField("Image URL", text: $imageURL)
                 TextField("Video URL", text: $videoURL)
+
+                Section("Photo") {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label(selectedImageData == nil ? "Choose Photo" : "Change Photo", systemImage: "photo")
+                    }
+                    .tint(.orange)
+
+                    if let selectedImageData, let image = UIImage(data: selectedImageData) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
 
                 Section("Ingredients") {
                     TextEditor(text: $ingredientsText)
@@ -72,6 +93,9 @@ struct AddRecipeView: View {
                 }
             }
             .navigationTitle("Add Recipe")
+            .task(id: selectedPhoto) {
+                await loadSelectedPhoto()
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -102,9 +126,14 @@ struct AddRecipeView: View {
                 ingredients: ingredients,
                 steps: steps,
                 videoURL: videoURL,
-                imageURL: imageURL
+                imageData: selectedImageData
             )
         )
+    }
+
+    private func loadSelectedPhoto() async {
+        guard let selectedPhoto else { return }
+        selectedImageData = try? await selectedPhoto.loadTransferable(type: Data.self)
     }
 
     private func parseIngredientLine(_ line: String) -> RecipeIngredient? {
@@ -119,6 +148,16 @@ struct RecipeDetailView: View {
 
     var body: some View {
         List {
+            if let imageData = recipe.imageData,
+               let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .listRowInsets(EdgeInsets())
+            }
+
             Section("Ingredients") {
                 ForEach(recipe.ingredients) { ingredient in
                     Text("\(ingredient.quantity.formatted()) \(ingredient.unit) \(ingredient.name)")
@@ -138,5 +177,26 @@ struct RecipeDetailView: View {
             }
         }
         .navigationTitle(recipe.name)
+    }
+}
+
+struct RecipeThumbnail: View {
+    let imageData: Data?
+
+    var body: some View {
+        if let imageData, let image = UIImage(data: imageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 58, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            Image(systemName: "fork.knife")
+                .font(.title2)
+                .foregroundStyle(.orange)
+                .frame(width: 58, height: 58)
+                .background(Color.orange.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
     }
 }
