@@ -15,9 +15,14 @@ struct CookingModeView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section(L.text("Ingredients", language: appLanguage)) {
-                    ForEach(recipe.ingredients) { ingredient in
-                        Text("\(ingredient.quantity.formatted()) \(ingredient.unit) \(ingredient.name)")
+                ForEach(RecipeIngredientRole.allCases) { role in
+                    let ingredients = recipe.ingredients.filter { $0.role == role }
+                    if !ingredients.isEmpty {
+                        Section(role.displayName(language: appLanguage)) {
+                            ForEach(ingredients) { ingredient in
+                                Text(ingredient.displayText)
+                            }
+                        }
                     }
                 }
 

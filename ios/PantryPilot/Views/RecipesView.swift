@@ -24,7 +24,7 @@ struct RecipesView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(recipe.name)
                                     .fontWeight(.semibold)
-                                Text(recipe.ingredients.map { "\($0.quantity.formatted()) \($0.unit) \($0.name)" }.joined(separator: " - "))
+                                Text(recipe.ingredients.map(\.displayText).joined(separator: " - "))
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(2)
@@ -60,7 +60,11 @@ struct AddRecipeView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var name = ""
-    @State private var ingredientsText = "1 lb chicken thigh\n2 piece tomato\n1 tbsp soy sauce"
+    @State private var ingredientDrafts: [RecipeIngredientDraft] = [
+        RecipeIngredientDraft(name: "chicken thigh", quantity: 1, unit: "lb", role: .main),
+        RecipeIngredientDraft(name: "tomato", quantity: 2, unit: "piece", role: .secondary),
+        RecipeIngredientDraft(name: "soy sauce", quantity: 1, unit: "tbsp", role: .seasoning)
+    ]
     @State private var stepsText = ""
     @State private var videoURL = ""
     @State private var selectedPhoto: PhotosPickerItem?
@@ -103,8 +107,14 @@ struct AddRecipeView: View {
                 }
 
                 Section(L.text("Ingredients", language: appLanguage)) {
-                    TextEditor(text: $ingredientsText)
-                        .frame(minHeight: 130)
+                    ForEach(RecipeIngredientRole.allCases) { role in
+                        RecipeIngredientGroupEditor(
+                            title: role.displayName(language: appLanguage),
+                            addTitle: role.addButtonTitle(language: appLanguage),
+                            role: role,
+                            drafts: $ingredientDrafts
+                        )
+                    }
                 }
 
                 Section(L.text("Steps", language: appLanguage)) {
@@ -135,9 +145,7 @@ struct AddRecipeView: View {
     }
 
     private func saveRecipe() {
-        let ingredients = ingredientsText
-            .split(separator: "\n")
-            .compactMap { RecipeFormParser.parseIngredientLine(String($0)) }
+        let ingredients = recipeIngredients(from: ingredientDrafts)
         let steps = stepsText
             .split(separator: "\n")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -178,7 +186,7 @@ struct EditRecipeView: View {
     @Bindable var recipe: Recipe
 
     @State private var name: String
-    @State private var ingredientsText: String
+    @State private var ingredientDrafts: [RecipeIngredientDraft]
     @State private var stepsText: String
     @State private var videoURL: String
     @State private var selectedPhoto: PhotosPickerItem?
@@ -190,9 +198,7 @@ struct EditRecipeView: View {
     init(recipe: Recipe) {
         self.recipe = recipe
         _name = State(initialValue: recipe.name)
-        _ingredientsText = State(initialValue: recipe.ingredients.map {
-            "\($0.quantity.formatted()) \($0.unit) \($0.name)"
-        }.joined(separator: "\n"))
+        _ingredientDrafts = State(initialValue: recipe.ingredients.map { RecipeIngredientDraft(ingredient: $0) })
         _stepsText = State(initialValue: recipe.steps.joined(separator: "\n"))
         _videoURL = State(initialValue: recipe.videoURL)
         _selectedImageData = State(initialValue: recipe.imageData)
@@ -247,8 +253,14 @@ struct EditRecipeView: View {
                 }
 
                 Section(L.text("Ingredients", language: appLanguage)) {
-                    TextEditor(text: $ingredientsText)
-                        .frame(minHeight: 130)
+                    ForEach(RecipeIngredientRole.allCases) { role in
+                        RecipeIngredientGroupEditor(
+                            title: role.displayName(language: appLanguage),
+                            addTitle: role.addButtonTitle(language: appLanguage),
+                            role: role,
+                            drafts: $ingredientDrafts
+                        )
+                    }
                 }
 
                 Section(L.text("Steps", language: appLanguage)) {
@@ -279,9 +291,7 @@ struct EditRecipeView: View {
     }
 
     private func saveChanges() {
-        let ingredients = ingredientsText
-            .split(separator: "\n")
-            .compactMap { RecipeFormParser.parseIngredientLine(String($0)) }
+        let ingredients = recipeIngredients(from: ingredientDrafts)
         let steps = stepsText
             .split(separator: "\n")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -322,11 +332,116 @@ struct EditRecipeView: View {
     }
 }
 
-enum RecipeFormParser {
-    static func parseIngredientLine(_ line: String) -> RecipeIngredient? {
-        let parts = line.split(separator: " ", maxSplits: 2).map(String.init)
-        guard parts.count == 3, let quantity = Double(parts[0]) else { return nil }
-        return RecipeIngredient(name: parts[2], quantity: quantity, unit: parts[1])
+struct RecipeIngredientDraft: Identifiable {
+    let id: UUID
+    var name: String
+    var quantity: Double
+    var unit: String
+    var role: RecipeIngredientRole
+
+    init(
+        id: UUID = UUID(),
+        name: String = "",
+        quantity: Double = 1,
+        unit: String = IngredientUnit.piece.rawValue,
+        role: RecipeIngredientRole
+    ) {
+        self.id = id
+        self.name = name
+        self.quantity = quantity
+        self.unit = IngredientUnit.normalizedSelection(for: unit)
+        self.role = role
+    }
+
+    init(ingredient: RecipeIngredient) {
+        self.init(
+            name: ingredient.name,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            role: ingredient.role
+        )
+    }
+}
+
+struct RecipeIngredientGroupEditor: View {
+    let title: String
+    let addTitle: String
+    let role: RecipeIngredientRole
+    @Binding var drafts: [RecipeIngredientDraft]
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    private var indices: [Int] {
+        drafts.indices.filter { drafts[$0].role == role }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+
+            ForEach(indices, id: \.self) { index in
+                RecipeIngredientDraftRow(draft: $drafts[index]) {
+                    let id = drafts[index].id
+                    drafts.removeAll { $0.id == id }
+                }
+            }
+
+            Button {
+                drafts.append(RecipeIngredientDraft(role: role))
+            } label: {
+                Label(addTitle, systemImage: "plus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .tint(.orange)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+struct RecipeIngredientDraftRow: View {
+    @Binding var draft: RecipeIngredientDraft
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(L.text("Quantity", language: appLanguage), value: $draft.quantity, format: .number)
+                .keyboardType(.decimalPad)
+                .frame(width: 64)
+
+            Picker(L.text("Unit", language: appLanguage), selection: $draft.unit) {
+                ForEach(IngredientUnit.allCases) { unit in
+                    Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                }
+            }
+            .frame(width: 92)
+
+            TextField(L.text("Ingredient name", language: appLanguage), text: $draft.name)
+
+            Button(role: .destructive) {
+                remove()
+            } label: {
+                Image(systemName: "minus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+}
+
+private func recipeIngredients(from drafts: [RecipeIngredientDraft]) -> [RecipeIngredient] {
+    RecipeIngredientRole.allCases.flatMap { role in
+        drafts
+            .filter { $0.role == role }
+            .compactMap { draft in
+                let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return nil }
+                return RecipeIngredient(
+                    name: name,
+                    quantity: draft.quantity,
+                    unit: draft.unit,
+                    role: draft.role
+                )
+            }
     }
 }
 
@@ -348,9 +463,14 @@ struct RecipeDetailView: View {
                     .listRowInsets(EdgeInsets())
             }
 
-            Section(L.text("Ingredients", language: appLanguage)) {
-                ForEach(recipe.ingredients) { ingredient in
-                    Text("\(ingredient.quantity.formatted()) \(ingredient.unit) \(ingredient.name)")
+            ForEach(RecipeIngredientRole.allCases) { role in
+                let ingredients = recipe.ingredients.filter { $0.role == role }
+                if !ingredients.isEmpty {
+                    Section(role.displayName(language: appLanguage)) {
+                        ForEach(ingredients) { ingredient in
+                            Text(ingredient.displayText)
+                        }
+                    }
                 }
             }
 

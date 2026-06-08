@@ -106,7 +106,20 @@ enum L {
         "Counter": "台面",
         "Cold": "冷藏",
         "Frozen": "冷冻",
-        "Room temp": "常温"
+        "Room temp": "常温",
+        "Main ingredients": "主要食材",
+        "Secondary ingredients": "次要食材",
+        "Seasonings": "调料",
+        "Add main ingredient": "添加主要食材",
+        "Add secondary ingredient": "添加次要食材",
+        "Add seasoning": "添加调料",
+        "piece": "个",
+        "clove": "瓣",
+        "bunch": "把",
+        "bottle": "瓶",
+        "can": "罐",
+        "bag": "袋",
+        "pack": "包"
     ]
 }
 
@@ -123,6 +136,29 @@ extension StorageLocation {
 }
 
 extension StorageApproach {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
+    }
+}
+
+extension RecipeIngredientRole {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
+    }
+
+    func addButtonTitle(language: String) -> String {
+        switch self {
+        case .main:
+            return L.text("Add main ingredient", language: language)
+        case .secondary:
+            return L.text("Add secondary ingredient", language: language)
+        case .seasoning:
+            return L.text("Add seasoning", language: language)
+        }
+    }
+}
+
+extension IngredientUnit {
     func displayName(language: String) -> String {
         L.text(rawValue, language: language)
     }

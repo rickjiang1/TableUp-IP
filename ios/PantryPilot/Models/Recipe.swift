@@ -40,17 +40,41 @@ final class Recipe {
     }
 }
 
+enum RecipeIngredientRole: String, CaseIterable, Codable, Identifiable {
+    case main = "Main ingredients"
+    case secondary = "Secondary ingredients"
+    case seasoning = "Seasonings"
+
+    var id: String { rawValue }
+}
+
 @Model
 final class RecipeIngredient {
     var name: String
     var normalizedName: String
     var quantity: Double
     var unit: String
+    var roleRaw: String = RecipeIngredientRole.main.rawValue
 
-    init(name: String, quantity: Double, unit: String) {
+    init(
+        name: String,
+        quantity: Double,
+        unit: String,
+        role: RecipeIngredientRole = .main
+    ) {
         self.name = name
         self.normalizedName = IngredientNormalizer.normalizeName(name)
         self.quantity = quantity
         self.unit = IngredientNormalizer.normalizeUnit(unit)
+        self.roleRaw = role.rawValue
+    }
+
+    var role: RecipeIngredientRole {
+        get { RecipeIngredientRole(rawValue: roleRaw) ?? .main }
+        set { roleRaw = newValue.rawValue }
+    }
+
+    var displayText: String {
+        "\(quantity.formatted()) \(unit) \(name)"
     }
 }

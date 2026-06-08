@@ -8,7 +8,11 @@ struct IngredientDetailView: View {
         Form {
             Section(L.text("Ingredient", language: appLanguage)) {
                 TextField(L.text("Name", language: appLanguage), text: $ingredient.name)
-                TextField(L.text("Unit", language: appLanguage), text: $ingredient.unit)
+                Picker(L.text("Unit", language: appLanguage), selection: $ingredient.unit) {
+                    ForEach(IngredientUnit.allCases) { unit in
+                        Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                    }
+                }
                 TextField(L.text("Quantity", language: appLanguage), value: $ingredient.quantity, format: .number)
                     .keyboardType(.decimalPad)
             }
@@ -48,6 +52,9 @@ struct IngredientDetailView: View {
         .navigationTitle(ingredient.name)
         .onChange(of: ingredient.name) { _, newValue in
             ingredient.normalizedName = IngredientNormalizer.normalizeName(newValue)
+        }
+        .onAppear {
+            ingredient.unit = IngredientUnit.normalizedSelection(for: ingredient.unit)
         }
         .onChange(of: ingredient.categoryRaw) { _, _ in
             refreshExpireDate()

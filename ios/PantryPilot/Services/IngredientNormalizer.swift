@@ -22,7 +22,12 @@ enum IngredientNormalizer {
         "milliliters": "ml",
         "milliliter": "ml",
         "liters": "l",
-        "liter": "l"
+        "liter": "l",
+        "bottles": "bottle",
+        "cans": "can",
+        "bags": "bag",
+        "packs": "pack",
+        "packages": "pack"
     ]
 
     static func normalizeName(_ value: String) -> String {
@@ -53,5 +58,31 @@ enum IngredientNormalizer {
         return keywords.first { _, words in
             words.contains { normalized.contains($0) }
         }?.key ?? .other
+    }
+}
+
+enum IngredientUnit: String, CaseIterable, Identifiable {
+    case piece
+    case g
+    case kg
+    case lb
+    case oz
+    case ml
+    case l
+    case tsp
+    case tbsp
+    case cup
+    case clove
+    case bunch
+    case bottle
+    case can
+    case bag
+    case pack
+
+    var id: String { rawValue }
+
+    static func normalizedSelection(for value: String) -> String {
+        let normalized = IngredientNormalizer.normalizeUnit(value)
+        return allCases.contains { $0.rawValue == normalized } ? normalized : Self.piece.rawValue
     }
 }

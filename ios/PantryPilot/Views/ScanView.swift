@@ -218,14 +218,14 @@ struct DetectedIngredient: Identifiable {
         StoredIngredient(
             name: name,
             quantity: quantity,
-            unit: unit,
+            unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
             location: location
         )
     }
 
     var displayName: String {
-        "\(name) (\(quantity.formatted()) \(unit))"
+        "\(name) (\(quantity.formatted()) \(IngredientUnit.normalizedSelection(for: unit)))"
     }
 }
 
@@ -245,7 +245,12 @@ struct DetectedItemsReviewView: View {
                         HStack {
                             TextField(L.text("Quantity", language: appLanguage), value: $item.quantity, format: .number)
                                 .keyboardType(.decimalPad)
-                            TextField(L.text("Unit", language: appLanguage), text: $item.unit)
+                            Picker(L.text("Unit", language: appLanguage), selection: $item.unit) {
+                                ForEach(IngredientUnit.allCases) { unit in
+                                    Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                                }
+                            }
+                            .labelsHidden()
                         }
 
                         Picker(L.text("Category", language: appLanguage), selection: $item.category) {
@@ -263,6 +268,11 @@ struct DetectedItemsReviewView: View {
                 }
                 .onDelete { indexSet in
                     items.remove(atOffsets: indexSet)
+                }
+            }
+            .onAppear {
+                for index in items.indices {
+                    items[index].unit = IngredientUnit.normalizedSelection(for: items[index].unit)
                 }
             }
             .navigationTitle(L.text("Review items", language: appLanguage))

@@ -21,8 +21,12 @@ struct ManualIngredientForm: View {
                 TextField(L.text("Quantity", language: appLanguage), value: $quantity, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .keyboardType(.decimalPad)
-                TextField(L.text("Unit", language: appLanguage), text: $unit)
-                    .textFieldStyle(.roundedBorder)
+                Picker(L.text("Unit", language: appLanguage), selection: $unit) {
+                    ForEach(IngredientUnit.allCases) { unit in
+                        Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                    }
+                }
+                .labelsHidden()
             }
 
             Picker(L.text("Category", language: appLanguage), selection: $category) {
