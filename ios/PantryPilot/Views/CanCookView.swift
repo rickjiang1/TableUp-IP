@@ -5,7 +5,6 @@ struct CanCookView: View {
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @Query private var ingredients: [StoredIngredient]
     @Query private var recipes: [Recipe]
-    @State private var selectedRecipe: Recipe?
 
     private var assessments: [CookAssessment] {
         recipes.map { RecipeMatcher.assess(recipe: $0, inventory: ingredients) }
@@ -36,8 +35,10 @@ struct CanCookView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(ready, id: \.recipe.id) { assessment in
-                            CookAssessmentRow(assessment: assessment) {
-                                selectedRecipe = assessment.recipe
+                            NavigationLink {
+                                RecipeDetailView(recipe: assessment.recipe)
+                            } label: {
+                                CookAssessmentRow(assessment: assessment)
                             }
                         }
                     }
@@ -49,15 +50,16 @@ struct CanCookView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(almostReady, id: \.recipe.id) { assessment in
-                            CookAssessmentRow(assessment: assessment)
+                            NavigationLink {
+                                RecipeDetailView(recipe: assessment.recipe)
+                            } label: {
+                                CookAssessmentRow(assessment: assessment)
+                            }
                         }
                     }
                 }
             }
             .navigationTitle("Can Cook")
-            .sheet(item: $selectedRecipe) { recipe in
-                CookingModeView(recipe: recipe)
-            }
         }
     }
 }
@@ -84,7 +86,6 @@ struct SummaryTile: View {
 
 struct CookAssessmentRow: View {
     let assessment: CookAssessment
-    var openCookingMode: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -113,12 +114,6 @@ struct CookAssessmentRow: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            if let openCookingMode, assessment.canCook {
-                Button("Open cooking mode", action: openCookingMode)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
             }
         }
         .padding(.vertical, 6)
