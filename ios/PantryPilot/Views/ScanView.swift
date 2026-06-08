@@ -5,6 +5,7 @@ import UIKit
 
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
@@ -72,7 +73,7 @@ struct ScanView: View {
                     }
                     .padding()
 
-                    DisclosureGroup("Add manually", isExpanded: $showingManualAdd) {
+                    DisclosureGroup(L.text("Add manually", language: appLanguage), isExpanded: $showingManualAdd) {
                         ManualIngredientForm { ingredient in
                             modelContext.insert(ingredient)
                             try? modelContext.save()
@@ -103,16 +104,16 @@ struct ScanView: View {
             }
             .alert(item: $saveConfirmation) { confirmation in
                 Alert(
-                    title: Text("Saved"),
+                    title: Text(L.text("Saved", language: appLanguage)),
                     message: Text(confirmation.message),
-                    dismissButton: .default(Text("OK"))
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
             .alert(item: $extractionError) { error in
                 Alert(
-                    title: Text("Extraction failed"),
+                    title: Text(L.text("Extraction failed", language: appLanguage)),
                     message: Text(error.message),
-                    dismissButton: .default(Text("OK"))
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
             .onChange(of: selectedImageData) { _, newValue in
@@ -231,6 +232,7 @@ struct DetectedIngredient: Identifiable {
 struct DetectedItemsReviewView: View {
     @Binding var items: [DetectedIngredient]
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let save: () -> Void
 
     var body: some View {
@@ -238,21 +240,21 @@ struct DetectedItemsReviewView: View {
             Form {
                 ForEach($items) { $item in
                     Section {
-                        TextField("Name", text: $item.name)
+                        TextField(L.text("Name", language: appLanguage), text: $item.name)
 
                         HStack {
-                            TextField("Quantity", value: $item.quantity, format: .number)
+                            TextField(L.text("Quantity", language: appLanguage), value: $item.quantity, format: .number)
                                 .keyboardType(.decimalPad)
-                            TextField("Unit", text: $item.unit)
+                            TextField(L.text("Unit", language: appLanguage), text: $item.unit)
                         }
 
-                        Picker("Category", selection: $item.category) {
+                        Picker(L.text("Category", language: appLanguage), selection: $item.category) {
                             ForEach(IngredientCategory.allCases) { category in
                                 Text(category.rawValue).tag(category)
                             }
                         }
 
-                        Picker("Location", selection: $item.location) {
+                        Picker(L.text("Location", language: appLanguage), selection: $item.location) {
                             ForEach(StorageLocation.allCases) { location in
                                 Text(location.rawValue).tag(location)
                             }
@@ -263,14 +265,14 @@ struct DetectedItemsReviewView: View {
                     items.remove(atOffsets: indexSet)
                 }
             }
-            .navigationTitle("Review items")
+            .navigationTitle(L.text("Review items", language: appLanguage))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(L.text("Cancel", language: appLanguage)) { dismiss() }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(L.text("Save", language: appLanguage)) { save() }
                         .fontWeight(.semibold)
                         .disabled(items.isEmpty)
                 }

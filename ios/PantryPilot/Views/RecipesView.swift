@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 struct RecipesView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var showingAddRecipe = false
 
@@ -39,7 +40,7 @@ struct RecipesView: View {
                     }
                 }
             }
-            .navigationTitle("Recipes")
+            .navigationTitle(L.text("Recipes", language: appLanguage))
             .toolbar {
                 Button {
                     showingAddRecipe = true
@@ -57,6 +58,7 @@ struct RecipesView: View {
 struct AddRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var name = ""
     @State private var ingredientsText = "1 lb chicken thigh\n2 piece tomato\n1 tbsp soy sauce"
     @State private var stepsText = ""
@@ -70,12 +72,12 @@ struct AddRecipeView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Recipe name", text: $name)
-                TextField("Video URL", text: $videoURL)
+                TextField(L.text("Recipe name", language: appLanguage), text: $name)
+                TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
 
-                Section("Photo") {
+                Section(L.text("Photo", language: appLanguage)) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label(selectedImageData == nil ? "Choose Photo" : "Change Photo", systemImage: "photo")
+                        Label(L.text(selectedImageData == nil ? "Choose Photo" : "Change Photo", language: appLanguage), systemImage: "photo")
                     }
                     .tint(.orange)
 
@@ -88,29 +90,29 @@ struct AddRecipeView: View {
                     }
                 }
 
-                Section("Video") {
+                Section(L.text("Video", language: appLanguage)) {
                     PhotosPicker(selection: $selectedVideo, matching: .videos) {
-                        Label(selectedVideoFileName.isEmpty ? "Choose Video" : "Change Video", systemImage: "video")
+                        Label(L.text(selectedVideoFileName.isEmpty ? "Choose Video" : "Change Video", language: appLanguage), systemImage: "video")
                     }
                     .tint(.orange)
 
                     if !selectedVideoFileName.isEmpty {
-                        Label("Video selected", systemImage: "checkmark.circle.fill")
+                        Label(L.text("Video selected", language: appLanguage), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     }
                 }
 
-                Section("Ingredients") {
+                Section(L.text("Ingredients", language: appLanguage)) {
                     TextEditor(text: $ingredientsText)
                         .frame(minHeight: 130)
                 }
 
-                Section("Steps") {
+                Section(L.text("Steps", language: appLanguage)) {
                     TextEditor(text: $stepsText)
                         .frame(minHeight: 100)
                 }
             }
-            .navigationTitle("Add Recipe")
+            .navigationTitle(L.text("Add Recipe", language: appLanguage))
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
             }
@@ -119,10 +121,10 @@ struct AddRecipeView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(L.text("Cancel", language: appLanguage)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(L.text("Save", language: appLanguage)) {
                         saveRecipe()
                         dismiss()
                     }
@@ -172,6 +174,7 @@ struct AddRecipeView: View {
 struct EditRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Bindable var recipe: Recipe
 
     @State private var name: String
@@ -200,12 +203,12 @@ struct EditRecipeView: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Recipe name", text: $name)
-                TextField("Video URL", text: $videoURL)
+                TextField(L.text("Recipe name", language: appLanguage), text: $name)
+                TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
 
-                Section("Photo") {
+                Section(L.text("Photo", language: appLanguage)) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        Label(selectedImageData == nil ? "Choose Photo" : "Change Photo", systemImage: "photo")
+                        Label(L.text(selectedImageData == nil ? "Choose Photo" : "Change Photo", language: appLanguage), systemImage: "photo")
                     }
                     .tint(.orange)
 
@@ -216,24 +219,24 @@ struct EditRecipeView: View {
                             .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 220)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                        Button("Remove Photo", role: .destructive) {
+                        Button(L.text("Remove Photo", language: appLanguage), role: .destructive) {
                             self.selectedImageData = nil
                             self.selectedImageThumbnailData = nil
                         }
                     }
                 }
 
-                Section("Video") {
+                Section(L.text("Video", language: appLanguage)) {
                     PhotosPicker(selection: $selectedVideo, matching: .videos) {
-                        Label(selectedVideoFileName.isEmpty ? "Choose Video" : "Change Video", systemImage: "video")
+                        Label(L.text(selectedVideoFileName.isEmpty ? "Choose Video" : "Change Video", language: appLanguage), systemImage: "video")
                     }
                     .tint(.orange)
 
                     if !selectedVideoFileName.isEmpty || recipe.videoData != nil {
-                        Label("Video selected", systemImage: "checkmark.circle.fill")
+                        Label(L.text("Video selected", language: appLanguage), systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
 
-                        Button("Remove Video", role: .destructive) {
+                        Button(L.text("Remove Video", language: appLanguage), role: .destructive) {
                             if !selectedVideoFileName.isEmpty {
                                 RecipeMediaStore.deleteVideo(fileName: selectedVideoFileName)
                             }
@@ -243,17 +246,17 @@ struct EditRecipeView: View {
                     }
                 }
 
-                Section("Ingredients") {
+                Section(L.text("Ingredients", language: appLanguage)) {
                     TextEditor(text: $ingredientsText)
                         .frame(minHeight: 130)
                 }
 
-                Section("Steps") {
+                Section(L.text("Steps", language: appLanguage)) {
                     TextEditor(text: $stepsText)
                         .frame(minHeight: 100)
                 }
             }
-            .navigationTitle("Edit Recipe")
+            .navigationTitle(L.text("Edit Recipe", language: appLanguage))
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
             }
@@ -262,10 +265,10 @@ struct EditRecipeView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(L.text("Cancel", language: appLanguage)) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(L.text("Save", language: appLanguage)) {
                         saveChanges()
                         dismiss()
                     }
@@ -329,6 +332,7 @@ enum RecipeFormParser {
 
 struct RecipeDetailView: View {
     @Bindable var recipe: Recipe
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var showingEditRecipe = false
     @State private var showingCookingMode = false
 
@@ -344,20 +348,20 @@ struct RecipeDetailView: View {
                     .listRowInsets(EdgeInsets())
             }
 
-            Section("Ingredients") {
+            Section(L.text("Ingredients", language: appLanguage)) {
                 ForEach(recipe.ingredients) { ingredient in
                     Text("\(ingredient.quantity.formatted()) \(ingredient.unit) \(ingredient.name)")
                 }
             }
 
-            Section("Steps") {
+            Section(L.text("Steps", language: appLanguage)) {
                 ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, step in
                     Text("\(index + 1). \(step)")
                 }
             }
 
             if recipe.videoURL.isEmpty == false || recipe.videoData != nil || recipe.videoFileURL != nil {
-                Section("Video") {
+                Section(L.text("Video", language: appLanguage)) {
                     if let videoURL = recipe.videoFileURL {
                         RecipeVideoPlayer(videoURL: videoURL)
                             .frame(height: 220)
@@ -368,7 +372,7 @@ struct RecipeDetailView: View {
 
                     if let url = URL(string: recipe.videoURL), !recipe.videoURL.isEmpty {
                         Link(destination: url) {
-                            Label("Open video URL", systemImage: "play.rectangle")
+                            Label(L.text("Open video URL", language: appLanguage), systemImage: "play.rectangle")
                         }
                     } else if !recipe.videoURL.isEmpty {
                         Text(recipe.videoURL)
@@ -380,11 +384,11 @@ struct RecipeDetailView: View {
         .navigationTitle(recipe.name)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button("Cook") {
+                Button(L.text("Cook", language: appLanguage)) {
                     showingCookingMode = true
                 }
 
-                Button("Edit") {
+                Button(L.text("Edit", language: appLanguage)) {
                     showingEditRecipe = true
                 }
             }

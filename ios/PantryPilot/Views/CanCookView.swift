@@ -2,6 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct CanCookView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @Query private var ingredients: [StoredIngredient]
     @Query private var recipes: [Recipe]
@@ -23,15 +24,15 @@ struct CanCookView: View {
             List {
                 Section {
                     HStack {
-                        SummaryTile(value: ready.count, label: "dishes ready")
-                        SummaryTile(value: almostReady.count, label: "almost there")
+                        SummaryTile(value: ready.count, label: L.text("dishes ready", language: appLanguage))
+                        SummaryTile(value: almostReady.count, label: L.text("almost there", language: appLanguage))
                     }
                     .listRowSeparator(.hidden)
                 }
 
-                Section("Ready to cook") {
+                Section(L.text("Ready to cook", language: appLanguage)) {
                     if ready.isEmpty {
-                        Text("No full matches yet.")
+                        Text(L.text("No full matches yet.", language: appLanguage))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(ready, id: \.recipe.id) { assessment in
@@ -44,9 +45,9 @@ struct CanCookView: View {
                     }
                 }
 
-                Section("Almost there") {
+                Section(L.text("Almost there", language: appLanguage)) {
                     if almostReady.isEmpty {
-                        Text("No \(Int(threshold * 100))%+ matches yet.")
+                        Text(emptyAlmostReadyText)
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(almostReady, id: \.recipe.id) { assessment in
@@ -59,8 +60,15 @@ struct CanCookView: View {
                     }
                 }
             }
-            .navigationTitle("Can Cook")
+            .navigationTitle(L.text("Can Cook", language: appLanguage))
         }
+    }
+
+    private var emptyAlmostReadyText: String {
+        if appLanguage == AppLanguage.chinese.rawValue {
+            return "还没有 \(Int(threshold * 100))%+ 匹配的食谱。"
+        }
+        return "No \(Int(threshold * 100))%+ matches yet."
     }
 }
 
@@ -86,6 +94,7 @@ struct SummaryTile: View {
 
 struct CookAssessmentRow: View {
     let assessment: CookAssessment
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -93,7 +102,7 @@ struct CookAssessmentRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(assessment.recipe.name)
                         .fontWeight(.semibold)
-                    Text("\(Int(assessment.matchRatio * 100))% ingredients")
+                    Text("\(Int(assessment.matchRatio * 100))% \(L.text("Ingredients", language: appLanguage).lowercased())")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -101,7 +110,7 @@ struct CookAssessmentRow: View {
                 Spacer()
 
                 if assessment.canCook {
-                    Text("Ready")
+                    Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.green)
@@ -110,7 +119,7 @@ struct CookAssessmentRow: View {
 
             if !assessment.missing.isEmpty {
                 ForEach(assessment.missing) { missing in
-                    Text("Missing \(missing.shortage.formatted()) \(missing.unit) \(missing.name), have \(missing.available.formatted())")
+                    Text("\(L.text("Missing", language: appLanguage)) \(missing.shortage.formatted()) \(missing.unit) \(missing.name), \(L.text("have", language: appLanguage)) \(missing.available.formatted())")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

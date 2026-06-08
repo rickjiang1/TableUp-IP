@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ManualIngredientForm: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var name = ""
     @State private var quantity = 1.0
     @State private var unit = "piece"
@@ -13,33 +14,33 @@ struct ManualIngredientForm: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            TextField("Ingredient name", text: $name)
+            TextField(L.text("Ingredient name", language: appLanguage), text: $name)
                 .textFieldStyle(.roundedBorder)
 
             HStack {
-                TextField("Quantity", value: $quantity, format: .number)
+                TextField(L.text("Quantity", language: appLanguage), value: $quantity, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .keyboardType(.decimalPad)
-                TextField("Unit", text: $unit)
+                TextField(L.text("Unit", language: appLanguage), text: $unit)
                     .textFieldStyle(.roundedBorder)
             }
 
-            Picker("Category", selection: $category) {
+            Picker(L.text("Category", language: appLanguage), selection: $category) {
                 ForEach(IngredientCategory.allCases) { category in
                     Text(category.rawValue).tag(category)
                 }
             }
 
-            Picker("Location", selection: $location) {
+            Picker(L.text("Location", language: appLanguage), selection: $location) {
                 ForEach(StorageLocation.allCases) { location in
                     Text(location.rawValue).tag(location)
                 }
             }
 
-            DatePicker("Enter date", selection: $enteredDate, displayedComponents: .date)
-            DatePicker("Expire date", selection: $expireDate, displayedComponents: .date)
+            DatePicker(L.text("Enter date", language: appLanguage), selection: $enteredDate, displayedComponents: .date)
+            DatePicker(L.text("Expire date", language: appLanguage), selection: $expireDate, displayedComponents: .date)
 
-            Button("Save item") {
+            Button(L.text("Save item", language: appLanguage)) {
                 guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 onSave(
                     StoredIngredient(

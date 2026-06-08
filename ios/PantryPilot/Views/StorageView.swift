@@ -3,6 +3,7 @@ import SwiftUI
 
 struct StorageView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
 
     var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
@@ -32,13 +33,14 @@ struct StorageView: View {
                     }
                 }
             }
-            .navigationTitle("Storage")
+            .navigationTitle(L.text("Storage", language: appLanguage))
         }
     }
 }
 
 struct IngredientRow: View {
     let ingredient: StoredIngredient
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
 
     private var expirationState: ExpirationState {
@@ -59,12 +61,12 @@ struct IngredientRow: View {
             }
 
             HStack(spacing: 8) {
-                Text("\(ingredient.location.rawValue) - expires \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("\(ingredient.location.rawValue) - \(L.text("expires", language: appLanguage)) \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
                 if let badge = expirationState.badgeText {
-                    Text(badge)
+                    Text(L.text(badge, language: appLanguage))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(expirationState.foregroundColor)
                         .padding(.horizontal, 8)
@@ -77,7 +79,7 @@ struct IngredientRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     ForEach(StorageAdvisor.recommendations(for: ingredient)) { recommendation in
-                        Text("\(recommendation.approach.rawValue): \(recommendation.expireDate.formatted(date: .numeric, time: .omitted))\(recommendation.isRecommended ? " best" : "")")
+                        Text("\(recommendation.approach.rawValue): \(recommendation.expireDate.formatted(date: .numeric, time: .omitted))\(recommendation.isRecommended ? " \(L.text("best", language: appLanguage))" : "")")
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
