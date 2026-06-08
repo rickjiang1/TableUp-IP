@@ -27,13 +27,13 @@ struct ManualIngredientForm: View {
 
             Picker(L.text("Category", language: appLanguage), selection: $category) {
                 ForEach(IngredientCategory.allCases) { category in
-                    Text(category.rawValue).tag(category)
+                    Text(category.displayName(language: appLanguage)).tag(category)
                 }
             }
 
             Picker(L.text("Location", language: appLanguage), selection: $location) {
                 ForEach(StorageLocation.allCases) { location in
-                    Text(location.rawValue).tag(location)
+                    Text(location.displayName(language: appLanguage)).tag(location)
                 }
             }
 
@@ -60,5 +60,25 @@ struct ManualIngredientForm: View {
             .buttonStyle(.borderedProminent)
             .tint(.orange)
         }
+        .onAppear {
+            refreshExpireDate()
+        }
+        .onChange(of: category) { _, _ in
+            refreshExpireDate()
+        }
+        .onChange(of: location) { _, _ in
+            refreshExpireDate()
+        }
+        .onChange(of: enteredDate) { _, _ in
+            refreshExpireDate()
+        }
+    }
+
+    private func refreshExpireDate() {
+        expireDate = StorageAdvisor.estimatedExpireDate(
+            category: category,
+            location: location,
+            enteredDate: enteredDate
+        )
     }
 }

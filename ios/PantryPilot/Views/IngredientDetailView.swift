@@ -16,13 +16,13 @@ struct IngredientDetailView: View {
             Section(L.text("Storage", language: appLanguage)) {
                 Picker(L.text("Category", language: appLanguage), selection: $ingredient.categoryRaw) {
                     ForEach(IngredientCategory.allCases) { category in
-                        Text(category.rawValue).tag(category.rawValue)
+                        Text(category.displayName(language: appLanguage)).tag(category.rawValue)
                     }
                 }
 
                 Picker(L.text("Location", language: appLanguage), selection: $ingredient.locationRaw) {
                     ForEach(StorageLocation.allCases) { location in
-                        Text(location.rawValue).tag(location.rawValue)
+                        Text(location.displayName(language: appLanguage)).tag(location.rawValue)
                     }
                 }
 
@@ -33,7 +33,7 @@ struct IngredientDetailView: View {
             Section(L.text("Recommended storage", language: appLanguage)) {
                 ForEach(StorageAdvisor.recommendations(for: ingredient)) { recommendation in
                     HStack {
-                        Text(recommendation.approach.rawValue)
+                        Text(recommendation.approach.displayName(language: appLanguage))
                         Spacer()
                         Text(recommendation.expireDate.formatted(date: .abbreviated, time: .omitted))
                         if recommendation.isRecommended {
@@ -49,5 +49,22 @@ struct IngredientDetailView: View {
         .onChange(of: ingredient.name) { _, newValue in
             ingredient.normalizedName = IngredientNormalizer.normalizeName(newValue)
         }
+        .onChange(of: ingredient.categoryRaw) { _, _ in
+            refreshExpireDate()
+        }
+        .onChange(of: ingredient.locationRaw) { _, _ in
+            refreshExpireDate()
+        }
+        .onChange(of: ingredient.enteredDate) { _, _ in
+            refreshExpireDate()
+        }
+    }
+
+    private func refreshExpireDate() {
+        ingredient.expireDate = StorageAdvisor.estimatedExpireDate(
+            category: ingredient.category,
+            location: ingredient.location,
+            enteredDate: ingredient.enteredDate
+        )
     }
 }

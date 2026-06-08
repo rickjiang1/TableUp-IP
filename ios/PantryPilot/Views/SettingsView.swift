@@ -90,8 +90,42 @@ enum L {
         "Use": "使用",
         "Left": "剩余",
         "Cooked": "已烹饪",
-        "Close": "关闭"
+        "Close": "关闭",
+        "Meat": "肉类",
+        "Seafood": "海鲜",
+        "Vegetable": "蔬菜",
+        "Fruit": "水果",
+        "Dairy": "乳制品",
+        "Grain": "谷物",
+        "Sauce": "酱料",
+        "Spice": "香料",
+        "Other": "其他",
+        "Fridge": "冷藏",
+        "Freezer": "冷冻",
+        "Pantry": "食品柜",
+        "Counter": "台面",
+        "Cold": "冷藏",
+        "Frozen": "冷冻",
+        "Room temp": "常温"
     ]
+}
+
+extension IngredientCategory {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
+    }
+}
+
+extension StorageLocation {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
+    }
+}
+
+extension StorageApproach {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
+    }
 }
 
 struct SettingsView: View {

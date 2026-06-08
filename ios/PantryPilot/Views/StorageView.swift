@@ -17,7 +17,7 @@ struct StorageView: View {
         NavigationStack {
             List {
                 ForEach(groupedIngredients, id: \.0) { category, items in
-                    Section(category.rawValue) {
+                    Section(category.displayName(language: appLanguage)) {
                         ForEach(items) { ingredient in
                             NavigationLink {
                                 IngredientDetailView(ingredient: ingredient)
@@ -61,7 +61,7 @@ struct IngredientRow: View {
             }
 
             HStack(spacing: 8) {
-                Text("\(ingredient.location.rawValue) - \(L.text("expires", language: appLanguage)) \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("\(ingredient.location.displayName(language: appLanguage)) - \(L.text("expires", language: appLanguage)) \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -79,7 +79,7 @@ struct IngredientRow: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
                     ForEach(StorageAdvisor.recommendations(for: ingredient)) { recommendation in
-                        Text("\(recommendation.approach.rawValue): \(recommendation.expireDate.formatted(date: .numeric, time: .omitted))\(recommendation.isRecommended ? " \(L.text("best", language: appLanguage))" : "")")
+                        Text("\(recommendation.approach.displayName(language: appLanguage)): \(recommendation.expireDate.formatted(date: .numeric, time: .omitted))\(recommendation.isRecommended ? " \(L.text("best", language: appLanguage))" : "")")
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)

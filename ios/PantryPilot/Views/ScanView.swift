@@ -250,13 +250,13 @@ struct DetectedItemsReviewView: View {
 
                         Picker(L.text("Category", language: appLanguage), selection: $item.category) {
                             ForEach(IngredientCategory.allCases) { category in
-                                Text(category.rawValue).tag(category)
+                                Text(category.displayName(language: appLanguage)).tag(category)
                             }
                         }
 
                         Picker(L.text("Location", language: appLanguage), selection: $item.location) {
                             ForEach(StorageLocation.allCases) { location in
-                                Text(location.rawValue).tag(location)
+                                Text(location.displayName(language: appLanguage)).tag(location)
                             }
                         }
                     }
