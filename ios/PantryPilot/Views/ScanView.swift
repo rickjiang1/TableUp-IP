@@ -12,6 +12,7 @@ struct ScanView: View {
     @State private var showingCamera = false
     @State private var showingDetectedItems = false
     @State private var saveConfirmation: SaveConfirmation?
+    @State private var extractionError: ExtractionErrorMessage?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
 
@@ -107,6 +108,13 @@ struct ScanView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
+            .alert(item: $extractionError) { error in
+                Alert(
+                    title: Text("Extraction failed"),
+                    message: Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
             .onChange(of: selectedImageData) { _, newValue in
                 if newValue != nil {
                     scanMessage = "Photo ready."
@@ -142,7 +150,9 @@ struct ScanView: View {
             showingDetectedItems = !detectedItems.isEmpty
         } catch {
             detectedItems = []
-            scanMessage = "Extraction failed. Make sure the backend is running."
+            let message = error.localizedDescription
+            scanMessage = "Extraction failed."
+            extractionError = ExtractionErrorMessage(message: message)
         }
 
         isExtracting = false
@@ -171,6 +181,11 @@ struct SaveConfirmation: Identifiable {
     var message: String {
         items.isEmpty ? "Nothing was saved." : items.joined(separator: "\n")
     }
+}
+
+struct ExtractionErrorMessage: Identifiable {
+    let id = UUID()
+    let message: String
 }
 
 struct PhotoAddButton: View {

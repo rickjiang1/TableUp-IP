@@ -20,12 +20,20 @@ struct GroceryPhotoExtractor {
         )
 
         let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
-            throw GroceryPhotoExtractorError.badResponse
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GroceryPhotoExtractorError.badResponse("Backend did not return an HTTP response.")
         }
 
-        return try JSONDecoder().decode(GroceryPhotoExtractionResponse.self, from: data)
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "No response body."
+            throw GroceryPhotoExtractorError.badResponse("Backend returned \(httpResponse.statusCode): \(message)")
+        }
+
+        do {
+            return try JSONDecoder().decode(GroceryPhotoExtractionResponse.self, from: data)
+        } catch {
+            throw GroceryPhotoExtractorError.badResponse("Could not read backend response: \(error.localizedDescription)")
+        }
     }
 
     private func makeMultipartBody(
@@ -47,7 +55,13 @@ struct GroceryPhotoExtractor {
 
 enum BackendConfiguration {
     static var baseURL: URL {
-        if let value = Bundle.main.object(forInfoDictionaryKey: "BackendBaseURL") as? String,
+        #if targetEnvironment(simulator)
+        let key = "BackendBaseURLSimulator"
+        #else
+        let key = "BackendBaseURLDevice"
+        #endif
+
+        if let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
            let url = URL(string: value) {
             return url
         }
@@ -56,8 +70,15 @@ enum BackendConfiguration {
     }
 }
 
-enum GroceryPhotoExtractorError: Error {
-    case badResponse
+enum GroceryPhotoExtractorError: LocalizedError {
+    case badResponse(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .badResponse(let message):
+            message
+        }
+    }
 }
 
 struct GroceryPhotoExtractionResponse: Decodable {
