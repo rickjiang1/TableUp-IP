@@ -8,6 +8,7 @@ final class Recipe {
     var videoURL: String
     var imageURL: String
     @Attribute(.externalStorage) var imageData: Data?
+    @Attribute(.externalStorage) var videoData: Data?
     var createdAt: Date
 
     @Relationship(deleteRule: .cascade)
@@ -19,7 +20,8 @@ final class Recipe {
         steps: [String] = [],
         videoURL: String = "",
         imageURL: String = "",
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        videoData: Data? = nil
     ) {
         self.name = name
         self.ingredients = ingredients
@@ -27,6 +29,7 @@ final class Recipe {
         self.videoURL = videoURL
         self.imageURL = imageURL
         self.imageData = imageData
+        self.videoData = videoData
         self.createdAt = .now
     }
 }

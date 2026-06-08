@@ -1,3 +1,4 @@
+import AVKit
 import PhotosUI
 import SwiftData
 import SwiftUI
@@ -60,6 +61,8 @@ struct AddRecipeView: View {
     @State private var videoURL = ""
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
+    @State private var selectedVideo: PhotosPickerItem?
+    @State private var selectedVideoData: Data?
 
     var body: some View {
         NavigationStack {
@@ -82,6 +85,18 @@ struct AddRecipeView: View {
                     }
                 }
 
+                Section("Video") {
+                    PhotosPicker(selection: $selectedVideo, matching: .videos) {
+                        Label(selectedVideoData == nil ? "Choose Video" : "Change Video", systemImage: "video")
+                    }
+                    .tint(.orange)
+
+                    if selectedVideoData != nil {
+                        Label("Video selected", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+
                 Section("Ingredients") {
                     TextEditor(text: $ingredientsText)
                         .frame(minHeight: 130)
@@ -95,6 +110,9 @@ struct AddRecipeView: View {
             .navigationTitle("Add Recipe")
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
+            }
+            .task(id: selectedVideo) {
+                await loadSelectedVideo()
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -126,7 +144,8 @@ struct AddRecipeView: View {
                 ingredients: ingredients,
                 steps: steps,
                 videoURL: videoURL,
-                imageData: selectedImageData
+                imageData: selectedImageData,
+                videoData: selectedVideoData
             )
         )
     }
@@ -134,6 +153,11 @@ struct AddRecipeView: View {
     private func loadSelectedPhoto() async {
         guard let selectedPhoto else { return }
         selectedImageData = try? await selectedPhoto.loadTransferable(type: Data.self)
+    }
+
+    private func loadSelectedVideo() async {
+        guard let selectedVideo else { return }
+        selectedVideoData = try? await selectedVideo.loadTransferable(type: Data.self)
     }
 
     private func parseIngredientLine(_ line: String) -> RecipeIngredient? {
@@ -170,13 +194,61 @@ struct RecipeDetailView: View {
                 }
             }
 
-            if !recipe.videoURL.isEmpty {
+            if recipe.videoData != nil || !recipe.videoURL.isEmpty {
                 Section("Video") {
-                    Text(recipe.videoURL)
+                    if let videoData = recipe.videoData {
+                        RecipeVideoPlayer(videoData: videoData)
+                            .frame(height: 220)
+                    }
+
+                    if let url = URL(string: recipe.videoURL), !recipe.videoURL.isEmpty {
+                        Link(destination: url) {
+                            Label("Open video URL", systemImage: "play.rectangle")
+                        }
+                    } else if !recipe.videoURL.isEmpty {
+                        Text(recipe.videoURL)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .navigationTitle(recipe.name)
+    }
+}
+
+struct RecipeVideoPlayer: View {
+    let videoData: Data
+    @State private var player: AVPlayer?
+    @State private var fileURL: URL?
+
+    var body: some View {
+        Group {
+            if let player {
+                VideoPlayer(player: player)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task {
+            guard player == nil else { return }
+            let url = FileManager.default.temporaryDirectory
+                .appending(path: "recipe-video-\(UUID().uuidString).mov")
+            do {
+                try videoData.write(to: url, options: .atomic)
+                fileURL = url
+                player = AVPlayer(url: url)
+            } catch {
+                player = nil
+            }
+        }
+        .onDisappear {
+            player?.pause()
+            if let fileURL {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
     }
 }
 
