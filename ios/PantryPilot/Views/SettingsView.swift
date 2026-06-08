@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @AppStorage("cloudStorageProvider") private var cloudStorageProvider = "Local only"
+    @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
 
     private let cloudOptions = [
         "Local only",
@@ -22,6 +23,12 @@ struct SettingsView: View {
                 }
 
                 Section("Storage") {
+                    Stepper(value: $expirationReminderDays, in: 0...30) {
+                        LabeledContent("Expire reminder") {
+                            Text("\(expirationReminderDays) days")
+                        }
+                    }
+
                     Picker("Cloud storage", selection: $cloudStorageProvider) {
                         ForEach(cloudOptions, id: \.self) { option in
                             Text(option).tag(option)

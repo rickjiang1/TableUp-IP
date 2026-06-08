@@ -39,6 +39,14 @@ struct StorageView: View {
 
 struct IngredientRow: View {
     let ingredient: StoredIngredient
+    @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
+
+    private var expirationState: ExpirationState {
+        ExpirationState(
+            expireDate: ingredient.expireDate,
+            reminderDays: expirationReminderDays
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -50,9 +58,21 @@ struct IngredientRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text("\(ingredient.location.rawValue) - expires \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text("\(ingredient.location.rawValue) - expires \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                if let badge = expirationState.badgeText {
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(expirationState.foregroundColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(expirationState.backgroundColor)
+                        .clipShape(Capsule())
+                }
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack {
@@ -68,5 +88,37 @@ struct IngredientRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+struct ExpirationState {
+    let expireDate: Date
+    let reminderDays: Int
+
+    private var daysUntilExpiration: Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let expirationDay = calendar.startOfDay(for: expireDate)
+        return calendar.dateComponents([.day], from: today, to: expirationDay).day ?? 0
+    }
+
+    var badgeText: String? {
+        if daysUntilExpiration < 0 {
+            return "Expired"
+        }
+
+        if daysUntilExpiration <= reminderDays {
+            return daysUntilExpiration == 0 ? "Expires today" : "Expires soon"
+        }
+
+        return nil
+    }
+
+    var foregroundColor: Color {
+        daysUntilExpiration < 0 ? .red : .orange
+    }
+
+    var backgroundColor: Color {
+        foregroundColor.opacity(0.14)
     }
 }
