@@ -252,7 +252,11 @@ async function createOpenAIResponse({ schemaName, schema, content }) {
 }
 
 function parseStructuredOutput(result) {
-  const text = result.output_text;
+  const text = result.output_text || result.output
+    ?.flatMap((item) => item.content || [])
+    ?.find((content) => content.type === "output_text" && typeof content.text === "string")
+    ?.text;
+
   if (!text) {
     throw new Error("Model returned no output_text");
   }
