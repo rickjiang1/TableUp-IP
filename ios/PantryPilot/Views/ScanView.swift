@@ -11,6 +11,7 @@ struct ScanView: View {
     @State private var showingManualAdd = false
     @State private var showingCamera = false
     @State private var showingDetectedItems = false
+    @State private var saveConfirmation: SaveConfirmation?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
 
@@ -73,6 +74,9 @@ struct ScanView: View {
                     DisclosureGroup("Add manually", isExpanded: $showingManualAdd) {
                         ManualIngredientForm { ingredient in
                             modelContext.insert(ingredient)
+                            try? modelContext.save()
+                            showingManualAdd = false
+                            saveConfirmation = SaveConfirmation(items: [ingredient.displayName])
                         }
                         .padding(.top, 12)
                     }
@@ -96,10 +100,20 @@ struct ScanView: View {
                     showingDetectedItems = false
                 }
             }
+            .alert(item: $saveConfirmation) { confirmation in
+                Alert(
+                    title: Text("Saved"),
+                    message: Text(confirmation.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
             .onChange(of: selectedImageData) { _, newValue in
                 if newValue != nil {
                     scanMessage = "Photo ready."
                     detectedItems = []
+                    Task {
+                        await extractIngredients()
+                    }
                 }
             }
         }
@@ -135,13 +149,27 @@ struct ScanView: View {
     }
 
     private func saveDetectedItems() {
+        let savedNames = detectedItems.map(\.displayName)
+
         for item in detectedItems {
             modelContext.insert(item.storedIngredient)
         }
+        try? modelContext.save()
+
         detectedItems = []
         selectedPhoto = nil
         selectedImageData = nil
         scanMessage = "Saved to storage."
+        saveConfirmation = SaveConfirmation(items: savedNames)
+    }
+}
+
+struct SaveConfirmation: Identifiable {
+    let id = UUID()
+    let items: [String]
+
+    var message: String {
+        items.isEmpty ? "Nothing was saved." : items.joined(separator: "\n")
     }
 }
 
@@ -178,6 +206,10 @@ struct DetectedIngredient: Identifiable {
             category: category,
             location: location
         )
+    }
+
+    var displayName: String {
+        "\(name) (\(quantity.formatted()) \(unit))"
     }
 }
 

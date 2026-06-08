@@ -69,4 +69,8 @@ final class StoredIngredient {
         get { StorageLocation(rawValue: locationRaw) ?? .fridge }
         set { locationRaw = newValue.rawValue }
     }
+
+    var displayName: String {
+        "\(name) (\(quantity.formatted()) \(unit))"
+    }
 }
