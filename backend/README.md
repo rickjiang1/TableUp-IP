@@ -21,7 +21,9 @@ DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
 DATABRICKS_TOKEN=your_token_here
 DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/your_warehouse_id
 DATABRICKS_CATALOG=workspace
-DATABRICKS_SCHEMA=default
+DATABRICKS_SCHEMA=foodmanagement
+DATABRICKS_VOLUME=pantry_media
+DATABRICKS_VOLUME_PATH=/Volumes/workspace/foodmanagement/pantry_media
 ```
 
 ## Run
@@ -59,10 +61,17 @@ The server uses OpenAI Responses API image input and Structured Outputs.
 The cloud recipe sync reads these tables:
 
 ```text
+workspace.foodmanagement
 pantry_recipes
 pantry_recipe_ingredients
 pantry_recipe_steps
 pantry_units
 ```
 
-For the MVP, edit recipe rows directly in Databricks. The iOS app syncs active recipes from `GET /api/recipes` through this backend.
+Media files should live in this Databricks volume:
+
+```text
+/Volumes/workspace/foodmanagement/pantry_media
+```
+
+For the MVP, edit recipe rows directly in Databricks or through the iOS app. The iOS app syncs active recipes through this backend, and Databricks credentials stay in `backend/.env`.

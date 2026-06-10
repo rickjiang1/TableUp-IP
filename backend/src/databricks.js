@@ -242,13 +242,13 @@ function databricksConfig() {
     token,
     warehouseId,
     catalog: process.env.DATABRICKS_CATALOG || "workspace",
-    schema: process.env.DATABRICKS_SCHEMA || "default"
+    schema: process.env.DATABRICKS_SCHEMA || "foodmanagement"
   };
 }
 
 function tableName(name) {
   const catalog = quoteIdentifier(process.env.DATABRICKS_CATALOG || "workspace");
-  const schema = quoteIdentifier(process.env.DATABRICKS_SCHEMA || "default");
+  const schema = quoteIdentifier(process.env.DATABRICKS_SCHEMA || "foodmanagement");
   return `${catalog}.${schema}.${quoteIdentifier(name)}`;
 }
 
