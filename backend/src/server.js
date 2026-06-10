@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
-import { fetchCloudRecipes } from "./databricks.js";
+import { deleteCloudRecipe, fetchCloudRecipes, upsertCloudRecipe } from "./databricks.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -29,6 +29,27 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/recipes") {
       const recipes = await fetchCloudRecipes();
       sendJson(response, 200, { recipes });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/recipes") {
+      const recipe = await readJsonRequest(request, 1024 * 1024);
+      const savedRecipe = await upsertCloudRecipe(recipe);
+      sendJson(response, 201, { recipe: savedRecipe });
+      return;
+    }
+
+    const recipeMatch = url.pathname.match(/^\/api\/recipes\/([^/]+)$/);
+    if (recipeMatch && request.method === "PUT") {
+      const recipe = await readJsonRequest(request, 1024 * 1024);
+      const savedRecipe = await upsertCloudRecipe(recipe, decodeURIComponent(recipeMatch[1]));
+      sendJson(response, 200, { recipe: savedRecipe });
+      return;
+    }
+
+    if (recipeMatch && request.method === "DELETE") {
+      await deleteCloudRecipe(decodeURIComponent(recipeMatch[1]));
+      sendJson(response, 200, { ok: true });
       return;
     }
 
@@ -151,6 +172,15 @@ function setCorsHeaders(response) {
 function sendJson(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json" });
   response.end(JSON.stringify(body));
+}
+
+async function readJsonRequest(request, maxBytes) {
+  const body = await readRequestBody(request, maxBytes);
+  try {
+    return JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new Error("Request body must be valid JSON.");
+  }
 }
 
 function readRequestBody(request, maxBytes) {

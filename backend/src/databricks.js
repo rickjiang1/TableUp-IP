@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 const statementPath = "/api/2.0/sql/statements";
 
 export async function fetchCloudRecipes() {
@@ -67,6 +69,88 @@ export async function fetchCloudRecipes() {
   }));
 }
 
+export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
+  const recipe = normalizeRecipeInput(input, recipeId);
+  await runSql(`
+    MERGE INTO ${tableName("pantry_recipes")} AS target
+    USING (
+      SELECT
+        ${sqlString(recipe.id)} AS recipe_id,
+        ${sqlString(recipe.name)} AS name,
+        ${sqlString(recipe.imageURL)} AS image_url,
+        ${sqlString(recipe.videoURL)} AS video_url
+    ) AS source
+    ON target.recipe_id = source.recipe_id
+    WHEN MATCHED THEN UPDATE SET
+      name = source.name,
+      image_url = source.image_url,
+      video_url = source.video_url,
+      updated_at = current_timestamp(),
+      active = true
+    WHEN NOT MATCHED THEN INSERT (
+      recipe_id,
+      name,
+      image_url,
+      video_url,
+      updated_at,
+      active
+    ) VALUES (
+      source.recipe_id,
+      source.name,
+      source.image_url,
+      source.video_url,
+      current_timestamp(),
+      true
+    )
+  `);
+
+  await runSql(`DELETE FROM ${tableName("pantry_recipe_ingredients")} WHERE recipe_id = ${sqlString(recipe.id)}`);
+  await runSql(`DELETE FROM ${tableName("pantry_recipe_steps")} WHERE recipe_id = ${sqlString(recipe.id)}`);
+
+  if (recipe.ingredients.length > 0) {
+    await runSql(`
+      INSERT INTO ${tableName("pantry_recipe_ingredients")}
+        (ingredient_id, recipe_id, role, name, quantity, unit, sort_order)
+      VALUES ${recipe.ingredients.map((ingredient, index) => `(
+        ${sqlString(ingredient.id || randomUUID())},
+        ${sqlString(recipe.id)},
+        ${sqlString(normalizeRole(ingredient.role))},
+        ${sqlString(ingredient.name)},
+        ${sqlNumber(ingredient.quantity, 1)},
+        ${sqlString(ingredient.unit || "piece")},
+        ${sqlNumber(ingredient.sortOrder, index + 1)}
+      )`).join(",")}
+    `);
+  }
+
+  if (recipe.steps.length > 0) {
+    await runSql(`
+      INSERT INTO ${tableName("pantry_recipe_steps")}
+        (step_id, recipe_id, step_order, instruction)
+      VALUES ${recipe.steps.map((step, index) => `(
+        ${sqlString(step.id || randomUUID())},
+        ${sqlString(recipe.id)},
+        ${sqlNumber(step.order, index + 1)},
+        ${sqlString(step.text)}
+      )`).join(",")}
+    `);
+  }
+
+  return (await fetchCloudRecipes()).find((cloudRecipe) => cloudRecipe.id === recipe.id);
+}
+
+export async function deleteCloudRecipe(recipeId) {
+  if (!recipeId || typeof recipeId !== "string") {
+    throw new Error("recipe id is required");
+  }
+
+  await runSql(`
+    UPDATE ${tableName("pantry_recipes")}
+    SET active = false, updated_at = current_timestamp()
+    WHERE recipe_id = ${sqlString(recipeId)}
+  `);
+}
+
 async function runSql(statement) {
   const config = databricksConfig();
   const response = await fetch(`${config.host}${statementPath}`, {
@@ -97,6 +181,50 @@ async function runSql(statement) {
   const columns = payload.manifest?.schema?.columns?.map((column) => column.name) || [];
   const rows = payload.result?.data_array || [];
   return rows.map((row) => Object.fromEntries(columns.map((column, index) => [column, row[index]])));
+}
+
+function normalizeRecipeInput(input, recipeId) {
+  const name = typeof input?.name === "string" ? input.name.trim() : "";
+  if (!name) {
+    throw new Error("Recipe name is required.");
+  }
+
+  return {
+    id: typeof input.id === "string" && input.id.trim() ? input.id.trim() : recipeId,
+    name,
+    imageURL: typeof input.imageURL === "string" ? input.imageURL.trim() : "",
+    videoURL: typeof input.videoURL === "string" ? input.videoURL.trim() : "",
+    ingredients: Array.isArray(input.ingredients)
+      ? input.ingredients
+          .map((ingredient) => ({
+            id: typeof ingredient.id === "string" ? ingredient.id : "",
+            role: ingredient.role,
+            name: typeof ingredient.name === "string" ? ingredient.name.trim() : "",
+            quantity: Number(ingredient.quantity || 1),
+            unit: typeof ingredient.unit === "string" ? ingredient.unit.trim() : "piece",
+            sortOrder: Number(ingredient.sortOrder || 0)
+          }))
+          .filter((ingredient) => ingredient.name)
+      : [],
+    steps: Array.isArray(input.steps)
+      ? input.steps
+          .map((step, index) => ({
+            id: typeof step.id === "string" ? step.id : "",
+            order: Number(step.order || index + 1),
+            text: typeof step.text === "string" ? step.text.trim() : ""
+          }))
+          .filter((step) => step.text)
+      : []
+  };
+}
+
+function sqlString(value) {
+  return `'${String(value ?? "").replaceAll("'", "''")}'`;
+}
+
+function sqlNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(number) : String(fallback);
 }
 
 function databricksConfig() {

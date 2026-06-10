@@ -36,9 +36,21 @@ struct RecipesView: View {
                     }
                 }
                 .onDelete { indexSet in
+                    let deletedCloudIds = indexSet.map { recipes[$0].cloudId }.filter { !$0.isEmpty }
                     for index in indexSet {
                         RecipeMediaStore.deleteVideo(fileName: recipes[index].videoFileName)
                         modelContext.delete(recipes[index])
+                    }
+                    try? modelContext.save()
+
+                    Task {
+                        for cloudId in deletedCloudIds {
+                            do {
+                                try await RecipeCloudSync().deleteRecipe(id: cloudId)
+                            } catch {
+                                syncError = RecipeSyncError(message: error.localizedDescription)
+                            }
+                        }
                     }
                 }
             }
@@ -155,9 +167,41 @@ struct RecipeCloudSync {
         try modelContext.save()
     }
 
+    func saveRecipe(_ recipe: Recipe) async throws -> CloudRecipe {
+        let payload = CloudRecipeSavePayload(recipe: recipe)
+        let method = recipe.cloudId.isEmpty ? "POST" : "PUT"
+        let path = recipe.cloudId.isEmpty ? "api/recipes" : "api/recipes/\(recipe.cloudId)"
+        let url = baseURL.appending(path: path)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(CloudRecipeSaveResponse.self, from: data).recipe
+    }
+
+    func deleteRecipe(id: String) async throws {
+        let url = baseURL.appending(path: "api/recipes/\(id)")
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 60
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+    }
+
     private func fetchRecipes() async throws -> [CloudRecipe] {
         let url = baseURL.appending(path: "api/recipes")
         let (data, response) = try await session.data(from: url)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(CloudRecipeResponse.self, from: data).recipes
+    }
+
+    private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GroceryPhotoExtractorError.badResponse("Backend did not return an HTTP response.")
         }
@@ -166,8 +210,6 @@ struct RecipeCloudSync {
             let message = String(data: data, encoding: .utf8) ?? "No response body."
             throw GroceryPhotoExtractorError.badResponse("Backend returned \(httpResponse.statusCode): \(message)")
         }
-
-        return try JSONDecoder().decode(CloudRecipeResponse.self, from: data).recipes
     }
 
     private func roleRank(_ role: CloudRecipeIngredient.Role) -> Int {
@@ -184,6 +226,64 @@ struct RecipeCloudSync {
 
 struct CloudRecipeResponse: Decodable {
     let recipes: [CloudRecipe]
+}
+
+struct CloudRecipeSaveResponse: Decodable {
+    let recipe: CloudRecipe
+}
+
+struct CloudRecipeSavePayload: Encodable {
+    let id: String?
+    let name: String
+    let imageURL: String
+    let videoURL: String
+    let ingredients: [Ingredient]
+    let steps: [Step]
+
+    init(recipe: Recipe) {
+        id = recipe.cloudId.isEmpty ? nil : recipe.cloudId
+        name = recipe.name
+        imageURL = recipe.imageURL
+        videoURL = recipe.videoURL
+        ingredients = recipe.ingredients.enumerated().map { index, ingredient in
+            Ingredient(
+                role: ingredient.role.rawValueForCloud,
+                name: ingredient.name,
+                quantity: ingredient.quantity,
+                unit: ingredient.unit,
+                sortOrder: index + 1
+            )
+        }
+        steps = recipe.steps.enumerated().map { index, step in
+            Step(order: index + 1, text: step)
+        }
+    }
+
+    struct Ingredient: Encodable {
+        let role: String
+        let name: String
+        let quantity: Double
+        let unit: String
+        let sortOrder: Int
+    }
+
+    struct Step: Encodable {
+        let order: Int
+        let text: String
+    }
+}
+
+private extension RecipeIngredientRole {
+    var rawValueForCloud: String {
+        switch self {
+        case .main:
+            return "main"
+        case .secondary:
+            return "secondary"
+        case .seasoning:
+            return "seasoning"
+        }
+    }
 }
 
 struct CloudRecipe: Decodable {
@@ -245,6 +345,8 @@ struct AddRecipeView: View {
     @State private var selectedImageThumbnailData: Data?
     @State private var selectedVideo: PhotosPickerItem?
     @State private var selectedVideoFileName = ""
+    @State private var saveError: RecipeSyncError?
+    @State private var isSaving = false
 
     var body: some View {
         NavigationStack {
@@ -308,33 +410,54 @@ struct AddRecipeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Save", language: appLanguage)) {
-                        saveRecipe()
-                        dismiss()
+                        Task {
+                            await saveRecipe()
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
+            }
+            .alert(item: $saveError) { error in
+                Alert(
+                    title: Text(L.text("Sync failed", language: appLanguage)),
+                    message: Text(error.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                )
             }
         }
     }
 
-    private func saveRecipe() {
+    private func saveRecipe() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+
         let ingredients = recipeIngredients(from: ingredientDrafts)
         let steps = stepsText
             .split(separator: "\n")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        modelContext.insert(
-            Recipe(
-                name: name,
-                ingredients: ingredients,
-                steps: steps,
-                videoURL: videoURL,
-                imageData: selectedImageData,
-                imageThumbnailData: selectedImageThumbnailData,
-                videoFileName: selectedVideoFileName
-            )
+        let recipe = Recipe(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            ingredients: ingredients,
+            steps: steps,
+            videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            imageData: selectedImageData,
+            imageThumbnailData: selectedImageThumbnailData,
+            videoFileName: selectedVideoFileName
         )
+        modelContext.insert(recipe)
+
+        do {
+            let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
+            recipe.cloudId = cloudRecipe.id
+            recipe.cloudUpdatedAt = cloudRecipe.updatedAt
+            try modelContext.save()
+            dismiss()
+        } catch {
+            saveError = RecipeSyncError(message: error.localizedDescription)
+        }
     }
 
     private func loadSelectedPhoto() async {
@@ -367,6 +490,8 @@ struct EditRecipeView: View {
     @State private var selectedImageThumbnailData: Data?
     @State private var selectedVideo: PhotosPickerItem?
     @State private var selectedVideoFileName: String
+    @State private var saveError: RecipeSyncError?
+    @State private var isSaving = false
 
     init(recipe: Recipe) {
         self.recipe = recipe
@@ -454,16 +579,28 @@ struct EditRecipeView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Save", language: appLanguage)) {
-                        saveChanges()
-                        dismiss()
+                        Task {
+                            await saveChanges()
+                        }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
+            }
+            .alert(item: $saveError) { error in
+                Alert(
+                    title: Text(L.text("Sync failed", language: appLanguage)),
+                    message: Text(error.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                )
             }
         }
     }
 
-    private func saveChanges() {
+    private func saveChanges() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+
         let ingredients = recipeIngredients(from: ingredientDrafts)
         let steps = stepsText
             .split(separator: "\n")
@@ -485,7 +622,15 @@ struct EditRecipeView: View {
         }
         recipe.ingredients = ingredients
 
-        try? modelContext.save()
+        do {
+            let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
+            recipe.cloudId = cloudRecipe.id
+            recipe.cloudUpdatedAt = cloudRecipe.updatedAt
+            try modelContext.save()
+            dismiss()
+        } catch {
+            saveError = RecipeSyncError(message: error.localizedDescription)
+        }
     }
 
     private func loadSelectedPhoto() async {
