@@ -113,6 +113,8 @@ enum L {
         "Add main ingredient": "添加主要食材",
         "Add secondary ingredient": "添加次要食材",
         "Add seasoning": "添加调料",
+        "Sync Recipes": "同步食谱",
+        "Sync failed": "同步失败",
         "piece": "个",
         "clove": "瓣",
         "bunch": "把",

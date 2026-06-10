@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
+import { fetchCloudRecipes } from "./databricks.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -22,6 +23,12 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/health") {
       sendJson(response, 200, { ok: true });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/recipes") {
+      const recipes = await fetchCloudRecipes();
+      sendJson(response, 200, { recipes });
       return;
     }
 
@@ -137,7 +144,7 @@ function loadEnv() {
 
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 

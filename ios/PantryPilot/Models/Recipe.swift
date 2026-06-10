@@ -3,6 +3,8 @@ import SwiftData
 
 @Model
 final class Recipe {
+    var cloudId: String
+    var cloudUpdatedAt: String
     var name: String
     var steps: [String]
     var videoURL: String
@@ -17,6 +19,8 @@ final class Recipe {
     var ingredients: [RecipeIngredient]
 
     init(
+        cloudId: String = "",
+        cloudUpdatedAt: String = "",
         name: String,
         ingredients: [RecipeIngredient] = [],
         steps: [String] = [],
@@ -27,6 +31,8 @@ final class Recipe {
         videoData: Data? = nil,
         videoFileName: String = ""
     ) {
+        self.cloudId = cloudId
+        self.cloudUpdatedAt = cloudUpdatedAt
         self.name = name
         self.ingredients = ingredients
         self.steps = steps

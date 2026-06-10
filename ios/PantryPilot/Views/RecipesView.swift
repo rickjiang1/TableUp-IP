@@ -10,6 +10,8 @@ struct RecipesView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var showingAddRecipe = false
+    @State private var isSyncing = false
+    @State private var syncError: RecipeSyncError?
 
     var body: some View {
         NavigationStack {
@@ -42,17 +44,188 @@ struct RecipesView: View {
             }
             .navigationTitle(L.text("Recipes", language: appLanguage))
             .toolbar {
-                Button {
-                    showingAddRecipe = true
-                } label: {
-                    Image(systemName: "plus")
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        Task {
+                            await syncRecipes()
+                        }
+                    } label: {
+                        Image(systemName: isSyncing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isSyncing)
+                    .accessibilityLabel(L.text("Sync Recipes", language: appLanguage))
+
+                    Button {
+                        showingAddRecipe = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
                 }
             }
             .sheet(isPresented: $showingAddRecipe) {
                 AddRecipeView()
             }
+            .alert(item: $syncError) { error in
+                Alert(
+                    title: Text(L.text("Sync failed", language: appLanguage)),
+                    message: Text(error.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                )
+            }
+            .task {
+                await syncRecipes()
+            }
         }
     }
+
+    private func syncRecipes() async {
+        guard !isSyncing else { return }
+        isSyncing = true
+        defer { isSyncing = false }
+
+        do {
+            try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
+        } catch {
+            syncError = RecipeSyncError(message: error.localizedDescription)
+        }
+    }
+}
+
+struct RecipeSyncError: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+struct RecipeCloudSync {
+    var baseURL: URL = BackendConfiguration.baseURL
+    var session: URLSession = .shared
+
+    func sync(into modelContext: ModelContext, existingRecipes: [Recipe]) async throws {
+        let cloudRecipes = try await fetchRecipes()
+        let recipesByCloudId = Dictionary(
+            uniqueKeysWithValues: existingRecipes
+                .filter { !$0.cloudId.isEmpty }
+                .map { ($0.cloudId, $0) }
+        )
+
+        for cloudRecipe in cloudRecipes {
+            let localRecipe = recipesByCloudId[cloudRecipe.id] ?? Recipe(
+                cloudId: cloudRecipe.id,
+                cloudUpdatedAt: cloudRecipe.updatedAt,
+                name: cloudRecipe.name
+            )
+
+            if localRecipe.cloudId.isEmpty {
+                localRecipe.cloudId = cloudRecipe.id
+            }
+
+            localRecipe.cloudUpdatedAt = cloudRecipe.updatedAt
+            localRecipe.name = cloudRecipe.name
+            localRecipe.imageURL = cloudRecipe.imageURL
+            localRecipe.videoURL = cloudRecipe.videoURL
+            localRecipe.steps = cloudRecipe.steps
+                .sorted { $0.order < $1.order }
+                .map(\.text)
+
+            for ingredient in Array(localRecipe.ingredients) {
+                modelContext.delete(ingredient)
+            }
+
+            localRecipe.ingredients = cloudRecipe.ingredients
+                .sorted { lhs, rhs in
+                    if lhs.role == rhs.role {
+                        return lhs.sortOrder < rhs.sortOrder
+                    }
+                    return roleRank(lhs.role) < roleRank(rhs.role)
+                }
+                .map { ingredient in
+                    RecipeIngredient(
+                        name: ingredient.name,
+                        quantity: ingredient.quantity,
+                        unit: ingredient.unit,
+                        role: ingredient.role.recipeRole
+                    )
+                }
+
+            if recipesByCloudId[cloudRecipe.id] == nil {
+                modelContext.insert(localRecipe)
+            }
+        }
+
+        try modelContext.save()
+    }
+
+    private func fetchRecipes() async throws -> [CloudRecipe] {
+        let url = baseURL.appending(path: "api/recipes")
+        let (data, response) = try await session.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GroceryPhotoExtractorError.badResponse("Backend did not return an HTTP response.")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "No response body."
+            throw GroceryPhotoExtractorError.badResponse("Backend returned \(httpResponse.statusCode): \(message)")
+        }
+
+        return try JSONDecoder().decode(CloudRecipeResponse.self, from: data).recipes
+    }
+
+    private func roleRank(_ role: CloudRecipeIngredient.Role) -> Int {
+        switch role {
+        case .main:
+            return 0
+        case .secondary:
+            return 1
+        case .seasoning:
+            return 2
+        }
+    }
+}
+
+struct CloudRecipeResponse: Decodable {
+    let recipes: [CloudRecipe]
+}
+
+struct CloudRecipe: Decodable {
+    let id: String
+    let name: String
+    let imageURL: String
+    let videoURL: String
+    let updatedAt: String
+    let ingredients: [CloudRecipeIngredient]
+    let steps: [CloudRecipeStep]
+}
+
+struct CloudRecipeIngredient: Decodable {
+    enum Role: String, Decodable {
+        case main
+        case secondary
+        case seasoning
+
+        var recipeRole: RecipeIngredientRole {
+            switch self {
+            case .main:
+                return .main
+            case .secondary:
+                return .secondary
+            case .seasoning:
+                return .seasoning
+            }
+        }
+    }
+
+    let id: String
+    let role: Role
+    let name: String
+    let quantity: Double
+    let unit: String
+    let sortOrder: Int
+}
+
+struct CloudRecipeStep: Decodable {
+    let id: String
+    let order: Int
+    let text: String
 }
 
 struct AddRecipeView: View {
