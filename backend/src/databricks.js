@@ -169,18 +169,57 @@ async function runSql(statement) {
   });
 
   const payload = await response.json();
-  if (!response.ok || payload.status?.state === "FAILED") {
+  if (!response.ok) {
     const message = payload.status?.error?.message || payload.message || `Databricks SQL failed with ${response.status}`;
     throw new Error(message);
   }
 
-  if (payload.status?.state && payload.status.state !== "SUCCEEDED") {
-    throw new Error(`Databricks statement did not finish: ${payload.status.state}`);
+  return rowsFromStatement(await waitForStatement(config, payload));
+}
+
+async function waitForStatement(config, payload) {
+  let current = payload;
+  const startedAt = Date.now();
+
+  while (current.status?.state && current.status.state !== "SUCCEEDED") {
+    if (current.status.state === "FAILED" || current.status.state === "CANCELED" || current.status.state === "CLOSED") {
+      const message = current.status?.error?.message || `Databricks statement ended with ${current.status.state}`;
+      throw new Error(message);
+    }
+
+    if (!current.statement_id) {
+      throw new Error(`Databricks statement did not finish: ${current.status.state}`);
+    }
+
+    if (Date.now() - startedAt > 60_000) {
+      throw new Error(`Databricks statement timed out: ${current.status.state}`);
+    }
+
+    await sleep(1_000);
+
+    const response = await fetch(`${config.host}${statementPath}/${current.statement_id}`, {
+      headers: {
+        Authorization: `Bearer ${config.token}`
+      }
+    });
+    current = await response.json();
+    if (!response.ok) {
+      const message = current.status?.error?.message || current.message || `Databricks SQL status failed with ${response.status}`;
+      throw new Error(message);
+    }
   }
 
+  return current;
+}
+
+function rowsFromStatement(payload) {
   const columns = payload.manifest?.schema?.columns?.map((column) => column.name) || [];
   const rows = payload.result?.data_array || [];
   return rows.map((row) => Object.fromEntries(columns.map((column, index) => [column, row[index]])));
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function normalizeRecipeInput(input, recipeId) {
