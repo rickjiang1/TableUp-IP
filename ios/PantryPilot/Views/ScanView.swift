@@ -75,8 +75,8 @@ struct ScanView: View {
                     .padding()
 
                     DisclosureGroup(L.text("Add manually", language: appLanguage), isExpanded: $showingManualAdd) {
-                        ManualIngredientForm { ingredient in
-                            saveManualIngredient(ingredient)
+                        ManualIngredientForm { input in
+                            saveManualIngredient(input)
                         }
                         .padding(.top, 12)
                     }
@@ -164,37 +164,20 @@ struct ScanView: View {
         isExtracting = false
     }
 
-    private func saveManualIngredient(_ ingredient: StoredIngredient) {
+    private func saveManualIngredient(_ input: IngredientInput) {
         do {
-            let countBefore = try inventoryCount()
-            modelContext.insert(ingredient)
-            try modelContext.save()
-            let countAfter = try inventoryCount()
-            guard countAfter > countBefore else {
-                throw IngredientSaveError.notPersisted
-            }
+            let savedNames = try InventoryStore.save([input], sourceContext: modelContext)
             showingManualAdd = false
             scanMessage = "Saved to storage."
-            saveConfirmation = SaveConfirmation(items: [ingredient.displayName])
+            saveConfirmation = SaveConfirmation(items: savedNames)
         } catch {
-            modelContext.rollback()
             saveError = SaveErrorMessage(message: error.localizedDescription)
         }
     }
 
     private func saveDetectedItems() {
-        let savedNames = detectedItems.map(\.displayName)
-
         do {
-            let countBefore = try inventoryCount()
-            for item in detectedItems {
-                modelContext.insert(item.storedIngredient)
-            }
-            try modelContext.save()
-            let countAfter = try inventoryCount()
-            guard countAfter >= countBefore + detectedItems.count else {
-                throw IngredientSaveError.notPersisted
-            }
+            let savedNames = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
             selectedPhoto = nil
@@ -202,13 +185,8 @@ struct ScanView: View {
             scanMessage = "Saved to storage."
             saveConfirmation = SaveConfirmation(items: savedNames)
         } catch {
-            modelContext.rollback()
             saveError = SaveErrorMessage(message: error.localizedDescription)
         }
-    }
-
-    private func inventoryCount() throws -> Int {
-        try modelContext.fetch(FetchDescriptor<StoredIngredient>()).count
     }
 }
 
@@ -232,10 +210,13 @@ struct SaveErrorMessage: Identifiable {
 }
 
 enum IngredientSaveError: LocalizedError {
-    case notPersisted
+    case notPersisted(before: Int, after: Int, expected: Int)
 
     var errorDescription: String? {
-        "The ingredient was not written to storage. Please try again."
+        switch self {
+        case .notPersisted(let before, let after, let expected):
+            "The ingredient was not written to storage. Before: \(before), after: \(after), expected new items: \(expected)."
+        }
     }
 }
 
@@ -265,7 +246,11 @@ struct DetectedIngredient: Identifiable {
     var location: StorageLocation
 
     var storedIngredient: StoredIngredient {
-        StoredIngredient(
+        ingredientInput.storedIngredient
+    }
+
+    var ingredientInput: IngredientInput {
+        IngredientInput(
             name: name,
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
@@ -276,6 +261,57 @@ struct DetectedIngredient: Identifiable {
 
     var displayName: String {
         "\(name) (\(quantity.formatted()) \(IngredientUnit.normalizedSelection(for: unit)))"
+    }
+}
+
+struct IngredientInput {
+    var name: String
+    var quantity: Double
+    var unit: String
+    var category: IngredientCategory
+    var location: StorageLocation
+    var enteredDate: Date = .now
+    var expireDate: Date?
+
+    var storedIngredient: StoredIngredient {
+        StoredIngredient(
+            name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            quantity: quantity,
+            unit: IngredientUnit.normalizedSelection(for: unit),
+            category: category,
+            location: location,
+            enteredDate: enteredDate,
+            expireDate: expireDate
+        )
+    }
+
+    var displayName: String {
+        "\(name) (\(quantity.formatted()) \(IngredientUnit.normalizedSelection(for: unit)))"
+    }
+}
+
+enum InventoryStore {
+    static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> [String] {
+        let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !cleanInputs.isEmpty else { return [] }
+
+        let saveContext = ModelContext(sourceContext.container)
+        let countBefore = try saveContext.fetch(FetchDescriptor<StoredIngredient>()).count
+        for input in cleanInputs {
+            saveContext.insert(input.storedIngredient)
+        }
+        try saveContext.save()
+        let countAfter = try saveContext.fetch(FetchDescriptor<StoredIngredient>()).count
+
+        guard countAfter >= countBefore + cleanInputs.count else {
+            throw IngredientSaveError.notPersisted(
+                before: countBefore,
+                after: countAfter,
+                expected: cleanInputs.count
+            )
+        }
+
+        return cleanInputs.map(\.displayName)
     }
 }
 

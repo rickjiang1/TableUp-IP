@@ -10,7 +10,7 @@ struct ManualIngredientForm: View {
     @State private var enteredDate = Date()
     @State private var expireDate = Date()
 
-    let onSave: (StoredIngredient) -> Void
+    let onSave: (IngredientInput) -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -47,7 +47,7 @@ struct ManualIngredientForm: View {
             Button(L.text("Save item", language: appLanguage)) {
                 guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 onSave(
-                    StoredIngredient(
+                    IngredientInput(
                         name: name,
                         quantity: quantity,
                         unit: unit,
