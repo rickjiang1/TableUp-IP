@@ -16,6 +16,15 @@ struct StorageView: View {
     var body: some View {
         NavigationStack {
             List {
+                if ingredients.isEmpty {
+                    ContentUnavailableView(
+                        L.text("No saved food", language: appLanguage),
+                        systemImage: "archivebox",
+                        description: Text(L.text("Saved ingredients will appear here.", language: appLanguage))
+                    )
+                    .listRowBackground(Color.clear)
+                }
+
                 ForEach(groupedIngredients, id: \.0) { category, items in
                     Section(category.displayName(language: appLanguage)) {
                         ForEach(items) { ingredient in

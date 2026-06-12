@@ -6,6 +6,7 @@ import UIKit
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @AppStorage("selectedTab") private var selectedTab = 0
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
@@ -14,6 +15,7 @@ struct ScanView: View {
     @State private var showingDetectedItems = false
     @State private var saveConfirmation: SaveConfirmation?
     @State private var extractionError: ExtractionErrorMessage?
+    @State private var saveError: SaveErrorMessage?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
 
@@ -75,10 +77,7 @@ struct ScanView: View {
 
                     DisclosureGroup(L.text("Add manually", language: appLanguage), isExpanded: $showingManualAdd) {
                         ManualIngredientForm { ingredient in
-                            modelContext.insert(ingredient)
-                            try? modelContext.save()
-                            showingManualAdd = false
-                            saveConfirmation = SaveConfirmation(items: [ingredient.displayName])
+                            saveManualIngredient(ingredient)
                         }
                         .padding(.top, 12)
                     }
@@ -112,6 +111,13 @@ struct ScanView: View {
             .alert(item: $extractionError) { error in
                 Alert(
                     title: Text(L.text("Extraction failed", language: appLanguage)),
+                    message: Text(error.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                )
+            }
+            .alert(item: $saveError) { error in
+                Alert(
+                    title: Text(L.text("Save failed", language: appLanguage)),
                     message: Text(error.message),
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
@@ -159,19 +165,39 @@ struct ScanView: View {
         isExtracting = false
     }
 
+    private func saveManualIngredient(_ ingredient: StoredIngredient) {
+        do {
+            modelContext.insert(ingredient)
+            try modelContext.save()
+            showingManualAdd = false
+            scanMessage = "Saved to storage."
+            saveConfirmation = SaveConfirmation(items: [ingredient.displayName])
+            selectedTab = 1
+        } catch {
+            modelContext.rollback()
+            saveError = SaveErrorMessage(message: error.localizedDescription)
+        }
+    }
+
     private func saveDetectedItems() {
         let savedNames = detectedItems.map(\.displayName)
 
-        for item in detectedItems {
-            modelContext.insert(item.storedIngredient)
-        }
-        try? modelContext.save()
+        do {
+            for item in detectedItems {
+                modelContext.insert(item.storedIngredient)
+            }
+            try modelContext.save()
 
-        detectedItems = []
-        selectedPhoto = nil
-        selectedImageData = nil
-        scanMessage = "Saved to storage."
-        saveConfirmation = SaveConfirmation(items: savedNames)
+            detectedItems = []
+            selectedPhoto = nil
+            selectedImageData = nil
+            scanMessage = "Saved to storage."
+            saveConfirmation = SaveConfirmation(items: savedNames)
+            selectedTab = 1
+        } catch {
+            modelContext.rollback()
+            saveError = SaveErrorMessage(message: error.localizedDescription)
+        }
     }
 }
 
@@ -185,6 +211,11 @@ struct SaveConfirmation: Identifiable {
 }
 
 struct ExtractionErrorMessage: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
+struct SaveErrorMessage: Identifiable {
     let id = UUID()
     let message: String
 }
