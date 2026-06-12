@@ -97,8 +97,9 @@ struct ScanView: View {
             }
             .sheet(isPresented: $showingDetectedItems) {
                 DetectedItemsReviewView(items: $detectedItems) {
-                    saveDetectedItems()
-                    showingDetectedItems = false
+                    if saveDetectedItems() {
+                        showingDetectedItems = false
+                    }
                 }
             }
             .alert(item: $saveConfirmation) { confirmation in
@@ -165,18 +166,20 @@ struct ScanView: View {
         isExtracting = false
     }
 
-    private func saveManualIngredient(_ input: IngredientInput) {
+    private func saveManualIngredient(_ input: IngredientInput) -> Bool {
         do {
             let savedNames = try InventoryStore.save([input], sourceContext: modelContext)
             showingManualAdd = false
             scanMessage = "Saved to storage."
             saveConfirmation = SaveConfirmation(items: savedNames)
+            return true
         } catch {
             saveError = SaveErrorMessage(message: error.localizedDescription)
+            return false
         }
     }
 
-    private func saveDetectedItems() {
+    private func saveDetectedItems() -> Bool {
         do {
             let savedNames = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
@@ -185,8 +188,10 @@ struct ScanView: View {
             selectedImageData = nil
             scanMessage = "Saved to storage."
             saveConfirmation = SaveConfirmation(items: savedNames)
+            return true
         } catch {
             saveError = SaveErrorMessage(message: error.localizedDescription)
+            return false
         }
     }
 }
@@ -291,6 +296,7 @@ struct IngredientInput {
     }
 }
 
+@MainActor
 enum InventoryStore {
     static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> [String] {
         let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
