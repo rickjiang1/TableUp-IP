@@ -6,7 +6,6 @@ import UIKit
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @AppStorage("selectedTab") private var selectedTab = 0
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
@@ -167,12 +166,16 @@ struct ScanView: View {
 
     private func saveManualIngredient(_ ingredient: StoredIngredient) {
         do {
+            let countBefore = try inventoryCount()
             modelContext.insert(ingredient)
             try modelContext.save()
+            let countAfter = try inventoryCount()
+            guard countAfter > countBefore else {
+                throw IngredientSaveError.notPersisted
+            }
             showingManualAdd = false
             scanMessage = "Saved to storage."
             saveConfirmation = SaveConfirmation(items: [ingredient.displayName])
-            selectedTab = 1
         } catch {
             modelContext.rollback()
             saveError = SaveErrorMessage(message: error.localizedDescription)
@@ -183,21 +186,29 @@ struct ScanView: View {
         let savedNames = detectedItems.map(\.displayName)
 
         do {
+            let countBefore = try inventoryCount()
             for item in detectedItems {
                 modelContext.insert(item.storedIngredient)
             }
             try modelContext.save()
+            let countAfter = try inventoryCount()
+            guard countAfter >= countBefore + detectedItems.count else {
+                throw IngredientSaveError.notPersisted
+            }
 
             detectedItems = []
             selectedPhoto = nil
             selectedImageData = nil
             scanMessage = "Saved to storage."
             saveConfirmation = SaveConfirmation(items: savedNames)
-            selectedTab = 1
         } catch {
             modelContext.rollback()
             saveError = SaveErrorMessage(message: error.localizedDescription)
         }
+    }
+
+    private func inventoryCount() throws -> Int {
+        try modelContext.fetch(FetchDescriptor<StoredIngredient>()).count
     }
 }
 
@@ -218,6 +229,14 @@ struct ExtractionErrorMessage: Identifiable {
 struct SaveErrorMessage: Identifiable {
     let id = UUID()
     let message: String
+}
+
+enum IngredientSaveError: LocalizedError {
+    case notPersisted
+
+    var errorDescription: String? {
+        "The ingredient was not written to storage. Please try again."
+    }
 }
 
 struct PhotoAddButton: View {
