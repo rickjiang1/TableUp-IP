@@ -220,6 +220,7 @@ struct SaveErrorMessage: Identifiable {
 enum IngredientSaveError: LocalizedError {
     case emptyInput
     case notWritten(expectedIncrease: Int, beforeCount: Int, afterCount: Int)
+    case writeDidNotReturnInsertedModels
 
     var errorDescription: String? {
         switch self {
@@ -227,6 +228,8 @@ enum IngredientSaveError: LocalizedError {
             "No ingredient was selected to save."
         case .notWritten(let expectedIncrease, let beforeCount, let afterCount):
             "The ingredient was not written to storage. Expected \(expectedIncrease) new item(s), but storage changed from \(beforeCount) to \(afterCount)."
+        case .writeDidNotReturnInsertedModels:
+            "The ingredient save completed, but SwiftData did not return any inserted item IDs."
         }
     }
 }
@@ -307,14 +310,23 @@ enum InventoryStore {
         let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !cleanInputs.isEmpty else { throw IngredientSaveError.emptyInput }
 
-        let beforeCount = try sourceContext.fetch(FetchDescriptor<StoredIngredient>()).count
+        let container = sourceContext.container
+        let beforeCount = try ModelContext(container).fetch(FetchDescriptor<StoredIngredient>()).count
+        let saveContext = ModelContext(container)
+        saveContext.autosaveEnabled = false
 
+        var insertedIDs: [PersistentIdentifier] = []
         for input in cleanInputs {
-            sourceContext.insert(input.storedIngredient)
+            let ingredient = input.storedIngredient
+            saveContext.insert(ingredient)
+            insertedIDs.append(ingredient.persistentModelID)
         }
-        try sourceContext.save()
+        guard !insertedIDs.isEmpty else { throw IngredientSaveError.writeDidNotReturnInsertedModels }
 
-        let afterCount = try sourceContext.fetch(FetchDescriptor<StoredIngredient>()).count
+        try saveContext.save()
+
+        let verifyContext = ModelContext(container)
+        let afterCount = try verifyContext.fetch(FetchDescriptor<StoredIngredient>()).count
         guard afterCount >= beforeCount + cleanInputs.count else {
             throw IngredientSaveError.notWritten(
                 expectedIncrease: cleanInputs.count,
