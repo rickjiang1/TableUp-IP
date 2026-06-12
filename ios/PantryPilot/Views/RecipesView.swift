@@ -126,6 +126,7 @@ struct RecipeCloudSync {
                 cloudUpdatedAt: cloudRecipe.updatedAt,
                 name: cloudRecipe.name
             )
+            let previousImageURL = localRecipe.imageURL
 
             if localRecipe.cloudId.isEmpty {
                 localRecipe.cloudId = cloudRecipe.id
@@ -135,6 +136,15 @@ struct RecipeCloudSync {
             localRecipe.name = cloudRecipe.name
             localRecipe.imageURL = cloudRecipe.imageURL
             localRecipe.videoURL = cloudRecipe.videoURL
+            if !cloudRecipe.imageURL.isEmpty,
+               (localRecipe.imageData == nil || previousImageURL != cloudRecipe.imageURL),
+               let imageData = try? await fetchMediaData(pathOrURL: cloudRecipe.imageURL) {
+                localRecipe.imageData = RecipeImageProcessor.jpegData(from: imageData, maxDimension: 1400, compression: 0.72) ?? imageData
+                localRecipe.imageThumbnailData = RecipeImageProcessor.jpegData(from: imageData, maxDimension: 160, compression: 0.62)
+            } else if cloudRecipe.imageURL.isEmpty {
+                localRecipe.imageData = nil
+                localRecipe.imageThumbnailData = nil
+            }
             localRecipe.steps = cloudRecipe.steps
                 .sorted { $0.order < $1.order }
                 .map(\.text)
@@ -168,6 +178,13 @@ struct RecipeCloudSync {
     }
 
     func saveRecipe(_ recipe: Recipe) async throws -> CloudRecipe {
+        if let imageData = recipe.imageData {
+            let uploadedImage = try await uploadImage(imageData)
+            recipe.imageURL = uploadedImage.url
+        } else {
+            recipe.imageURL = ""
+        }
+
         let payload = CloudRecipeSavePayload(recipe: recipe)
         let method = recipe.cloudId.isEmpty ? "POST" : "PUT"
         let path = recipe.cloudId.isEmpty ? "api/recipes" : "api/recipes/\(recipe.cloudId)"
@@ -201,6 +218,33 @@ struct RecipeCloudSync {
         return try JSONDecoder().decode(CloudRecipeResponse.self, from: data).recipes
     }
 
+    private func uploadImage(_ imageData: Data) async throws -> MediaUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let url = baseURL.appending(path: "api/media/image")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 90
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = multipartBody(
+            data: imageData,
+            boundary: boundary,
+            fieldName: "file",
+            fileName: "recipe-photo.jpg",
+            mimeType: "image/jpeg"
+        )
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try JSONDecoder().decode(MediaUploadResponse.self, from: data)
+    }
+
+    private func fetchMediaData(pathOrURL: String) async throws -> Data {
+        let url = backendURL(for: pathOrURL)
+        let (data, response) = try await session.data(from: url)
+        try validate(response: response, data: data)
+        return data
+    }
+
     private func validate(response: URLResponse, data: Data) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GroceryPhotoExtractorError.badResponse("Backend did not return an HTTP response.")
@@ -222,6 +266,29 @@ struct RecipeCloudSync {
             return 2
         }
     }
+
+    private func backendURL(for pathOrURL: String) -> URL {
+        if let absoluteURL = URL(string: pathOrURL), absoluteURL.scheme != nil {
+            return absoluteURL
+        }
+        return baseURL.appending(path: pathOrURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+    }
+
+    private func multipartBody(
+        data: Data,
+        boundary: String,
+        fieldName: String,
+        fileName: String,
+        mimeType: String
+    ) -> Data {
+        var body = Data()
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n")
+        body.append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+        return body
+    }
 }
 
 struct CloudRecipeResponse: Decodable {
@@ -230,6 +297,12 @@ struct CloudRecipeResponse: Decodable {
 
 struct CloudRecipeSaveResponse: Decodable {
     let recipe: CloudRecipe
+}
+
+struct MediaUploadResponse: Decodable {
+    let fileName: String
+    let path: String
+    let url: String
 }
 
 struct CloudRecipeSavePayload: Encodable {
@@ -996,5 +1069,11 @@ struct RecipeThumbnail: View {
                 .background(Color.orange.opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        append(Data(string.utf8))
     }
 }

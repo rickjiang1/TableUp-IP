@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
-import { deleteCloudRecipe, fetchCloudRecipes, upsertCloudRecipe } from "./databricks.js";
+import { deleteCloudRecipe, fetchCloudRecipes, readVolumeFile, uploadVolumeFile, upsertCloudRecipe } from "./databricks.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -32,6 +32,35 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const mediaMatch = url.pathname.match(/^\/api\/media\/([^/]+)$/);
+    if (mediaMatch && request.method === "GET") {
+      const file = await readVolumeFile(decodeURIComponent(mediaMatch[1]));
+      response.writeHead(200, {
+        "Content-Type": file.mimeType,
+        "Cache-Control": "public, max-age=31536000, immutable"
+      });
+      response.end(file.data);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/media/image") {
+      const body = await readRequestBody(request, 8 * 1024 * 1024);
+      const file = parseMultipartFile(request.headers["content-type"], body, ["file", "photo", "image"]);
+
+      if (!file) {
+        sendJson(response, 400, { error: "file is required" });
+        return;
+      }
+
+      const uploaded = await uploadVolumeFile({
+        data: file.data,
+        mimeType: file.mimeType,
+        extension: extensionForMimeType(file.mimeType)
+      });
+      sendJson(response, 201, uploaded);
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/recipes") {
       const recipe = await readJsonRequest(request, 1024 * 1024);
       const savedRecipe = await upsertCloudRecipe(recipe);
@@ -60,7 +89,7 @@ const server = createServer(async (request, response) => {
       }
 
       const body = await readRequestBody(request, 8 * 1024 * 1024);
-      const photo = parseMultipartPhoto(request.headers["content-type"], body);
+      const photo = parseMultipartFile(request.headers["content-type"], body, ["photo"]);
 
       if (!photo) {
         sendJson(response, 400, { error: "photo is required" });
@@ -203,11 +232,13 @@ function readRequestBody(request, maxBytes) {
   });
 }
 
-function parseMultipartPhoto(contentType, body) {
+function parseMultipartFile(contentType, body, fieldNames) {
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || "")?.slice(1).find(Boolean);
   if (!boundary) {
     return null;
   }
+
+  const fieldPattern = new RegExp(`name="(?:${fieldNames.map(escapeRegExp).join("|")})"`);
 
   const marker = Buffer.from(`--${boundary}`);
   let offset = 0;
@@ -230,7 +261,7 @@ function parseMultipartPhoto(contentType, body) {
     }
 
     const headerText = body.slice(partStart, contentStart).toString("latin1");
-    if (/name="photo"/.test(headerText)) {
+    if (fieldPattern.test(headerText)) {
       const mimeType = /content-type:\s*([^\r\n]+)/i.exec(headerText)?.[1]?.trim() || "image/jpeg";
       let dataEnd = nextPart;
       if (body[dataEnd - 2] === 13 && body[dataEnd - 1] === 10) {
@@ -247,6 +278,21 @@ function parseMultipartPhoto(contentType, body) {
   }
 
   return null;
+}
+
+function extensionForMimeType(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized.includes("png")) {
+    return "png";
+  }
+  if (normalized.includes("heic")) {
+    return "heic";
+  }
+  return "jpg";
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function createOpenAIResponse({ schemaName, schema, content }) {

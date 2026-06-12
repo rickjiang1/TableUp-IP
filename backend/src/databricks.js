@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 const statementPath = "/api/2.0/sql/statements";
+const filesPath = "/api/2.0/fs/files";
 
 export async function fetchCloudRecipes() {
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
@@ -151,6 +152,56 @@ export async function deleteCloudRecipe(recipeId) {
   `);
 }
 
+export async function uploadVolumeFile({ data, mimeType = "application/octet-stream", extension = "bin" }) {
+  const config = databricksConfig();
+  const volumePath = volumeConfig().path;
+  const safeExtension = String(extension || "bin").replace(/[^A-Za-z0-9]/g, "") || "bin";
+  const fileName = `${randomUUID()}.${safeExtension}`;
+  const path = `${volumePath}/${fileName}`;
+
+  const response = await fetch(`${config.host}${filesPath}${encodePath(path)}?overwrite=true`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+      "Content-Type": mimeType
+    },
+    body: data
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Databricks media upload failed with ${response.status}: ${text}`);
+  }
+
+  return {
+    fileName,
+    path,
+    url: `/api/media/${encodeURIComponent(fileName)}`
+  };
+}
+
+export async function readVolumeFile(fileName) {
+  const config = databricksConfig();
+  const volumePath = volumeConfig().path;
+  const safeFileName = sanitizeFileName(fileName);
+  const path = `${volumePath}/${safeFileName}`;
+  const response = await fetch(`${config.host}${filesPath}${encodePath(path)}`, {
+    headers: {
+      Authorization: `Bearer ${config.token}`
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Databricks media read failed with ${response.status}: ${text}`);
+  }
+
+  return {
+    data: Buffer.from(await response.arrayBuffer()),
+    mimeType: mimeTypeForFileName(safeFileName)
+  };
+}
+
 async function runSql(statement) {
   const config = databricksConfig();
   const response = await fetch(`${config.host}${statementPath}`, {
@@ -191,7 +242,7 @@ async function waitForStatement(config, payload) {
       throw new Error(`Databricks statement did not finish: ${current.status.state}`);
     }
 
-    if (Date.now() - startedAt > 60_000) {
+    if (Date.now() - startedAt > 180_000) {
       throw new Error(`Databricks statement timed out: ${current.status.state}`);
     }
 
@@ -285,6 +336,14 @@ function databricksConfig() {
   };
 }
 
+function volumeConfig() {
+  const path = (process.env.DATABRICKS_VOLUME_PATH || "").replace(/\/$/, "");
+  if (!path) {
+    throw new Error("Databricks media volume is not configured. Add DATABRICKS_VOLUME_PATH to backend/.env.");
+  }
+  return { path };
+}
+
 function tableName(name) {
   const catalog = quoteIdentifier(process.env.DATABRICKS_CATALOG || "workspace");
   const schema = quoteIdentifier(process.env.DATABRICKS_SCHEMA || "foodmanagement");
@@ -293,6 +352,38 @@ function tableName(name) {
 
 function quoteIdentifier(value) {
   return `\`${String(value).replaceAll("`", "``")}\``;
+}
+
+function encodePath(path) {
+  return path.split("/").map((part, index) => index === 0 ? "" : encodeURIComponent(part)).join("/");
+}
+
+function sanitizeFileName(fileName) {
+  const safeFileName = String(fileName || "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(safeFileName)) {
+    throw new Error("Invalid media file name.");
+  }
+  return safeFileName;
+}
+
+function mimeTypeForFileName(fileName) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+    return "image/jpeg";
+  }
+  if (lower.endsWith(".png")) {
+    return "image/png";
+  }
+  if (lower.endsWith(".heic")) {
+    return "image/heic";
+  }
+  if (lower.endsWith(".mov")) {
+    return "video/quicktime";
+  }
+  if (lower.endsWith(".mp4")) {
+    return "video/mp4";
+  }
+  return "application/octet-stream";
 }
 
 function groupBy(rows, key) {
