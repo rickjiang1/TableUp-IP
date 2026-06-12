@@ -48,6 +48,7 @@ struct RecipesView: View {
                             do {
                                 try await RecipeCloudSync().deleteRecipe(id: cloudId)
                             } catch {
+                                guard !error.isCancellation else { return }
                                 syncError = RecipeSyncError(message: error.localizedDescription)
                             }
                         }
@@ -98,8 +99,23 @@ struct RecipesView: View {
         do {
             try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
         } catch {
+            guard !error.isCancellation else { return }
             syncError = RecipeSyncError(message: error.localizedDescription)
         }
+    }
+}
+
+private extension Error {
+    var isCancellation: Bool {
+        if self is CancellationError {
+            return true
+        }
+
+        if let urlError = self as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        return (self as NSError).code == NSURLErrorCancelled
     }
 }
 
