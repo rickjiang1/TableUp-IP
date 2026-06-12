@@ -119,6 +119,15 @@ enum L {
         "Add seasoning": "添加调料",
         "Sync Recipes": "同步食谱",
         "Sync failed": "同步失败",
+        "Recipe Library": "食谱库",
+        "Central Recipes": "中心食谱",
+        "My Recipes": "我的食谱",
+        "New Folder": "新建文件夹",
+        "Folder name": "文件夹名称",
+        "No recipes here": "这里还没有食谱",
+        "Create a folder or add a recipe.": "创建文件夹或添加食谱。",
+        "folders": "个文件夹",
+        "recipes": "个食谱",
         "piece": "个",
         "clove": "瓣",
         "bunch": "把",
@@ -160,6 +169,17 @@ extension RecipeIngredientRole {
             return L.text("Add secondary ingredient", language: language)
         case .seasoning:
             return L.text("Add seasoning", language: language)
+        }
+    }
+}
+
+extension RecipeSource {
+    func displayName(language: String) -> String {
+        switch self {
+        case .central:
+            return L.text("Central Recipes", language: language)
+        case .user:
+            return L.text("My Recipes", language: language)
         }
     }
 }

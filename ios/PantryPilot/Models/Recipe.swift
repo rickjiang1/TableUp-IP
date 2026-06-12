@@ -5,6 +5,8 @@ import SwiftData
 final class Recipe {
     var cloudId: String
     var cloudUpdatedAt: String
+    var sourceRaw: String = RecipeSource.user.rawValue
+    var folderId: String = ""
     var name: String
     var steps: [String]
     var videoURL: String
@@ -21,6 +23,8 @@ final class Recipe {
     init(
         cloudId: String = "",
         cloudUpdatedAt: String = "",
+        source: RecipeSource = .user,
+        folderId: String = "",
         name: String,
         ingredients: [RecipeIngredient] = [],
         steps: [String] = [],
@@ -33,6 +37,8 @@ final class Recipe {
     ) {
         self.cloudId = cloudId
         self.cloudUpdatedAt = cloudUpdatedAt
+        self.sourceRaw = source.rawValue
+        self.folderId = folderId
         self.name = name
         self.ingredients = ingredients
         self.steps = steps
@@ -43,6 +49,45 @@ final class Recipe {
         self.videoData = videoData
         self.videoFileName = videoFileName
         self.createdAt = .now
+    }
+
+    var source: RecipeSource {
+        get { RecipeSource(rawValue: sourceRaw) ?? .user }
+        set { sourceRaw = newValue.rawValue }
+    }
+}
+
+enum RecipeSource: String, CaseIterable, Identifiable {
+    case central
+    case user
+
+    var id: String { rawValue }
+}
+
+@Model
+final class RecipeFolder {
+    var id: String
+    var sourceRaw: String
+    var parentId: String
+    var name: String
+    var createdAt: Date
+
+    init(
+        id: String = UUID().uuidString,
+        source: RecipeSource = .user,
+        parentId: String = "",
+        name: String
+    ) {
+        self.id = id
+        self.sourceRaw = source.rawValue
+        self.parentId = parentId
+        self.name = name
+        self.createdAt = .now
+    }
+
+    var source: RecipeSource {
+        get { RecipeSource(rawValue: sourceRaw) ?? .user }
+        set { sourceRaw = newValue.rawValue }
     }
 }
 

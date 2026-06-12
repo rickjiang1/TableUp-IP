@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>BackendBaseURLDevice</key>
-	<string>http://192.168.1.152:8787/</string>
+	<string>https://foodmanagementapp.onrender.com/</string>
 	<key>BackendBaseURLSimulator</key>
-	<string>http://127.0.0.1:8787/</string>
+	<string>https://foodmanagementapp.onrender.com/</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -34,7 +34,7 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Pantry Pilot uses selected grocery photos to extract ingredients.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Pantry Pilot connects to the local Pantry Pilot backend on your Mac to extract grocery items.</string>
+	<string>Pantry Pilot connects to the Pantry Pilot backend to extract grocery items.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -7,6 +7,7 @@ struct PantryPilotApp: App {
         let schema = Schema([
             StoredIngredient.self,
             Recipe.self,
+            RecipeFolder.self,
             RecipeIngredient.self
         ])
         let configuration = ModelConfiguration(

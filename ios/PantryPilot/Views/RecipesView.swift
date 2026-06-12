@@ -9,14 +9,94 @@ struct RecipesView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
+    @Query(sort: \RecipeFolder.createdAt, order: .forward) private var folders: [RecipeFolder]
+    @State private var selectedSource: RecipeSource = .central
+    @State private var folderPath: [RecipeFolder] = []
     @State private var showingAddRecipe = false
+    @State private var showingAddFolder = false
+    @State private var newFolderName = ""
     @State private var isSyncing = false
     @State private var recipeAlert: RecipeAlertMessage?
+
+    private var currentFolderId: String {
+        folderPath.last?.id ?? ""
+    }
+
+    private var visibleFolders: [RecipeFolder] {
+        folders
+            .filter { $0.source == selectedSource && $0.parentId == currentFolderId }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var visibleRecipes: [Recipe] {
+        recipes
+            .filter { $0.source == selectedSource && $0.folderId == currentFolderId }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                ForEach(recipes) { recipe in
+                Picker(L.text("Recipe Library", language: appLanguage), selection: $selectedSource) {
+                    ForEach(RecipeSource.allCases) { source in
+                        Text(source.displayName(language: appLanguage)).tag(source)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
+                .onChange(of: selectedSource) { _, _ in
+                    folderPath = []
+                }
+
+                if !folderPath.isEmpty {
+                    Button {
+                        _ = folderPath.popLast()
+                    } label: {
+                        Label(parentFolderTitle, systemImage: "chevron.left")
+                    }
+                }
+
+                if visibleFolders.isEmpty && visibleRecipes.isEmpty {
+                    ContentUnavailableView(
+                        L.text("No recipes here", language: appLanguage),
+                        systemImage: selectedSource == .central ? "books.vertical" : "folder",
+                        description: Text(L.text("Create a folder or add a recipe.", language: appLanguage))
+                    )
+                }
+
+                ForEach(visibleFolders) { folder in
+                    Button {
+                        folderPath.append(folder)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "folder.fill")
+                                .font(.title2)
+                                .foregroundStyle(.orange)
+                                .frame(width: 58, height: 58)
+                                .background(Color.orange.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(folder.name)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+                                Text(folderSummary(for: folder))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                .onDelete(perform: deleteFolders)
+
+                ForEach(visibleRecipes) { recipe in
                     NavigationLink {
                         RecipeDetailView(recipe: recipe)
                     } label: {
@@ -35,28 +115,21 @@ struct RecipesView: View {
                         .padding(.vertical, 4)
                     }
                 }
-                .onDelete { indexSet in
-                    let deletedCloudIds = indexSet.map { recipes[$0].cloudId }.filter { !$0.isEmpty }
-                    for index in indexSet {
-                        RecipeMediaStore.deleteVideo(fileName: recipes[index].videoFileName)
-                        modelContext.delete(recipes[index])
-                    }
-                    try? modelContext.save()
-
-                    Task {
-                        for cloudId in deletedCloudIds {
-                            do {
-                                try await RecipeCloudSync().deleteRecipe(id: cloudId)
-                            } catch {
-                                guard !error.isCancellation else { return }
-                                recipeAlert = RecipeAlertMessage(title: "Sync failed", message: error.localizedDescription)
-                            }
+                .onDelete(perform: deleteRecipes)
+            }
+            .navigationTitle(navigationTitle)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !folderPath.isEmpty {
+                        Button {
+                            folderPath = []
+                        } label: {
+                            Image(systemName: "house")
                         }
+                        .accessibilityLabel(L.text("Recipe Library", language: appLanguage))
                     }
                 }
-            }
-            .navigationTitle(L.text("Recipes", language: appLanguage))
-            .toolbar {
+
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
                         Task {
@@ -68,15 +141,27 @@ struct RecipesView: View {
                     .disabled(isSyncing)
                     .accessibilityLabel(L.text("Sync Recipes", language: appLanguage))
 
-                    Button {
-                        showingAddRecipe = true
+                    Menu {
+                        Button {
+                            showingAddFolder = true
+                        } label: {
+                            Label(L.text("New Folder", language: appLanguage), systemImage: "folder.badge.plus")
+                        }
+
+                        Button {
+                            showingAddRecipe = true
+                        } label: {
+                            Label(L.text("Add Recipe", language: appLanguage), systemImage: "plus")
+                        }
                     } label: {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus.circle.fill")
                     }
                 }
             }
             .sheet(isPresented: $showingAddRecipe) {
                 AddRecipeView(
+                    source: selectedSource,
+                    folderId: currentFolderId,
                     onSaved: { name in
                         recipeAlert = RecipeAlertMessage(title: "Saved", message: name)
                     },
@@ -84,6 +169,16 @@ struct RecipesView: View {
                         recipeAlert = RecipeAlertMessage(title: "Sync failed", message: message)
                     }
                 )
+            }
+            .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
+                TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)
+                Button(L.text("Cancel", language: appLanguage), role: .cancel) {
+                    newFolderName = ""
+                }
+                Button(L.text("Save", language: appLanguage)) {
+                    saveFolder()
+                }
+                .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .alert(item: $recipeAlert) { alert in
                 Alert(
@@ -94,6 +189,83 @@ struct RecipesView: View {
             }
             .task {
                 await syncRecipes()
+            }
+        }
+    }
+
+    private var parentFolderTitle: String {
+        if folderPath.count == 1 {
+            return selectedSource.displayName(language: appLanguage)
+        }
+        return folderPath.dropLast().last?.name ?? selectedSource.displayName(language: appLanguage)
+    }
+
+    private var navigationTitle: String {
+        folderPath.last?.name ?? selectedSource.displayName(language: appLanguage)
+    }
+
+    private func folderSummary(for folder: RecipeFolder) -> String {
+        let childFolders = folders.filter { $0.parentId == folder.id }.count
+        let childRecipes = recipes.filter { $0.folderId == folder.id }.count
+        return "\(childFolders) \(L.text("folders", language: appLanguage)) - \(childRecipes) \(L.text("recipes", language: appLanguage))"
+    }
+
+    private func saveFolder() {
+        let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        modelContext.insert(
+            RecipeFolder(
+                source: selectedSource,
+                parentId: currentFolderId,
+                name: trimmedName
+            )
+        )
+        do {
+            try modelContext.save()
+            recipeAlert = RecipeAlertMessage(title: "Saved", message: trimmedName)
+        } catch {
+            recipeAlert = RecipeAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+        newFolderName = ""
+    }
+
+    private func deleteFolders(_ indexSet: IndexSet) {
+        for index in indexSet {
+            let folder = visibleFolders[index]
+            deleteFolderTree(folder)
+        }
+        try? modelContext.save()
+    }
+
+    private func deleteFolderTree(_ folder: RecipeFolder) {
+        for child in folders.filter({ $0.parentId == folder.id }) {
+            deleteFolderTree(child)
+        }
+        for recipe in recipes.filter({ $0.folderId == folder.id }) {
+            RecipeMediaStore.deleteVideo(fileName: recipe.videoFileName)
+            modelContext.delete(recipe)
+        }
+        modelContext.delete(folder)
+    }
+
+    private func deleteRecipes(_ indexSet: IndexSet) {
+        let deletedRecipes = indexSet.map { visibleRecipes[$0] }
+        let deletedCloudIds = deletedRecipes.map(\.cloudId).filter { !$0.isEmpty }
+        for recipe in deletedRecipes {
+            RecipeMediaStore.deleteVideo(fileName: recipe.videoFileName)
+            modelContext.delete(recipe)
+        }
+        try? modelContext.save()
+
+        Task {
+            for cloudId in deletedCloudIds {
+                do {
+                    try await RecipeCloudSync().deleteRecipe(id: cloudId)
+                } catch {
+                    guard !error.isCancellation else { return }
+                    recipeAlert = RecipeAlertMessage(title: "Sync failed", message: error.localizedDescription)
+                }
             }
         }
     }
@@ -153,6 +325,7 @@ struct RecipeCloudSync {
             let localRecipe = recipesByCloudId[cloudRecipe.id] ?? Recipe(
                 cloudId: cloudRecipe.id,
                 cloudUpdatedAt: cloudRecipe.updatedAt,
+                source: .central,
                 name: cloudRecipe.name
             )
             let previousImageURL = localRecipe.imageURL
@@ -161,6 +334,7 @@ struct RecipeCloudSync {
                 localRecipe.cloudId = cloudRecipe.id
             }
 
+            localRecipe.source = .central
             localRecipe.cloudUpdatedAt = cloudRecipe.updatedAt
             localRecipe.name = cloudRecipe.name
             localRecipe.imageURL = cloudRecipe.imageURL
@@ -434,6 +608,8 @@ struct AddRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    let source: RecipeSource
+    let folderId: String
     let onSaved: (String) -> Void
     let onSyncFailed: (String) -> Void
     @State private var name = ""
@@ -545,6 +721,8 @@ struct AddRecipeView: View {
             .filter { !$0.isEmpty }
 
         let recipe = Recipe(
+            source: source,
+            folderId: folderId,
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             ingredients: ingredients,
             steps: steps,
@@ -561,6 +739,7 @@ struct AddRecipeView: View {
             onSaved(savedName)
             dismiss()
 
+            guard recipe.source == .central else { return }
             Task {
                 do {
                     let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
@@ -755,6 +934,7 @@ struct EditRecipeView: View {
             onSaved(savedName)
             dismiss()
 
+            guard recipe.source == .central else { return }
             Task {
                 do {
                     let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
