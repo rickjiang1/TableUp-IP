@@ -6,6 +6,7 @@ import UIKit
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @Query private var inventory: [StoredIngredient]
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
@@ -210,12 +211,12 @@ struct SaveErrorMessage: Identifiable {
 }
 
 enum IngredientSaveError: LocalizedError {
-    case notPersisted(before: Int, after: Int, expected: Int)
+    case emptyInput
 
     var errorDescription: String? {
         switch self {
-        case .notPersisted(let before, let after, let expected):
-            "The ingredient was not written to storage. Before: \(before), after: \(after), expected new items: \(expected)."
+        case .emptyInput:
+            "No ingredient was selected to save."
         }
     }
 }
@@ -293,23 +294,12 @@ struct IngredientInput {
 enum InventoryStore {
     static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> [String] {
         let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        guard !cleanInputs.isEmpty else { return [] }
+        guard !cleanInputs.isEmpty else { throw IngredientSaveError.emptyInput }
 
-        let saveContext = ModelContext(sourceContext.container)
-        let countBefore = try saveContext.fetch(FetchDescriptor<StoredIngredient>()).count
         for input in cleanInputs {
-            saveContext.insert(input.storedIngredient)
+            sourceContext.insert(input.storedIngredient)
         }
-        try saveContext.save()
-        let countAfter = try saveContext.fetch(FetchDescriptor<StoredIngredient>()).count
-
-        guard countAfter >= countBefore + cleanInputs.count else {
-            throw IngredientSaveError.notPersisted(
-                before: countBefore,
-                after: countAfter,
-                expected: cleanInputs.count
-            )
-        }
+        try sourceContext.save()
 
         return cleanInputs.map(\.displayName)
     }
