@@ -11,7 +11,7 @@ struct RecipesView: View {
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var showingAddRecipe = false
     @State private var isSyncing = false
-    @State private var syncError: RecipeSyncError?
+    @State private var recipeAlert: RecipeAlertMessage?
 
     var body: some View {
         NavigationStack {
@@ -49,7 +49,7 @@ struct RecipesView: View {
                                 try await RecipeCloudSync().deleteRecipe(id: cloudId)
                             } catch {
                                 guard !error.isCancellation else { return }
-                                syncError = RecipeSyncError(message: error.localizedDescription)
+                                recipeAlert = RecipeAlertMessage(title: "Sync failed", message: error.localizedDescription)
                             }
                         }
                     }
@@ -76,12 +76,19 @@ struct RecipesView: View {
                 }
             }
             .sheet(isPresented: $showingAddRecipe) {
-                AddRecipeView()
+                AddRecipeView(
+                    onSaved: { name in
+                        recipeAlert = RecipeAlertMessage(title: "Saved", message: name)
+                    },
+                    onSyncFailed: { message in
+                        recipeAlert = RecipeAlertMessage(title: "Sync failed", message: message)
+                    }
+                )
             }
-            .alert(item: $syncError) { error in
+            .alert(item: $recipeAlert) { alert in
                 Alert(
-                    title: Text(L.text("Sync failed", language: appLanguage)),
-                    message: Text(error.message),
+                    title: Text(L.text(alert.title, language: appLanguage)),
+                    message: Text(alert.message),
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
@@ -100,7 +107,7 @@ struct RecipesView: View {
             try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
         } catch {
             guard !error.isCancellation else { return }
-            syncError = RecipeSyncError(message: error.localizedDescription)
+            recipeAlert = RecipeAlertMessage(title: "Sync failed", message: error.localizedDescription)
         }
     }
 }
@@ -121,6 +128,12 @@ private extension Error {
 
 struct RecipeSyncError: Identifiable {
     let id = UUID()
+    let message: String
+}
+
+struct RecipeAlertMessage: Identifiable {
+    let id = UUID()
+    let title: String
     let message: String
 }
 
@@ -421,6 +434,8 @@ struct AddRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    let onSaved: (String) -> Void
+    let onSyncFailed: (String) -> Void
     @State private var name = ""
     @State private var ingredientDrafts: [RecipeIngredientDraft] = [
         RecipeIngredientDraft(name: "chicken thigh", quantity: 1, unit: "lb", role: .main),
@@ -486,6 +501,8 @@ struct AddRecipeView: View {
                         .frame(minHeight: 100)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
             .navigationTitle(L.text("Add Recipe", language: appLanguage))
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
@@ -539,11 +556,22 @@ struct AddRecipeView: View {
         modelContext.insert(recipe)
 
         do {
-            let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
-            recipe.cloudId = cloudRecipe.id
-            recipe.cloudUpdatedAt = cloudRecipe.updatedAt
             try modelContext.save()
+            let savedName = recipe.name
+            onSaved(savedName)
             dismiss()
+
+            Task {
+                do {
+                    let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
+                    recipe.cloudId = cloudRecipe.id
+                    recipe.cloudUpdatedAt = cloudRecipe.updatedAt
+                    try modelContext.save()
+                } catch {
+                    guard !error.isCancellation else { return }
+                    onSyncFailed(error.localizedDescription)
+                }
+            }
         } catch {
             saveError = RecipeSyncError(message: error.localizedDescription)
         }
@@ -569,6 +597,8 @@ struct EditRecipeView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Bindable var recipe: Recipe
+    let onSaved: (String) -> Void
+    let onSyncFailed: (String) -> Void
 
     @State private var name: String
     @State private var ingredientDrafts: [RecipeIngredientDraft]
@@ -582,8 +612,14 @@ struct EditRecipeView: View {
     @State private var saveError: RecipeSyncError?
     @State private var isSaving = false
 
-    init(recipe: Recipe) {
+    init(
+        recipe: Recipe,
+        onSaved: @escaping (String) -> Void,
+        onSyncFailed: @escaping (String) -> Void
+    ) {
         self.recipe = recipe
+        self.onSaved = onSaved
+        self.onSyncFailed = onSyncFailed
         _name = State(initialValue: recipe.name)
         _ingredientDrafts = State(initialValue: recipe.ingredients.map { RecipeIngredientDraft(ingredient: $0) })
         _stepsText = State(initialValue: recipe.steps.joined(separator: "\n"))
@@ -655,6 +691,8 @@ struct EditRecipeView: View {
                         .frame(minHeight: 100)
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
             .navigationTitle(L.text("Edit Recipe", language: appLanguage))
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
@@ -712,11 +750,22 @@ struct EditRecipeView: View {
         recipe.ingredients = ingredients
 
         do {
-            let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
-            recipe.cloudId = cloudRecipe.id
-            recipe.cloudUpdatedAt = cloudRecipe.updatedAt
             try modelContext.save()
+            let savedName = recipe.name
+            onSaved(savedName)
             dismiss()
+
+            Task {
+                do {
+                    let cloudRecipe = try await RecipeCloudSync().saveRecipe(recipe)
+                    recipe.cloudId = cloudRecipe.id
+                    recipe.cloudUpdatedAt = cloudRecipe.updatedAt
+                    try modelContext.save()
+                } catch {
+                    guard !error.isCancellation else { return }
+                    onSyncFailed(error.localizedDescription)
+                }
+            }
         } catch {
             saveError = RecipeSyncError(message: error.localizedDescription)
         }
@@ -857,6 +906,7 @@ struct RecipeDetailView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var showingEditRecipe = false
     @State private var showingCookingMode = false
+    @State private var recipeAlert: RecipeAlertMessage?
 
     var body: some View {
         List {
@@ -921,10 +971,25 @@ struct RecipeDetailView: View {
             }
         }
         .sheet(isPresented: $showingEditRecipe) {
-            EditRecipeView(recipe: recipe)
+            EditRecipeView(
+                recipe: recipe,
+                onSaved: { name in
+                    recipeAlert = RecipeAlertMessage(title: "Saved", message: name)
+                },
+                onSyncFailed: { message in
+                    recipeAlert = RecipeAlertMessage(title: "Sync failed", message: message)
+                }
+            )
         }
         .sheet(isPresented: $showingCookingMode) {
             CookingModeView(recipe: recipe)
+        }
+        .alert(item: $recipeAlert) { alert in
+            Alert(
+                title: Text(L.text(alert.title, language: appLanguage)),
+                message: Text(alert.message),
+                dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+            )
         }
     }
 }

@@ -13,9 +13,7 @@ struct ScanView: View {
     @State private var showingManualAdd = false
     @State private var showingCamera = false
     @State private var showingDetectedItems = false
-    @State private var saveConfirmation: SaveConfirmation?
-    @State private var extractionError: ExtractionErrorMessage?
-    @State private var saveError: SaveErrorMessage?
+    @State private var scanAlert: ScanAlertMessage?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
 
@@ -23,6 +21,8 @@ struct ScanView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
+                    Spacer(minLength: 90)
+
                     VStack(spacing: 18) {
                         if UIImagePickerController.isSourceTypeAvailable(.camera) {
                             Button {
@@ -88,6 +88,8 @@ struct ScanView: View {
                 .padding()
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
             .task(id: selectedPhoto) {
                 await loadSelectedPhoto()
             }
@@ -102,24 +104,10 @@ struct ScanView: View {
                     }
                 }
             }
-            .alert(item: $saveConfirmation) { confirmation in
+            .alert(item: $scanAlert) { alert in
                 Alert(
-                    title: Text(L.text("Saved", language: appLanguage)),
-                    message: Text(confirmation.message),
-                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
-                )
-            }
-            .alert(item: $extractionError) { error in
-                Alert(
-                    title: Text(L.text("Extraction failed", language: appLanguage)),
-                    message: Text(error.message),
-                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
-                )
-            }
-            .alert(item: $saveError) { error in
-                Alert(
-                    title: Text(L.text("Save failed", language: appLanguage)),
-                    message: Text(error.message),
+                    title: Text(L.text(alert.title, language: appLanguage)),
+                    message: Text(alert.message),
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
@@ -160,7 +148,7 @@ struct ScanView: View {
             detectedItems = []
             let message = error.localizedDescription
             scanMessage = "Extraction failed."
-            extractionError = ExtractionErrorMessage(message: message)
+            scanAlert = ScanAlertMessage(title: "Extraction failed", message: message)
         }
 
         isExtracting = false
@@ -171,10 +159,13 @@ struct ScanView: View {
             let result = try InventoryStore.save([input], sourceContext: modelContext)
             showingManualAdd = false
             scanMessage = "Saved to storage."
-            saveConfirmation = SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount)
+            scanAlert = ScanAlertMessage(
+                title: "Saved",
+                message: SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount).message
+            )
             return true
         } catch {
-            saveError = SaveErrorMessage(message: error.localizedDescription)
+            scanAlert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
             return false
         }
     }
@@ -187,13 +178,22 @@ struct ScanView: View {
             selectedPhoto = nil
             selectedImageData = nil
             scanMessage = "Saved to storage."
-            saveConfirmation = SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount)
+            scanAlert = ScanAlertMessage(
+                title: "Saved",
+                message: SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount).message
+            )
             return true
         } catch {
-            saveError = SaveErrorMessage(message: error.localizedDescription)
+            scanAlert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
             return false
         }
     }
+}
+
+struct ScanAlertMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 struct SaveConfirmation: Identifiable {
@@ -205,16 +205,6 @@ struct SaveConfirmation: Identifiable {
         let savedText = items.isEmpty ? "Nothing was saved." : items.joined(separator: "\n")
         return "\(savedText)\n\nStorage now has \(inventoryCount) item(s)."
     }
-}
-
-struct ExtractionErrorMessage: Identifiable {
-    let id = UUID()
-    let message: String
-}
-
-struct SaveErrorMessage: Identifiable {
-    let id = UUID()
-    let message: String
 }
 
 enum IngredientSaveError: LocalizedError {

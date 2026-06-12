@@ -137,7 +137,6 @@
 				300000000000000000000001 /* Sources */,
 				300000000000000000000000 /* Frameworks */,
 				300000000000000000000002 /* Resources */,
-				300000000000000000000003 /* Bundle Local Env */,
 			);
 			buildRules = (
 			);
@@ -190,30 +189,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		300000000000000000000003 /* Bundle Local Env */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(PROJECT_DIR)/../backend/.env",
-			);
-			name = "Bundle Local Env";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/backend.env",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "ENV_FILE=\"${PROJECT_DIR}/../backend/.env\"\nDEST_FILE=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/backend.env\"\nif [ -f \"$ENV_FILE\" ]; then\n  cp \"$ENV_FILE\" \"$DEST_FILE\"\nelse\n  rm -f \"$DEST_FILE\"\nfi\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		300000000000000000000001 /* Sources */ = {

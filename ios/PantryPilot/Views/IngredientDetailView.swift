@@ -49,6 +49,8 @@ struct IngredientDetailView: View {
                 }
             }
         }
+        .scrollDismissesKeyboard(.interactively)
+        .dismissKeyboardOnTap()
         .navigationTitle(ingredient.name)
         .onChange(of: ingredient.name) { _, newValue in
             ingredient.normalizedName = IngredientNormalizer.normalizeName(newValue)
