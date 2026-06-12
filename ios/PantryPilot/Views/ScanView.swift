@@ -168,10 +168,10 @@ struct ScanView: View {
 
     private func saveManualIngredient(_ input: IngredientInput) -> Bool {
         do {
-            let savedNames = try InventoryStore.save([input], sourceContext: modelContext)
+            let result = try InventoryStore.save([input], sourceContext: modelContext)
             showingManualAdd = false
             scanMessage = "Saved to storage."
-            saveConfirmation = SaveConfirmation(items: savedNames)
+            saveConfirmation = SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount)
             return true
         } catch {
             saveError = SaveErrorMessage(message: error.localizedDescription)
@@ -181,13 +181,13 @@ struct ScanView: View {
 
     private func saveDetectedItems() -> Bool {
         do {
-            let savedNames = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
+            let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
             selectedPhoto = nil
             selectedImageData = nil
             scanMessage = "Saved to storage."
-            saveConfirmation = SaveConfirmation(items: savedNames)
+            saveConfirmation = SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount)
             return true
         } catch {
             saveError = SaveErrorMessage(message: error.localizedDescription)
@@ -199,9 +199,11 @@ struct ScanView: View {
 struct SaveConfirmation: Identifiable {
     let id = UUID()
     let items: [String]
+    let inventoryCount: Int
 
     var message: String {
-        items.isEmpty ? "Nothing was saved." : items.joined(separator: "\n")
+        let savedText = items.isEmpty ? "Nothing was saved." : items.joined(separator: "\n")
+        return "\(savedText)\n\nStorage now has \(inventoryCount) item(s)."
     }
 }
 
@@ -217,11 +219,14 @@ struct SaveErrorMessage: Identifiable {
 
 enum IngredientSaveError: LocalizedError {
     case emptyInput
+    case notWritten(expectedIncrease: Int, beforeCount: Int, afterCount: Int)
 
     var errorDescription: String? {
         switch self {
         case .emptyInput:
             "No ingredient was selected to save."
+        case .notWritten(let expectedIncrease, let beforeCount, let afterCount):
+            "The ingredient was not written to storage. Expected \(expectedIncrease) new item(s), but storage changed from \(beforeCount) to \(afterCount)."
         }
     }
 }
@@ -298,17 +303,36 @@ struct IngredientInput {
 
 @MainActor
 enum InventoryStore {
-    static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> [String] {
+    static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> InventorySaveResult {
         let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !cleanInputs.isEmpty else { throw IngredientSaveError.emptyInput }
+
+        let beforeCount = try sourceContext.fetch(FetchDescriptor<StoredIngredient>()).count
 
         for input in cleanInputs {
             sourceContext.insert(input.storedIngredient)
         }
         try sourceContext.save()
 
-        return cleanInputs.map(\.displayName)
+        let afterCount = try sourceContext.fetch(FetchDescriptor<StoredIngredient>()).count
+        guard afterCount >= beforeCount + cleanInputs.count else {
+            throw IngredientSaveError.notWritten(
+                expectedIncrease: cleanInputs.count,
+                beforeCount: beforeCount,
+                afterCount: afterCount
+            )
+        }
+
+        return InventorySaveResult(
+            savedNames: cleanInputs.map(\.displayName),
+            inventoryCount: afterCount
+        )
     }
+}
+
+struct InventorySaveResult {
+    let savedNames: [String]
+    let inventoryCount: Int
 }
 
 struct DetectedItemsReviewView: View {
