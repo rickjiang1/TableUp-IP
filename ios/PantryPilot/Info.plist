@@ -6,6 +6,10 @@
 	<string>http://192.168.1.152:8787/</string>
 	<key>BackendBaseURLSimulator</key>
 	<string>http://127.0.0.1:8787/</string>
+	<key>OpenAIAPIKey</key>
+	<string>$(OPENAI_API_KEY)</string>
+	<key>OpenAIModel</key>
+	<string>$(OPENAI_MODEL)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
