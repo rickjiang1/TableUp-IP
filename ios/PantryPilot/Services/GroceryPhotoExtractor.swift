@@ -1,18 +1,20 @@
 import Foundation
+import UIKit
 
 struct GroceryPhotoExtractor {
     var baseURL: URL = BackendConfiguration.baseURL
     var session: URLSession = .shared
 
     func extract(from imageData: Data) async throws -> GroceryPhotoExtractionResponse {
+        let uploadImageData = Self.preparedJPEGData(from: imageData) ?? imageData
         let boundary = "Boundary-\(UUID().uuidString)"
         let url = baseURL.appending(path: "api/extract-grocery-photo")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        request.timeoutInterval = 150
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = makeMultipartBody(
-            imageData: imageData,
+            imageData: uploadImageData,
             boundary: boundary,
             fieldName: "photo",
             fileName: "grocery-photo.jpg",
@@ -50,6 +52,22 @@ struct GroceryPhotoExtractor {
         body.append(imageData)
         body.append("\r\n--\(boundary)--\r\n")
         return body
+    }
+
+    private static func preparedJPEGData(from data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+
+        let largestSide = max(image.size.width, image.size.height)
+        guard largestSide > 0 else { return nil }
+
+        let maxDimension: CGFloat = 1400
+        let scale = min(maxDimension / largestSide, 1)
+        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let resizedImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return resizedImage.jpegData(compressionQuality: 0.72)
     }
 }
 
