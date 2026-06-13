@@ -1,4 +1,5 @@
 import { pbkdf2Sync, randomBytes, createHash, createHmac } from "node:crypto";
+import dns from "node:dns/promises";
 import net from "node:net";
 import tls from "node:tls";
 
@@ -58,8 +59,9 @@ function postgresConfig() {
 }
 
 async function connectSocket(config) {
+  const { address } = await dns.lookup(config.host, { family: 4 });
   const rawSocket = await new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: config.host, port: config.port }, () => resolve(socket));
+    const socket = net.createConnection({ host: address, port: config.port }, () => resolve(socket));
     socket.setTimeout(20_000, () => reject(new Error("Postgres connection timed out.")));
     socket.once("error", reject);
   });
