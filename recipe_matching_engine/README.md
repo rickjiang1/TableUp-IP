@@ -16,6 +16,14 @@ Rule-based recipe matching for TableUp. This module does not use AI.
 python3 -m unittest recipe_matching_engine.test_matcher -v
 ```
 
+## Demo Rankings
+
+Print ranked mock recipes against a mixed demo inventory:
+
+```bash
+python3 -m recipe_matching_engine.demo_rankings
+```
+
 ## Integration Notes
 
 The engine is intentionally plain Python dataclasses and pure functions/classes. It can later be wired into:
