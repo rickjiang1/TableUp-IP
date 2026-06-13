@@ -20,7 +20,7 @@ struct PantryPilotApp: App {
         do {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
-            fatalError("Could not create Pantry Pilot model container: \(error)")
+            fatalError("Could not create TableUp model container: \(error)")
         }
     }()
 

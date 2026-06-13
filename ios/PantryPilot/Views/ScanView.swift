@@ -99,8 +99,14 @@ struct ScanView: View {
             }
             .sheet(isPresented: $showingDetectedItems) {
                 DetectedItemsReviewView(items: $detectedItems) {
-                    if saveDetectedItems() {
+                    let result = saveDetectedItems()
+                    if result.didSave {
                         showingDetectedItems = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            scanAlert = result.alert
+                        }
+                    } else {
+                        scanAlert = result.alert
                     }
                 }
             }
@@ -170,7 +176,7 @@ struct ScanView: View {
         }
     }
 
-    private func saveDetectedItems() -> Bool {
+    private func saveDetectedItems() -> ReviewSaveResult {
         do {
             let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
@@ -178,14 +184,18 @@ struct ScanView: View {
             selectedPhoto = nil
             selectedImageData = nil
             scanMessage = "Saved to storage."
-            scanAlert = ScanAlertMessage(
-                title: "Saved",
-                message: SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount).message
+            return ReviewSaveResult(
+                didSave: true,
+                alert: ScanAlertMessage(
+                    title: "Saved",
+                    message: SaveConfirmation(items: result.savedNames, inventoryCount: result.inventoryCount).message
+                )
             )
-            return true
         } catch {
-            scanAlert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
-            return false
+            return ReviewSaveResult(
+                didSave: false,
+                alert: ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+            )
         }
     }
 }
@@ -194,6 +204,11 @@ struct ScanAlertMessage: Identifiable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+struct ReviewSaveResult {
+    let didSave: Bool
+    let alert: ScanAlertMessage
 }
 
 struct SaveConfirmation: Identifiable {

@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "500000000000000000000000"
-               BuildableName = "PantryPilot.app"
+               BuildableName = "TableUp.app"
                BlueprintName = "PantryPilot"
                ReferencedContainer = "container:PantryPilot.xcodeproj">
             </BuildableReference>
@@ -43,7 +43,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "500000000000000000000000"
-            BuildableName = "PantryPilot.app"
+            BuildableName = "TableUp.app"
             BlueprintName = "PantryPilot"
             ReferencedContainer = "container:PantryPilot.xcodeproj">
          </BuildableReference>
@@ -60,7 +60,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "500000000000000000000000"
-            BuildableName = "PantryPilot.app"
+            BuildableName = "TableUp.app"
             BlueprintName = "PantryPilot"
             ReferencedContainer = "container:PantryPilot.xcodeproj">
          </BuildableReference>

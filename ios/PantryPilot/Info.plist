@@ -16,6 +16,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>TableUp</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -30,11 +32,11 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Pantry Pilot uses the camera to scan grocery photos.</string>
+	<string>TableUp uses the camera to scan grocery photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Pantry Pilot uses selected grocery photos to extract ingredients.</string>
+	<string>TableUp uses selected grocery photos to extract ingredients.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Pantry Pilot connects to the Pantry Pilot backend to extract grocery items.</string>
+	<string>TableUp connects to the TableUp backend to extract grocery items.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
