@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
-import { deleteCloudRecipe, fetchCloudRecipes, readVolumeFile, uploadVolumeFile, upsertCloudRecipe } from "./databricks.js";
+import { deleteCloudRecipe, fetchCloudRecipes, readVolumeFile, uploadVolumeFile, upsertCloudRecipe } from "./supabase.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -165,7 +165,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
-  console.log(`Pantry Pilot backend listening on http://127.0.0.1:${port}`);
+  console.log(`TableUp backend listening on http://127.0.0.1:${port}`);
 });
 
 function loadEnv() {

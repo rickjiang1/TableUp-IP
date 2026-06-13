@@ -1,4 +1,4 @@
-# Pantry Pilot Backend
+# TableUp Backend
 
 Small backend for AI extraction. It keeps the OpenAI API key off the iOS app.
 
@@ -14,16 +14,11 @@ Put a fresh OpenAI API key in `.env`.
 
 Do not reuse any key pasted into chat. Rotate it first.
 
-For Databricks recipe sync, also add:
+For Supabase recipe sync and media storage, also add:
 
 ```env
-DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
-DATABRICKS_TOKEN=your_token_here
-DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/your_warehouse_id
-DATABRICKS_CATALOG=workspace
-DATABRICKS_SCHEMA=foodmanagement
-DATABRICKS_VOLUME=pantry_media
-DATABRICKS_VOLUME_PATH=/Volumes/workspace/foodmanagement/pantry_media
+SUPABASE_DATABASE_URL=postgresql://postgres:your_password@db.your-project.supabase.co:5432/postgres
+SUPABASE_SSL_REJECT_UNAUTHORIZED=false
 ```
 
 ## Run
@@ -56,22 +51,29 @@ GET /api/recipes
 
 The server uses OpenAI Responses API image input and Structured Outputs.
 
-## Databricks Recipe Tables
+## Supabase Tables
 
-The cloud recipe sync reads these tables:
+The backend creates these tables automatically on first use:
 
 ```text
-workspace.foodmanagement
 pantry_recipes
 pantry_recipe_ingredients
 pantry_recipe_steps
-pantry_units
+pantry_media
 ```
 
-Media files should live in this Databricks volume:
+Media files are stored in `pantry_media` as `bytea` for the MVP, and served back through:
 
 ```text
-/Volumes/workspace/foodmanagement/pantry_media
+GET /api/media/:fileName
 ```
 
-For the MVP, edit recipe rows directly in Databricks or through the iOS app. The iOS app syncs active recipes through this backend, and Databricks credentials stay in `backend/.env`.
+For the MVP, edit recipe rows directly in Supabase or through the iOS app. The iOS app syncs active recipes through this backend, and Supabase credentials stay in `backend/.env` or Render environment variables.
+
+## Databricks Migration
+
+If the old Databricks variables are still present in `.env`, migrate existing recipes into Supabase with:
+
+```bash
+npm run migrate:databricks:supabase
+```
