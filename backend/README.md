@@ -17,8 +17,8 @@ Do not reuse any key pasted into chat. Rotate it first.
 For Supabase recipe sync and media storage, also add:
 
 ```env
-SUPABASE_DATABASE_URL=postgresql://postgres:your_password@db.your-project.supabase.co:5432/postgres
-SUPABASE_SSL_REJECT_UNAUTHORIZED=false
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
 
 ## Run
@@ -62,13 +62,13 @@ pantry_recipe_steps
 pantry_media
 ```
 
-Media files are stored in `pantry_media` as `bytea` for the MVP, and served back through:
+Media files are stored in `pantry_media` as base64 text for the MVP, and served back through:
 
 ```text
 GET /api/media/:fileName
 ```
 
-For the MVP, edit recipe rows directly in Supabase or through the iOS app. The iOS app syncs active recipes through this backend, and Supabase credentials stay in `backend/.env` or Render environment variables.
+For the MVP, edit recipe rows directly in Supabase or through the iOS app. The iOS app syncs active recipes through this backend, and Supabase keys stay in `backend/.env` or Render environment variables.
 
 ## Databricks Migration
 

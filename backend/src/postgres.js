@@ -1,5 +1,4 @@
 import { pbkdf2Sync, randomBytes, createHash, createHmac } from "node:crypto";
-import dns from "node:dns/promises";
 import net from "node:net";
 import tls from "node:tls";
 
@@ -54,24 +53,27 @@ function postgresConfig() {
     user: decodeURIComponent(url.username || "postgres"),
     password: decodeURIComponent(url.password || ""),
     database: decodeURIComponent(url.pathname.replace(/^\//, "") || "postgres"),
+    forceIPv4: String(process.env.POSTGRES_FORCE_IPV4 || "true").toLowerCase() !== "false",
     sslRejectUnauthorized: String(process.env.SUPABASE_SSL_REJECT_UNAUTHORIZED || "false").toLowerCase() === "true"
   };
 }
 
 async function connectSocket(config) {
-  const { address } = await dns.lookup(config.host, { family: 4 });
   const rawSocket = await new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: address, port: config.port }, () => resolve(socket));
+    const socket = net.createConnection({
+      host: config.host,
+      port: config.port,
+      ...(config.forceIPv4 ? { family: 4 } : {})
+    }, () => resolve(socket));
     socket.setTimeout(20_000, () => reject(new Error("Postgres connection timed out.")));
     socket.once("error", reject);
   });
 
-  rawSocket.write(packInt32(8));
-  rawSocket.write(packInt32(sslRequestCode));
+  rawSocket.write(Buffer.concat([packInt32(8), packInt32(sslRequestCode)]));
 
   const response = await readExactly(rawSocket, 1);
   if (response.toString("utf8") !== "S") {
-    throw new Error("Postgres server did not accept SSL.");
+    throw new Error(`Postgres server did not accept SSL: ${response.toString("hex")}.`);
   }
 
   return await new Promise((resolve, reject) => {

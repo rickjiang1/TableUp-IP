@@ -1,89 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { query, sqlBytea, sqlNumber, sqlString } from "./postgres.js";
 
 export async function ensureSupabaseSchema() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS pantry_recipes (
-      recipe_id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      image_url TEXT NOT NULL DEFAULT '',
-      video_url TEXT NOT NULL DEFAULT '',
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      active BOOLEAN NOT NULL DEFAULT true
-    );
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS pantry_recipe_ingredients (
-      ingredient_id TEXT PRIMARY KEY,
-      recipe_id TEXT NOT NULL REFERENCES pantry_recipes(recipe_id) ON DELETE CASCADE,
-      role TEXT NOT NULL DEFAULT 'main',
-      name TEXT NOT NULL,
-      quantity DOUBLE PRECISION NOT NULL DEFAULT 1,
-      unit TEXT NOT NULL DEFAULT 'piece',
-      sort_order INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS pantry_recipe_steps (
-      step_id TEXT PRIMARY KEY,
-      recipe_id TEXT NOT NULL REFERENCES pantry_recipes(recipe_id) ON DELETE CASCADE,
-      step_order INTEGER NOT NULL DEFAULT 0,
-      instruction TEXT NOT NULL
-    );
-  `);
-  await query(`
-    CREATE TABLE IF NOT EXISTS pantry_media (
-      file_name TEXT PRIMARY KEY,
-      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
-      data BYTEA NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
+  // Tables are created by the migration/bootstrap step. REST mode keeps Render off Postgres TCP.
 }
 
 export async function fetchCloudRecipes() {
-  await ensureSupabaseSchema();
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
-    query(`
-      SELECT
-        recipe_id,
-        name,
-        COALESCE(image_url, '') AS image_url,
-        COALESCE(video_url, '') AS video_url,
-        updated_at::text AS updated_at
-      FROM pantry_recipes
-      WHERE COALESCE(active, true) = true
-      ORDER BY updated_at DESC, name ASC
-    `),
-    query(`
-      SELECT
-        i.recipe_id,
-        i.ingredient_id,
-        i.role,
-        i.name,
-        COALESCE(i.quantity, 1)::text AS quantity,
-        COALESCE(i.unit, 'piece') AS unit,
-        COALESCE(i.sort_order, 0)::text AS sort_order
-      FROM pantry_recipe_ingredients i
-      INNER JOIN pantry_recipes r ON r.recipe_id = i.recipe_id
-      WHERE COALESCE(r.active, true) = true
-      ORDER BY i.recipe_id, sort_order ASC, ingredient_id ASC
-    `),
-    query(`
-      SELECT
-        s.recipe_id,
-        s.step_id,
-        s.step_order::text AS step_order,
-        s.instruction
-      FROM pantry_recipe_steps s
-      INNER JOIN pantry_recipes r ON r.recipe_id = s.recipe_id
-      WHERE COALESCE(r.active, true) = true
-      ORDER BY s.recipe_id, step_order ASC, step_id ASC
-    `)
+    restSelect("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at&active=eq.true&order=updated_at.desc,name.asc"),
+    restSelect("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,role,name,quantity,unit,sort_order&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
+    restSelect("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
   ]);
 
-  const ingredientsByRecipe = groupBy(ingredientRows, "recipe_id");
-  const stepsByRecipe = groupBy(stepRows, "recipe_id");
+  const activeRecipeIds = new Set(recipeRows.map((recipe) => recipe.recipe_id));
+  const ingredientsByRecipe = groupBy(
+    ingredientRows.filter((ingredient) => activeRecipeIds.has(ingredient.recipe_id)),
+    "recipe_id"
+  );
+  const stepsByRecipe = groupBy(
+    stepRows.filter((step) => activeRecipeIds.has(step.recipe_id)),
+    "recipe_id"
+  );
 
   return recipeRows.map((recipe) => ({
     id: recipe.recipe_id,
@@ -108,84 +44,87 @@ export async function fetchCloudRecipes() {
 }
 
 export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
-  await ensureSupabaseSchema();
   const recipe = normalizeRecipeInput(input, recipeId);
+  const now = new Date().toISOString();
 
-  await query(`
-    INSERT INTO pantry_recipes (recipe_id, name, image_url, video_url, updated_at, active)
-    VALUES (
-      ${sqlString(recipe.id)},
-      ${sqlString(recipe.name)},
-      ${sqlString(recipe.imageURL)},
-      ${sqlString(recipe.videoURL)},
-      now(),
-      true
-    )
-    ON CONFLICT (recipe_id) DO UPDATE SET
-      name = EXCLUDED.name,
-      image_url = EXCLUDED.image_url,
-      video_url = EXCLUDED.video_url,
-      updated_at = now(),
-      active = true
-  `);
+  await restWrite(
+    "pantry_recipes?on_conflict=recipe_id",
+    "POST",
+    [{
+      recipe_id: recipe.id,
+      name: recipe.name,
+      image_url: recipe.imageURL,
+      video_url: recipe.videoURL,
+      updated_at: now,
+      active: true
+    }],
+    { prefer: "resolution=merge-duplicates" }
+  );
 
-  await query(`DELETE FROM pantry_recipe_ingredients WHERE recipe_id = ${sqlString(recipe.id)}`);
-  await query(`DELETE FROM pantry_recipe_steps WHERE recipe_id = ${sqlString(recipe.id)}`);
+  await restWrite(`pantry_recipe_ingredients?recipe_id=eq.${encodeURIComponent(recipe.id)}`, "DELETE");
+  await restWrite(`pantry_recipe_steps?recipe_id=eq.${encodeURIComponent(recipe.id)}`, "DELETE");
 
   if (recipe.ingredients.length > 0) {
-    await query(`
-      INSERT INTO pantry_recipe_ingredients
-        (ingredient_id, recipe_id, role, name, quantity, unit, sort_order)
-      VALUES ${recipe.ingredients.map((ingredient, index) => `(
-        ${sqlString(ingredient.id || randomUUID())},
-        ${sqlString(recipe.id)},
-        ${sqlString(normalizeRole(ingredient.role))},
-        ${sqlString(ingredient.name)},
-        ${sqlNumber(ingredient.quantity, 1)},
-        ${sqlString(ingredient.unit || "piece")},
-        ${sqlNumber(ingredient.sortOrder, index + 1)}
-      )`).join(",")}
-    `);
+    await restWrite(
+      "pantry_recipe_ingredients",
+      "POST",
+      recipe.ingredients.map((ingredient, index) => ({
+        ingredient_id: ingredient.id || randomUUID(),
+        recipe_id: recipe.id,
+        role: normalizeRole(ingredient.role),
+        name: ingredient.name,
+        quantity: Number.isFinite(Number(ingredient.quantity)) ? Number(ingredient.quantity) : 1,
+        unit: ingredient.unit || "piece",
+        sort_order: Number.isFinite(Number(ingredient.sortOrder)) ? Number(ingredient.sortOrder) : index + 1
+      }))
+    );
   }
 
   if (recipe.steps.length > 0) {
-    await query(`
-      INSERT INTO pantry_recipe_steps
-        (step_id, recipe_id, step_order, instruction)
-      VALUES ${recipe.steps.map((step, index) => `(
-        ${sqlString(step.id || randomUUID())},
-        ${sqlString(recipe.id)},
-        ${sqlNumber(step.order, index + 1)},
-        ${sqlString(step.text)}
-      )`).join(",")}
-    `);
+    await restWrite(
+      "pantry_recipe_steps",
+      "POST",
+      recipe.steps.map((step, index) => ({
+        step_id: step.id || randomUUID(),
+        recipe_id: recipe.id,
+        step_order: Number.isFinite(Number(step.order)) ? Number(step.order) : index + 1,
+        instruction: step.text
+      }))
+    );
   }
 
   return (await fetchCloudRecipes()).find((cloudRecipe) => cloudRecipe.id === recipe.id);
 }
 
 export async function deleteCloudRecipe(recipeId) {
-  await ensureSupabaseSchema();
   if (!recipeId || typeof recipeId !== "string") {
     throw new Error("recipe id is required");
   }
 
-  await query(`
-    UPDATE pantry_recipes
-    SET active = false, updated_at = now()
-    WHERE recipe_id = ${sqlString(recipeId)}
-  `);
+  await restWrite(
+    `pantry_recipes?recipe_id=eq.${encodeURIComponent(recipeId)}`,
+    "PATCH",
+    {
+      active: false,
+      updated_at: new Date().toISOString()
+    }
+  );
 }
 
 export async function uploadVolumeFile({ data, mimeType = "application/octet-stream", extension = "bin" }) {
-  await ensureSupabaseSchema();
   const safeExtension = String(extension || "bin").replace(/[^A-Za-z0-9]/g, "") || "bin";
   const fileName = `${randomUUID()}.${safeExtension}`;
 
-  await query(`
-    INSERT INTO pantry_media (file_name, mime_type, data)
-    VALUES (${sqlString(fileName)}, ${sqlString(mimeType)}, ${sqlBytea(data)})
-  `);
+  await restWrite(
+    "pantry_media?on_conflict=file_name",
+    "POST",
+    [{
+      file_name: fileName,
+      mime_type: mimeType,
+      data_base64: Buffer.from(data).toString("base64")
+    }],
+    { prefer: "resolution=merge-duplicates" }
+  );
 
   return {
     fileName,
@@ -195,41 +134,80 @@ export async function uploadVolumeFile({ data, mimeType = "application/octet-str
 }
 
 export async function readVolumeFile(fileName) {
-  await ensureSupabaseSchema();
   const safeFileName = sanitizeFileName(fileName);
-  const rows = await query(`
-    SELECT mime_type, encode(data, 'base64') AS data
-    FROM pantry_media
-    WHERE file_name = ${sqlString(safeFileName)}
-    LIMIT 1
-  `);
+  const rows = await restSelect(
+    "pantry_media",
+    `select=mime_type,data_base64&file_name=eq.${encodeURIComponent(safeFileName)}&limit=1`
+  );
 
-  if (rows.length === 0) {
+  if (rows.length === 0 || !rows[0].data_base64) {
     throw new Error("Media file was not found.");
   }
 
   return {
-    data: Buffer.from(rows[0].data, "base64"),
+    data: Buffer.from(rows[0].data_base64, "base64"),
     mimeType: rows[0].mime_type || mimeTypeForFileName(safeFileName)
   };
 }
 
 export async function upsertMediaFile({ fileName, data, mimeType = "application/octet-stream" }) {
-  await ensureSupabaseSchema();
   const safeFileName = sanitizeFileName(fileName);
-  await query(`
-    INSERT INTO pantry_media (file_name, mime_type, data)
-    VALUES (${sqlString(safeFileName)}, ${sqlString(mimeType)}, ${sqlBytea(data)})
-    ON CONFLICT (file_name) DO UPDATE SET
-      mime_type = EXCLUDED.mime_type,
-      data = EXCLUDED.data
-  `);
+  await restWrite(
+    "pantry_media?on_conflict=file_name",
+    "POST",
+    [{
+      file_name: safeFileName,
+      mime_type: mimeType,
+      data_base64: Buffer.from(data).toString("base64")
+    }],
+    { prefer: "resolution=merge-duplicates" }
+  );
 }
 
 export async function recipeCount() {
-  await ensureSupabaseSchema();
-  const rows = await query("SELECT COUNT(*)::text AS count FROM pantry_recipes WHERE active = true");
-  return Number(rows[0]?.count || 0);
+  const rows = await restSelect("pantry_recipes", "select=recipe_id&active=eq.true");
+  return rows.length;
+}
+
+async function restSelect(table, queryString) {
+  return restRequest(`${table}?${queryString}`, { method: "GET" });
+}
+
+async function restWrite(path, method, body, options = {}) {
+  return restRequest(path, {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+    prefer: options.prefer
+  });
+}
+
+async function restRequest(path, { method, body, prefer }) {
+  const config = supabaseRestConfig();
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    method,
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${config.key}`,
+      "Content-Type": "application/json",
+      ...(prefer ? { Prefer: prefer } : {})
+    },
+    body
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `Supabase REST failed with ${response.status}`);
+  }
+  return text ? JSON.parse(text) : [];
+}
+
+function supabaseRestConfig() {
+  const url = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+  if (!url || !key) {
+    throw new Error("Supabase REST is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.");
+  }
+  return { url, key };
 }
 
 function normalizeRecipeInput(input, recipeId) {
