@@ -17,6 +17,7 @@ Do not reuse any key pasted into chat. Rotate it first.
 For Supabase recipe sync and media storage, also add:
 
 ```env
+APP_ENV=dev
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
@@ -32,6 +33,14 @@ Health check:
 ```text
 http://localhost:8787/health
 ```
+
+The health check includes the active environment:
+
+```json
+{ "ok": true, "env": "dev" }
+```
+
+For MVP deployment, use separate Render services and separate Supabase projects for `dev` and `prod`. See `../docs/DEPLOYMENT.md`.
 
 ## Endpoints
 

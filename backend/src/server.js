@@ -21,6 +21,7 @@ loadEnv();
 const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+const appEnv = process.env.APP_ENV || "dev";
 
 const server = createServer(async (request, response) => {
   try {
@@ -35,7 +36,7 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", `http://${request.headers.host || "127.0.0.1"}`);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      sendJson(response, 200, { ok: true });
+      sendJson(response, 200, { ok: true, env: appEnv });
       return;
     }
 

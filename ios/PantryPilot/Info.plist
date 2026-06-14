@@ -3,9 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>BackendBaseURLDevice</key>
-	<string>https://foodmanagementapp.onrender.com/</string>
+	<string>$(BACKEND_BASE_URL_DEVICE)</string>
 	<key>BackendBaseURLSimulator</key>
-	<string>https://foodmanagementapp.onrender.com/</string>
+	<string>$(BACKEND_BASE_URL_SIMULATOR)</string>
+	<key>TableUpEnvironment</key>
+	<string>$(TABLEUP_ENVIRONMENT)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
