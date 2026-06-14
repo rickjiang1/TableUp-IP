@@ -1,0 +1,48 @@
+name: Deploy Backend
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Backend environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  deploy-dev:
+    name: Deploy dev backend
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'develop') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Trigger Render dev deploy
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_DEV"
+        env:
+          RENDER_DEPLOY_HOOK_DEV: ${{ secrets.RENDER_DEPLOY_HOOK_DEV }}
+
+  deploy-prod:
+    name: Deploy prod backend
+    if: >
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger Render prod deploy
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_PROD"
+        env:
+          RENDER_DEPLOY_HOOK_PROD: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
