@@ -197,6 +197,13 @@ export async function fetchMatchingRules() {
   return { ingredients, aliases, substitutions };
 }
 
+export async function fetchIngredientDictionary() {
+  return await restSelect(
+    "ingredients",
+    "select=ingredient_id,canonical_name,category&order=category.asc,canonical_name.asc"
+  );
+}
+
 export async function upsertUnknownIngredients(items) {
   const normalized = Array.isArray(items)
     ? items
@@ -262,7 +269,7 @@ export async function fetchPendingUnknownIngredients(limit = 25) {
   }
 }
 
-export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId, canonicalName, category = "other", confidenceScore = 0.7, verified = false, language = "mixed" }) {
+export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId, canonicalName, category = "other", confidenceScore = 0.7, verified = false, language = "mixed", unknownIngredientId = "" }) {
   const alias = String(aliasName || "").trim();
   const canonical = String(canonicalName || ingredientId || "").trim();
   const id = String(ingredientId || canonicalIngredientId(canonical)).trim();
@@ -295,6 +302,20 @@ export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId,
     }],
     { prefer: "resolution=merge-duplicates" }
   );
+
+  if (unknownIngredientId) {
+    await restWrite(
+      `unknown_ingredients?id=eq.${encodeURIComponent(unknownIngredientId)}`,
+      "PATCH",
+      {
+        suggested_canonical_name: canonical,
+        suggested_ingredient_id: id,
+        ai_confidence: confidenceScore,
+        status: "resolved",
+        last_seen_at: new Date().toISOString()
+      }
+    );
+  }
 }
 
 export async function restSelect(table, queryString) {

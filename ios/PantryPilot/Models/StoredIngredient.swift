@@ -28,6 +28,8 @@ enum StorageLocation: String, CaseIterable, Codable, Identifiable {
 final class StoredIngredient {
     var name: String
     var normalizedName: String
+    var descriptionText: String = ""
+    var canonicalIngredientId: String = ""
     var quantity: Double
     var unit: String
     var categoryRaw: String
@@ -38,6 +40,8 @@ final class StoredIngredient {
 
     init(
         name: String,
+        descriptionText: String = "",
+        canonicalIngredientId: String = "",
         quantity: Double,
         unit: String,
         category: IngredientCategory,
@@ -47,6 +51,8 @@ final class StoredIngredient {
     ) {
         self.name = name
         self.normalizedName = IngredientNormalizer.normalizeName(name)
+        self.descriptionText = descriptionText
+        self.canonicalIngredientId = canonicalIngredientId
         self.quantity = quantity
         self.unit = IngredientNormalizer.normalizeUnit(unit)
         self.categoryRaw = category.rawValue
@@ -72,5 +78,9 @@ final class StoredIngredient {
 
     var displayName: String {
         "\(name) (\(quantity.formatted()) \(unit))"
+    }
+
+    var isMatchedToIngredientLibrary: Bool {
+        !canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

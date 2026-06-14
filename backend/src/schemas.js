@@ -11,9 +11,11 @@ export const groceryExtractionSchema = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["name", "quantity", "unit", "category", "location", "confidence", "sourceText"],
+        required: ["name", "rawName", "description", "quantity", "unit", "category", "location", "confidence", "sourceText"],
         properties: {
           name: { type: "string" },
+          rawName: { type: "string" },
+          description: { type: "string" },
           quantity: { type: "number" },
           unit: { type: "string" },
           category: { type: "string", enum: categoryEnum },

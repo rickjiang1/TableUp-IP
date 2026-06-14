@@ -3,6 +3,8 @@ import { readFileSync, existsSync } from "node:fs";
 import {
   deleteCloudRecipe,
   fetchCloudRecipes,
+  fetchIngredientDictionary,
+  fetchMatchingRules,
   fetchPendingUnknownIngredients,
   readVolumeFile,
   uploadVolumeFile,
@@ -38,6 +40,12 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/recipes") {
       const recipes = await fetchCloudRecipes();
       sendJson(response, 200, { recipes });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/ingredients") {
+      const ingredients = await fetchIngredientDictionary();
+      sendJson(response, 200, { ingredients });
       return;
     }
 
@@ -135,7 +143,10 @@ const server = createServer(async (request, response) => {
             type: "input_text",
             text: [
               "Extract grocery inventory items from this image.",
-              "Return item name, quantity, unit, category, storage location, confidence, and source text when visible.",
+              "Use name for the core food only, not brand, origin, grade, packaging, or preparation adjectives.",
+              "Put the full visible product name and modifiers in rawName and description.",
+              "Example: 美国和牛 无骨牛肋条 => name: 牛肋条, rawName: 美国和牛 无骨牛肋条, description: 美国和牛; 无骨.",
+              "Return item name, rawName, description, quantity, unit, category, storage location, confidence, and source text when visible.",
               "If quantity is unclear, estimate conservatively and lower confidence."
             ].join(" ")
           },
@@ -147,7 +158,7 @@ const server = createServer(async (request, response) => {
         ]
       });
 
-      sendJson(response, 200, parseStructuredOutput(result));
+      sendJson(response, 200, await normalizeGroceryExtraction(parseStructuredOutput(result)));
       return;
     }
 
@@ -231,6 +242,71 @@ function setCorsHeaders(response) {
 function sendJson(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json" });
   response.end(JSON.stringify(body));
+}
+
+async function normalizeGroceryExtraction(output) {
+  const rules = await fetchMatchingRules();
+  const resolver = buildIngredientResolver(rules);
+  return {
+    items: (output.items || []).map((item) => {
+      const name = String(item.name || "").trim();
+      const rawName = String(item.rawName || item.sourceText || name).trim();
+      const nameResolved = resolver.resolve(name);
+      const resolved = nameResolved.known ? nameResolved : resolver.resolve(rawName);
+      return {
+        ...item,
+        name,
+        rawName,
+        description: String(item.description || "").trim(),
+        canonicalIngredientId: resolved.known ? resolved.ingredientId : "",
+        matchedToIngredientLibrary: Boolean(resolved.known)
+      };
+    })
+  };
+}
+
+function buildIngredientResolver(rules) {
+  const byId = new Map();
+  const byName = new Map();
+  const aliases = new Map();
+
+  for (const ingredient of rules.ingredients || []) {
+    byId.set(ingredient.ingredient_id, ingredient);
+    byName.set(normalizeIngredientName(ingredient.canonical_name), ingredient.ingredient_id);
+    byName.set(normalizeIngredientName(ingredient.ingredient_id), ingredient.ingredient_id);
+  }
+
+  for (const alias of rules.aliases || []) {
+    aliases.set(normalizeIngredientName(alias.alias_name), alias.ingredient_id);
+  }
+
+  return {
+    resolve(name) {
+      const value = String(name || "").trim();
+      const normalized = normalizeIngredientName(value);
+      if (!normalized) {
+        return { ingredientId: "", known: false };
+      }
+      if (byId.has(value)) {
+        return { ingredientId: value, known: true };
+      }
+      if (byName.has(normalized)) {
+        return { ingredientId: byName.get(normalized), known: true };
+      }
+      if (aliases.has(normalized)) {
+        return { ingredientId: aliases.get(normalized), known: true };
+      }
+      return { ingredientId: "", known: false };
+    }
+  };
+}
+
+function normalizeIngredientName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 async function readJsonRequest(request, maxBytes) {

@@ -470,14 +470,27 @@ struct CloudRecipeMatchRequest: Encodable {
 
     init(inventory: [StoredIngredient]) {
         self.inventory = inventory.map {
-            InventoryItem(name: $0.name, quantity: $0.quantity, unit: $0.unit)
+            InventoryItem(
+                name: $0.name,
+                ingredientID: $0.canonicalIngredientId,
+                quantity: $0.quantity,
+                unit: $0.unit
+            )
         }
     }
 
     struct InventoryItem: Encodable {
         let name: String
+        let ingredientID: String
         let quantity: Double
         let unit: String
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case ingredientID = "ingredient_id"
+            case quantity
+            case unit
+        }
     }
 }
 

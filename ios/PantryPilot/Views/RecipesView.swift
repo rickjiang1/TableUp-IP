@@ -17,6 +17,7 @@ struct RecipesView: View {
     @State private var newFolderName = ""
     @State private var isSyncing = false
     @State private var recipeAlert: RecipeAlertMessage?
+    @State private var showingUnmatchedIngredients = false
 
     private var currentFolderId: String {
         folderPath.last?.id ?? ""
@@ -159,6 +160,13 @@ struct RecipesView: View {
 
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
+                        showingUnmatchedIngredients = true
+                    } label: {
+                        Text(L.text("Unmatched", language: appLanguage))
+                    }
+                    .accessibilityLabel(L.text("Unmatched ingredients", language: appLanguage))
+
+                    Button {
                         Task {
                             await syncRecipes()
                         }
@@ -196,6 +204,9 @@ struct RecipesView: View {
                         recipeAlert = RecipeAlertMessage(title: "Sync failed", message: message)
                     }
                 )
+            }
+            .sheet(isPresented: $showingUnmatchedIngredients) {
+                UnknownIngredientsManagerView()
             }
             .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
                 TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)

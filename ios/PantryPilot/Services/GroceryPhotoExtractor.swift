@@ -105,21 +105,42 @@ struct GroceryPhotoExtractionResponse: Decodable {
 
 struct ExtractedGroceryItem: Decodable {
     let name: String
+    let rawName: String?
+    let description: String?
     let quantity: Double
     let unit: String
     let category: IngredientCategory
     let location: StorageLocation
     let confidence: Double
     let sourceText: String
+    let canonicalIngredientId: String?
+    let matchedToIngredientLibrary: Bool?
 
     var detectedIngredient: DetectedIngredient {
         DetectedIngredient(
             name: name,
+            rawName: rawName ?? sourceText,
+            description: description ?? "",
+            canonicalIngredientId: canonicalIngredientId ?? "",
             quantity: quantity,
             unit: unit,
             category: category,
             location: location
         )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case rawName
+        case description
+        case quantity
+        case unit
+        case category
+        case location
+        case confidence
+        case sourceText
+        case canonicalIngredientId
+        case matchedToIngredientLibrary
     }
 }
 

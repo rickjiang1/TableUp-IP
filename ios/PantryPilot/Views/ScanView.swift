@@ -259,6 +259,9 @@ struct PhotoAddButton: View {
 struct DetectedIngredient: Identifiable {
     let id = UUID()
     var name: String
+    var rawName: String = ""
+    var description: String = ""
+    var canonicalIngredientId: String = ""
     var quantity: Double
     var unit: String
     var category: IngredientCategory
@@ -271,6 +274,8 @@ struct DetectedIngredient: Identifiable {
     var ingredientInput: IngredientInput {
         IngredientInput(
             name: name,
+            descriptionText: displayDescription,
+            canonicalIngredientId: canonicalIngredientId,
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
@@ -281,10 +286,24 @@ struct DetectedIngredient: Identifiable {
     var displayName: String {
         "\(name) (\(quantity.formatted()) \(IngredientUnit.normalizedSelection(for: unit)))"
     }
+
+    private var displayDescription: String {
+        var seen = Set<String>()
+        let pieces = [rawName, description]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { value in
+                guard !value.isEmpty && value != name && !seen.contains(value) else { return false }
+                seen.insert(value)
+                return true
+            }
+        return pieces.joined(separator: " - ")
+    }
 }
 
 struct IngredientInput {
     var name: String
+    var descriptionText: String = ""
+    var canonicalIngredientId: String = ""
     var quantity: Double
     var unit: String
     var category: IngredientCategory
@@ -295,6 +314,8 @@ struct IngredientInput {
     var storedIngredient: StoredIngredient {
         StoredIngredient(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+            descriptionText: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
+            canonicalIngredientId: canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines),
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
@@ -364,6 +385,17 @@ struct DetectedItemsReviewView: View {
                 ForEach($items) { $item in
                     Section {
                         TextField(L.text("Name", language: appLanguage), text: $item.name)
+                        if !item.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            TextField(L.text("Full product name", language: appLanguage), text: $item.rawName)
+                        }
+                        TextField(L.text("Description", language: appLanguage), text: $item.description, axis: .vertical)
+                            .lineLimit(2...4)
+
+                        if !item.canonicalIngredientId.isEmpty {
+                            Label(item.canonicalIngredientId, systemImage: "checkmark.seal.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.green)
+                        }
 
                         HStack {
                             TextField(L.text("Quantity", language: appLanguage), value: $item.quantity, format: .number)
