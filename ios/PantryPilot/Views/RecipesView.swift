@@ -187,9 +187,6 @@ struct RecipesView: View {
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
-            .task {
-                await syncRecipes()
-            }
         }
     }
 
@@ -270,6 +267,7 @@ struct RecipesView: View {
         }
     }
 
+    @MainActor
     private func syncRecipes() async {
         guard !isSyncing else { return }
         isSyncing = true
@@ -313,6 +311,7 @@ struct RecipeCloudSync {
     var baseURL: URL = BackendConfiguration.baseURL
     var session: URLSession = .shared
 
+    @MainActor
     func sync(into modelContext: ModelContext, existingRecipes: [Recipe]) async throws {
         let cloudRecipes = try await fetchRecipes()
         let latestRecipes = (try? modelContext.fetch(FetchDescriptor<Recipe>())) ?? existingRecipes
