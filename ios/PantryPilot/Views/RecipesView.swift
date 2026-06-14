@@ -206,7 +206,7 @@ struct RecipesView: View {
                 )
             }
             .sheet(isPresented: $showingUnmatchedIngredients) {
-                UnknownIngredientsManagerView(itemsToScan: recipeIngredientsToScan)
+                UnknownIngredientsManagerView(itemsToScan: recipeIngredientsToScan, source: "recipe")
             }
             .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
                 TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)

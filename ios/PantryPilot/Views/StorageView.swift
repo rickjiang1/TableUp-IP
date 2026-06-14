@@ -184,7 +184,7 @@ struct StorageView: View {
             _ = try await client.resolve(items: ingredients.map {
                 IngredientResolveInput(name: $0.name, source: "inventory")
             })
-            async let unknowns = client.fetchPending()
+            async let unknowns = client.fetchPending(source: "inventory")
             async let dictionary = client.fetchIngredientDictionary()
             unmatchedIngredients = try await unknowns
             ingredientDictionary = try await dictionary
@@ -267,6 +267,7 @@ struct StorageAlertMessage: Identifiable {
 
 struct UnknownIngredientsManagerView: View {
     var itemsToScan: [IngredientResolveInput] = []
+    var source: String = ""
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var unmatchedIngredients: [UnknownIngredient] = []
@@ -353,7 +354,7 @@ struct UnknownIngredientsManagerView: View {
             if !itemsToScan.isEmpty {
                 _ = try await client.resolve(items: itemsToScan)
             }
-            async let unknowns = client.fetchPending()
+            async let unknowns = client.fetchPending(source: source)
             async let dictionary = client.fetchIngredientDictionary()
             unmatchedIngredients = try await unknowns
             ingredientDictionary = try await dictionary
@@ -469,10 +470,14 @@ struct UnknownIngredientClient {
     var baseURL: URL = BackendConfiguration.baseURL
     var session: URLSession = .shared
 
-    func fetchPending(limit: Int = 50) async throws -> [UnknownIngredient] {
+    func fetchPending(limit: Int = 50, source: String = "") async throws -> [UnknownIngredient] {
+        var queryItems = [URLQueryItem(name: "limit", value: "\(limit)")]
+        if !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "source", value: source))
+        }
         let endpoint = baseURL
             .appending(path: "api/unknown-ingredients")
-            .appending(queryItems: [URLQueryItem(name: "limit", value: "\(limit)")])
+            .appending(queryItems: queryItems)
         let (data, response) = try await session.data(from: endpoint)
 
         guard let httpResponse = response as? HTTPURLResponse,

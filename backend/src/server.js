@@ -66,7 +66,8 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/unknown-ingredients") {
       const limit = Number(url.searchParams.get("limit") || 25);
-      const unknownIngredients = await fetchPendingUnknownIngredients(limit);
+      const source = url.searchParams.get("source") || "";
+      const unknownIngredients = await fetchPendingUnknownIngredients(limit, source);
       sendJson(response, 200, { unknownIngredients });
       return;
     }

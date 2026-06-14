@@ -257,11 +257,13 @@ export async function upsertUnknownIngredients(items) {
   }));
 }
 
-export async function fetchPendingUnknownIngredients(limit = 25) {
+export async function fetchPendingUnknownIngredients(limit = 25, source = "") {
   try {
+    const normalizedSource = String(source || "").trim();
+    const sourceFilter = normalizedSource ? `&source=eq.${encodeURIComponent(normalizedSource)}` : "";
     return await restSelect(
       "unknown_ingredients",
-      `select=id,raw_name,normalized_name,source,suggested_canonical_name,ai_confidence,status,occurrence_count,first_seen_at,last_seen_at&status=eq.pending&order=last_seen_at.desc&limit=${Math.max(1, Math.min(Number(limit) || 25, 100))}`
+      `select=id,raw_name,normalized_name,source,suggested_canonical_name,ai_confidence,status,occurrence_count,first_seen_at,last_seen_at&status=eq.pending${sourceFilter}&order=last_seen_at.desc&limit=${Math.max(1, Math.min(Number(limit) || 25, 100))}`
     );
   } catch (error) {
     console.warn(`Unable to fetch pending unknown ingredients: ${error.message}`);
