@@ -206,7 +206,7 @@ struct RecipesView: View {
                 )
             }
             .sheet(isPresented: $showingUnmatchedIngredients) {
-                UnknownIngredientsManagerView()
+                UnknownIngredientsManagerView(itemsToScan: recipeIngredientsToScan)
             }
             .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
                 TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)
@@ -237,6 +237,12 @@ struct RecipesView: View {
 
     private var navigationTitle: String {
         folderPath.last?.name ?? selectedSource.displayName(language: appLanguage)
+    }
+
+    private var recipeIngredientsToScan: [IngredientResolveInput] {
+        recipes.flatMap { recipe in
+            recipe.ingredients.map { IngredientResolveInput(name: $0.name, source: "recipe") }
+        }
     }
 
     private func folderSummary(for folder: RecipeFolder) -> String {

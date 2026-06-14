@@ -9,7 +9,8 @@ import {
   readVolumeFile,
   uploadVolumeFile,
   upsertCloudRecipe,
-  upsertIngredientAliasSuggestion
+  upsertIngredientAliasSuggestion,
+  upsertUnknownIngredients
 } from "./supabase.js";
 import { matchRecipesForInventory } from "./recipeMatching.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
@@ -46,6 +47,13 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/ingredients") {
       const ingredients = await fetchIngredientDictionary();
       sendJson(response, 200, { ingredients });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/resolve-ingredients") {
+      const body = await readJsonRequest(request, 1024 * 1024);
+      const resolved = await resolveIngredientItems(body.items);
+      sendJson(response, 200, { items: resolved });
       return;
     }
 
@@ -265,6 +273,35 @@ async function normalizeGroceryExtraction(output) {
   };
 }
 
+async function resolveIngredientItems(inputItems) {
+  const rules = await fetchMatchingRules();
+  const resolver = buildIngredientResolver(rules);
+  const items = Array.isArray(inputItems) ? inputItems : [];
+
+  const resolvedItems = items
+    .map((item) => {
+      const name = String(item?.name || "").trim();
+      const source = String(item?.source || "inventory").trim() || "inventory";
+      const resolved = resolver.resolve(name);
+      return {
+        name,
+        source,
+        ingredientId: resolved.ingredientId,
+        known: resolved.known,
+        aliasMatched: Boolean(resolved.aliasMatched)
+      };
+    })
+    .filter((item) => item.name);
+
+  await upsertUnknownIngredients(
+    resolvedItems
+      .filter((item) => !item.known)
+      .map((item) => ({ rawName: item.name, source: item.source }))
+  );
+
+  return resolvedItems;
+}
+
 function buildIngredientResolver(rules) {
   const byId = new Map();
   const byName = new Map();
@@ -285,18 +322,18 @@ function buildIngredientResolver(rules) {
       const value = String(name || "").trim();
       const normalized = normalizeIngredientName(value);
       if (!normalized) {
-        return { ingredientId: "", known: false };
+        return { ingredientId: "", aliasMatched: false, known: false };
       }
       if (byId.has(value)) {
-        return { ingredientId: value, known: true };
+        return { ingredientId: value, aliasMatched: false, known: true };
       }
       if (byName.has(normalized)) {
-        return { ingredientId: byName.get(normalized), known: true };
+        return { ingredientId: byName.get(normalized), aliasMatched: false, known: true };
       }
       if (aliases.has(normalized)) {
-        return { ingredientId: aliases.get(normalized), known: true };
+        return { ingredientId: aliases.get(normalized), aliasMatched: true, known: true };
       }
-      return { ingredientId: "", known: false };
+      return { ingredientId: "", aliasMatched: false, known: false };
     }
   };
 }

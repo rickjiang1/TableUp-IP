@@ -180,8 +180,12 @@ struct StorageView: View {
         unmatchedError = nil
 
         do {
-            async let unknowns = UnknownIngredientClient().fetchPending()
-            async let dictionary = UnknownIngredientClient().fetchIngredientDictionary()
+            let client = UnknownIngredientClient()
+            _ = try await client.resolve(items: ingredients.map {
+                IngredientResolveInput(name: $0.name, source: "inventory")
+            })
+            async let unknowns = client.fetchPending()
+            async let dictionary = client.fetchIngredientDictionary()
             unmatchedIngredients = try await unknowns
             ingredientDictionary = try await dictionary
         } catch {
@@ -262,6 +266,7 @@ struct StorageAlertMessage: Identifiable {
 }
 
 struct UnknownIngredientsManagerView: View {
+    var itemsToScan: [IngredientResolveInput] = []
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var unmatchedIngredients: [UnknownIngredient] = []
@@ -344,8 +349,12 @@ struct UnknownIngredientsManagerView: View {
         isLoading = true
         errorMessage = nil
         do {
-            async let unknowns = UnknownIngredientClient().fetchPending()
-            async let dictionary = UnknownIngredientClient().fetchIngredientDictionary()
+            let client = UnknownIngredientClient()
+            if !itemsToScan.isEmpty {
+                _ = try await client.resolve(items: itemsToScan)
+            }
+            async let unknowns = client.fetchPending()
+            async let dictionary = client.fetchIngredientDictionary()
             unmatchedIngredients = try await unknowns
             ingredientDictionary = try await dictionary
         } catch {
@@ -486,6 +495,24 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(CloudIngredientResponse.self, from: data).ingredients
     }
 
+    func resolve(items: [IngredientResolveInput]) async throws -> [IngredientResolveResult] {
+        guard !items.isEmpty else { return [] }
+
+        let endpoint = baseURL.appending(path: "api/resolve-ingredients")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(IngredientResolveRequest(items: items))
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UnknownIngredientClientError.badResponse
+        }
+
+        return try JSONDecoder().decode(IngredientResolveResponse.self, from: data).items
+    }
+
     func resolve(unknown: UnknownIngredient, as ingredient: CloudIngredient) async throws {
         let endpoint = baseURL.appending(path: "api/ingredient-aliases")
         var request = URLRequest(url: endpoint)
@@ -539,6 +566,27 @@ struct CloudIngredient: Decodable, Identifiable {
         case canonicalName = "canonical_name"
         case category
     }
+}
+
+struct IngredientResolveInput: Encodable {
+    let name: String
+    let source: String
+}
+
+struct IngredientResolveRequest: Encodable {
+    let items: [IngredientResolveInput]
+}
+
+struct IngredientResolveResponse: Decodable {
+    let items: [IngredientResolveResult]
+}
+
+struct IngredientResolveResult: Decodable {
+    let name: String
+    let source: String
+    let ingredientId: String
+    let known: Bool
+    let aliasMatched: Bool
 }
 
 struct IngredientAliasResolvePayload: Encodable {

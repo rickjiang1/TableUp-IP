@@ -3,11 +3,17 @@ import SwiftUI
 struct IngredientDetailView: View {
     @Bindable var ingredient: StoredIngredient
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @State private var resolveTask: Task<Void, Never>?
 
     var body: some View {
         Form {
             Section(L.text("Ingredient", language: appLanguage)) {
                 TextField(L.text("Name", language: appLanguage), text: $ingredient.name)
+                if ingredient.isMatchedToIngredientLibrary {
+                    Label(ingredient.canonicalIngredientId, systemImage: "checkmark.seal.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.green)
+                }
                 Picker(L.text("Unit", language: appLanguage), selection: $ingredient.unit) {
                     ForEach(IngredientUnit.allCases) { unit in
                         Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
@@ -57,9 +63,14 @@ struct IngredientDetailView: View {
         .navigationTitle(ingredient.name)
         .onChange(of: ingredient.name) { _, newValue in
             ingredient.normalizedName = IngredientNormalizer.normalizeName(newValue)
+            ingredient.canonicalIngredientId = ""
+            resolveIngredientName(newValue)
         }
         .onAppear {
             ingredient.unit = IngredientUnit.normalizedSelection(for: ingredient.unit)
+            if ingredient.canonicalIngredientId.isEmpty {
+                resolveIngredientName(ingredient.name)
+            }
         }
         .onChange(of: ingredient.categoryRaw) { _, _ in
             refreshExpireDate()
@@ -78,5 +89,37 @@ struct IngredientDetailView: View {
             location: ingredient.location,
             enteredDate: ingredient.enteredDate
         )
+    }
+
+    private func resolveIngredientName(_ name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        resolveTask?.cancel()
+
+        guard !trimmedName.isEmpty else {
+            ingredient.canonicalIngredientId = ""
+            return
+        }
+
+        resolveTask = Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+
+            do {
+                let results = try await UnknownIngredientClient().resolve(
+                    items: [IngredientResolveInput(name: trimmedName, source: "inventory")]
+                )
+                let result = results.first
+
+                await MainActor.run {
+                    guard ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedName else { return }
+                    ingredient.canonicalIngredientId = result?.known == true ? result?.ingredientId ?? "" : ""
+                }
+            } catch {
+                await MainActor.run {
+                    guard ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedName else { return }
+                    ingredient.canonicalIngredientId = ""
+                }
+            }
+        }
     }
 }

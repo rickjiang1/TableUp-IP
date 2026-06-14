@@ -100,7 +100,9 @@ function normalizeInventory(input, resolver) {
     .map((item) => {
       const name = typeof item?.name === "string" ? item.name.trim() : "";
       const explicitId = typeof item?.ingredient_id === "string" ? item.ingredient_id.trim() : "";
-      const resolved = explicitId ? { ingredientId: explicitId, aliasMatched: false, known: true } : resolver.resolve(name);
+      const resolved = explicitId && resolver.isKnownIngredientId(explicitId)
+        ? { ingredientId: explicitId, aliasMatched: false, known: true }
+        : resolver.resolve(name);
       return {
         name,
         ingredientId: resolved.ingredientId,
@@ -141,6 +143,9 @@ function buildIngredientResolver(rules) {
         return { ingredientId: aliases.get(normalized), aliasMatched: true, known: true };
       }
       return { ingredientId: canonicalIngredientId(name), aliasMatched: false, known: false };
+    },
+    isKnownIngredientId(ingredientId) {
+      return byId.has(String(ingredientId || "").trim());
     }
   };
 }
@@ -156,7 +161,7 @@ async function recordUnknownIngredients(inventory, recipes, resolver) {
 
   for (const recipe of recipes) {
     for (const ingredient of recipe.ingredients || []) {
-      if (ingredient.canonicalIngredientId) {
+      if (ingredient.canonicalIngredientId && resolver.isKnownIngredientId(ingredient.canonicalIngredientId)) {
         continue;
       }
 
@@ -202,7 +207,7 @@ function buildSubstitutionMap(substitutions) {
 }
 
 function resolveRecipeIngredientId(ingredient, resolver) {
-  if (ingredient.canonicalIngredientId) {
+  if (ingredient.canonicalIngredientId && resolver.isKnownIngredientId(ingredient.canonicalIngredientId)) {
     return ingredient.canonicalIngredientId;
   }
   return resolver.resolve(ingredient.name).ingredientId;

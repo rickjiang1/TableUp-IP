@@ -34,7 +34,7 @@ export async function fetchCloudRecipes() {
     cleanupScore: Number(recipe.cleanup_score || 0),
     ingredients: (ingredientsByRecipe.get(recipe.recipe_id) || []).map((ingredient) => ({
       id: ingredient.ingredient_id,
-      canonicalIngredientId: ingredient.canonical_ingredient_id || canonicalIngredientId(ingredient.name),
+      canonicalIngredientId: ingredient.canonical_ingredient_id || "",
       role: normalizeRole(ingredient.role),
       name: ingredient.name,
       quantity: Number(ingredient.quantity || 1),
@@ -87,7 +87,7 @@ export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
         recipe_id: recipe.id,
         role: normalizeRole(ingredient.role),
         name: ingredient.name,
-        canonical_ingredient_id: ingredient.canonicalIngredientId || canonicalIngredientId(ingredient.name),
+        canonical_ingredient_id: ingredient.canonicalIngredientId || "",
         quantity: Number.isFinite(Number(ingredient.quantity)) ? Number(ingredient.quantity) : 1,
         unit: ingredient.unit || "piece",
         sort_order: Number.isFinite(Number(ingredient.sortOrder)) ? Number(ingredient.sortOrder) : index + 1,
