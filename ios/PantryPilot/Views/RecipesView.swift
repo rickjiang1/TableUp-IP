@@ -34,6 +34,12 @@ struct RecipesView: View {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    private var moveDestinationFolders: [RecipeFolder] {
+        folders
+            .filter { $0.source == selectedSource }
+            .sorted { folderPathTitle(for: $0).localizedCaseInsensitiveCompare(folderPathTitle(for: $1)) == .orderedAscending }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -113,6 +119,27 @@ struct RecipesView: View {
                             }
                         }
                         .padding(.vertical, 4)
+                    }
+                    .contextMenu {
+                        Menu {
+                            Button {
+                                move(recipe, to: "")
+                            } label: {
+                                Label(L.text("Root Folder", language: appLanguage), systemImage: "books.vertical")
+                            }
+                            .disabled(recipe.folderId.isEmpty)
+
+                            ForEach(moveDestinationFolders) { folder in
+                                Button {
+                                    move(recipe, to: folder.id)
+                                } label: {
+                                    Label(folderPathTitle(for: folder), systemImage: "folder")
+                                }
+                                .disabled(recipe.folderId == folder.id)
+                            }
+                        } label: {
+                            Label(L.text("Move to Folder", language: appLanguage), systemImage: "folder")
+                        }
                     }
                 }
                 .onDelete(perform: deleteRecipes)
@@ -205,6 +232,32 @@ struct RecipesView: View {
         let childFolders = folders.filter { $0.parentId == folder.id }.count
         let childRecipes = recipes.filter { $0.folderId == folder.id }.count
         return "\(childFolders) \(L.text("folders", language: appLanguage)) - \(childRecipes) \(L.text("recipes", language: appLanguage))"
+    }
+
+    private func folderPathTitle(for folder: RecipeFolder) -> String {
+        var names = [folder.name]
+        var parentId = folder.parentId
+        var visited = Set([folder.id])
+
+        while !parentId.isEmpty,
+              let parent = folders.first(where: { $0.id == parentId }),
+              !visited.contains(parent.id) {
+            names.insert(parent.name, at: 0)
+            visited.insert(parent.id)
+            parentId = parent.parentId
+        }
+
+        return names.joined(separator: " / ")
+    }
+
+    private func move(_ recipe: Recipe, to folderId: String) {
+        recipe.folderId = folderId
+        do {
+            try modelContext.save()
+            recipeAlert = RecipeAlertMessage(title: "Moved", message: recipe.name)
+        } catch {
+            recipeAlert = RecipeAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
     }
 
     private func saveFolder() {
@@ -1055,6 +1108,7 @@ struct RecipeIngredientDraftRow: View {
                 }
             }
             .frame(width: 92)
+            .pickerStyle(.menu)
 
             TextField(L.text("Ingredient name", language: appLanguage), text: $draft.name)
 

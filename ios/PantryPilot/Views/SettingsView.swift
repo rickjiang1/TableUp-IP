@@ -74,6 +74,14 @@ enum L {
         "Save failed": "保存失败",
         "No saved food": "还没有保存的食材",
         "Saved ingredients will appear here.": "保存后的食材会显示在这里。",
+        "Clear All": "一键清除",
+        "Clear all storage?": "清空所有库存？",
+        "This will remove every saved ingredient.": "这会删除所有已保存的食材。",
+        "Cleared": "已清空",
+        "item(s) removed": "个食材已删除",
+        "Move to Folder": "移动到文件夹",
+        "Root Folder": "根目录",
+        "Moved": "已移动",
         "Extraction failed": "提取失败",
         "OK": "好的",
         "Review items": "确认食材",
@@ -192,14 +200,14 @@ extension IngredientUnit {
 
 extension View {
     func dismissKeyboardOnTap() -> some View {
-        onTapGesture {
+        simultaneousGesture(TapGesture().onEnded {
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
                 to: nil,
                 from: nil,
                 for: nil
             )
-        }
+        })
     }
 }
 

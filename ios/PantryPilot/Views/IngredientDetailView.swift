@@ -13,6 +13,7 @@ struct IngredientDetailView: View {
                         Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
                     }
                 }
+                .pickerStyle(.menu)
                 TextField(L.text("Quantity", language: appLanguage), value: $ingredient.quantity, format: .number)
                     .keyboardType(.decimalPad)
             }
@@ -23,12 +24,14 @@ struct IngredientDetailView: View {
                         Text(category.displayName(language: appLanguage)).tag(category.rawValue)
                     }
                 }
+                .pickerStyle(.menu)
 
                 Picker(L.text("Location", language: appLanguage), selection: $ingredient.locationRaw) {
                     ForEach(StorageLocation.allCases) { location in
                         Text(location.displayName(language: appLanguage)).tag(location.rawValue)
                     }
                 }
+                .pickerStyle(.menu)
 
                 DatePicker(L.text("Enter date", language: appLanguage), selection: $ingredient.enteredDate, displayedComponents: .date)
                 DatePicker(L.text("Expire date", language: appLanguage), selection: $ingredient.expireDate, displayedComponents: .date)

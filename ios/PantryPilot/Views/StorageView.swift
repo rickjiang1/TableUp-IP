@@ -5,6 +5,8 @@ struct StorageView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
+    @State private var showingClearConfirmation = false
+    @State private var storageAlert: StorageAlertMessage?
 
     var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
         IngredientCategory.allCases.compactMap { category in
@@ -43,8 +45,59 @@ struct StorageView: View {
                 }
             }
             .navigationTitle(L.text("Storage", language: appLanguage))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive) {
+                        showingClearConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(ingredients.isEmpty)
+                    .accessibilityLabel(L.text("Clear All", language: appLanguage))
+                }
+            }
+            .confirmationDialog(
+                L.text("Clear all storage?", language: appLanguage),
+                isPresented: $showingClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L.text("Clear All", language: appLanguage), role: .destructive) {
+                    clearAllIngredients()
+                }
+                Button(L.text("Cancel", language: appLanguage), role: .cancel) {}
+            } message: {
+                Text(L.text("This will remove every saved ingredient.", language: appLanguage))
+            }
+            .alert(item: $storageAlert) { alert in
+                Alert(
+                    title: Text(L.text(alert.title, language: appLanguage)),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                )
+            }
         }
     }
+
+    private func clearAllIngredients() {
+        let removedCount = ingredients.count
+        ingredients.forEach(modelContext.delete)
+
+        do {
+            try modelContext.save()
+            storageAlert = StorageAlertMessage(
+                title: "Cleared",
+                message: "\(removedCount) \(L.text("item(s) removed", language: appLanguage))"
+            )
+        } catch {
+            storageAlert = StorageAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+    }
+}
+
+struct StorageAlertMessage: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
 }
 
 struct IngredientRow: View {

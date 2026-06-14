@@ -27,6 +27,7 @@ struct ManualIngredientForm: View {
                     }
                 }
                 .labelsHidden()
+                .pickerStyle(.menu)
             }
 
             Picker(L.text("Category", language: appLanguage), selection: $category) {
@@ -34,12 +35,14 @@ struct ManualIngredientForm: View {
                     Text(category.displayName(language: appLanguage)).tag(category)
                 }
             }
+            .pickerStyle(.menu)
 
             Picker(L.text("Location", language: appLanguage), selection: $location) {
                 ForEach(StorageLocation.allCases) { location in
                     Text(location.displayName(language: appLanguage)).tag(location)
                 }
             }
+            .pickerStyle(.menu)
 
             DatePicker(L.text("Enter date", language: appLanguage), selection: $enteredDate, displayedComponents: .date)
             DatePicker(L.text("Expire date", language: appLanguage), selection: $expireDate, displayedComponents: .date)

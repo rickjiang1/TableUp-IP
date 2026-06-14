@@ -374,6 +374,7 @@ struct DetectedItemsReviewView: View {
                                 }
                             }
                             .labelsHidden()
+                            .pickerStyle(.menu)
                         }
 
                         Picker(L.text("Category", language: appLanguage), selection: $item.category) {
@@ -381,12 +382,14 @@ struct DetectedItemsReviewView: View {
                                 Text(category.displayName(language: appLanguage)).tag(category)
                             }
                         }
+                        .pickerStyle(.menu)
 
                         Picker(L.text("Location", language: appLanguage), selection: $item.location) {
                             ForEach(StorageLocation.allCases) { location in
                                 Text(location.displayName(language: appLanguage)).tag(location)
                             }
                         }
+                        .pickerStyle(.menu)
                     }
                 }
                 .onDelete { indexSet in
