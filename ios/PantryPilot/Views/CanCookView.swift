@@ -36,13 +36,12 @@ struct CanCookView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
                     HStack {
                         SummaryTile(value: useCloudMatches ? cloudReady.count : ready.count, label: L.text("dishes ready", language: appLanguage))
                         SummaryTile(value: useCloudMatches ? cloudAlmostReady.count : almostReady.count, label: L.text("almost there", language: appLanguage))
                     }
-                    .listRowSeparator(.hidden)
 
                     if isRefreshing {
                         ProgressView()
@@ -53,77 +52,113 @@ struct CanCookView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
 
-                Section(L.text("Ready to cook", language: appLanguage)) {
-                    if useCloudMatches {
-                        if cloudReady.isEmpty {
-                            Text(L.text("No full matches yet.", language: appLanguage))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(cloudReady, id: \.recipeID) { match in
-                                if let recipe = recipe(for: match) {
-                                    NavigationLink {
-                                        RecipeDetailView(recipe: recipe)
-                                    } label: {
-                                        CloudCookAssessmentRow(match: match)
-                                    }
-                                } else {
-                                    CloudCookAssessmentRow(match: match)
-                                }
-                            }
-                        }
-                    } else if ready.isEmpty {
-                        Text(L.text("No full matches yet.", language: appLanguage))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(ready, id: \.recipe.id) { assessment in
-                            NavigationLink {
-                                RecipeDetailView(recipe: assessment.recipe)
-                            } label: {
-                                CookAssessmentRow(assessment: assessment)
-                            }
-                        }
+                    canCookSection(title: L.text("Ready to cook", language: appLanguage)) {
+                        readyRows
+                    }
+
+                    canCookSection(title: L.text("Almost there", language: appLanguage)) {
+                        almostReadyRows
                     }
                 }
-
-                Section(L.text("Almost there", language: appLanguage)) {
-                    if useCloudMatches {
-                        if cloudAlmostReady.isEmpty {
-                            Text(emptyAlmostReadyText)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(cloudAlmostReady, id: \.recipeID) { match in
-                                if let recipe = recipe(for: match) {
-                                    NavigationLink {
-                                        RecipeDetailView(recipe: recipe)
-                                    } label: {
-                                        CloudCookAssessmentRow(match: match)
-                                    }
-                                } else {
-                                    CloudCookAssessmentRow(match: match)
-                                }
-                            }
-                        }
-                    } else if almostReady.isEmpty {
-                        Text(emptyAlmostReadyText)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(almostReady, id: \.recipe.id) { assessment in
-                            NavigationLink {
-                                RecipeDetailView(recipe: assessment.recipe)
-                            } label: {
-                                CookAssessmentRow(assessment: assessment)
-                            }
-                        }
-                    }
-                }
+                .padding()
             }
+            .background(Color(.systemGroupedBackground))
             .navigationTitle(L.text("Can Cook", language: appLanguage))
             .task(id: refreshSignature) {
                 await refreshCloudMatches()
             }
         }
+    }
+
+    private func canCookSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(.background)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var readyRows: some View {
+        if useCloudMatches {
+            if cloudReady.isEmpty {
+                emptyRow(L.text("No full matches yet.", language: appLanguage))
+            } else {
+                ForEach(cloudReady, id: \.recipeID) { match in
+                    cloudRow(match)
+                    Divider()
+                }
+            }
+        } else if ready.isEmpty {
+            emptyRow(L.text("No full matches yet.", language: appLanguage))
+        } else {
+            ForEach(ready, id: \.recipe.id) { assessment in
+                NavigationLink {
+                    RecipeDetailView(recipe: assessment.recipe)
+                } label: {
+                    CookAssessmentRow(assessment: assessment)
+                }
+                .buttonStyle(.plain)
+                Divider()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var almostReadyRows: some View {
+        if useCloudMatches {
+            if cloudAlmostReady.isEmpty {
+                emptyRow(emptyAlmostReadyText)
+            } else {
+                ForEach(cloudAlmostReady, id: \.recipeID) { match in
+                    cloudRow(match)
+                    Divider()
+                }
+            }
+        } else if almostReady.isEmpty {
+            emptyRow(emptyAlmostReadyText)
+        } else {
+            ForEach(almostReady, id: \.recipe.id) { assessment in
+                NavigationLink {
+                    RecipeDetailView(recipe: assessment.recipe)
+                } label: {
+                    CookAssessmentRow(assessment: assessment)
+                }
+                .buttonStyle(.plain)
+                Divider()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cloudRow(_ match: CloudRecipeMatch) -> some View {
+        if let recipe = recipe(for: match) {
+            NavigationLink {
+                RecipeDetailView(recipe: recipe)
+            } label: {
+                CloudCookAssessmentRow(match: match)
+            }
+            .buttonStyle(.plain)
+        } else {
+            CloudCookAssessmentRow(match: match)
+        }
+    }
+
+    private func emptyRow(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
     }
 
     private var emptyAlmostReadyText: String {
