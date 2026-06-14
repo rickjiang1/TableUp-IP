@@ -147,18 +147,8 @@ struct CanCookView: View {
         }
     }
 
-    @ViewBuilder
     private func cloudRow(_ match: CloudRecipeMatch) -> some View {
-        if let recipe = recipe(for: match) {
-            NavigationLink {
-                RecipeDetailView(recipe: recipe)
-            } label: {
-                CloudCookAssessmentRow(match: match)
-            }
-            .buttonStyle(.plain)
-        } else {
-            CloudCookAssessmentRow(match: match)
-        }
+        CloudCookAssessmentRow(match: match)
     }
 
     private func emptyRow(_ text: String) -> some View {
@@ -192,9 +182,6 @@ struct CanCookView: View {
         }
     }
 
-    private func recipe(for match: CloudRecipeMatch) -> Recipe? {
-        recipes.first { $0.cloudId == match.recipeID }
-    }
 }
 
 struct SummaryTile: View {
