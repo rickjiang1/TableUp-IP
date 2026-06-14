@@ -158,6 +158,8 @@ enum L {
         "Main ingredients": "主要食材",
         "Secondary ingredients": "次要食材",
         "Seasonings": "调料",
+        "Matched to": "匹配到",
+        "Not matched": "未匹配",
         "Add main ingredient": "添加主要食材",
         "Add secondary ingredient": "添加次要食材",
         "Add seasoning": "添加调料",

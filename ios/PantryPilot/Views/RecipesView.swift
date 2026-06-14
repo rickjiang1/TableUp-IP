@@ -1461,7 +1461,7 @@ struct RecipeDetailView: View {
                 if !ingredients.isEmpty {
                     Section(role.displayName(language: appLanguage)) {
                         ForEach(ingredients) { ingredient in
-                            Text(ingredient.displayText)
+                            RecipeIngredientMatchRow(ingredient: ingredient)
                         }
                     }
                 }
@@ -1527,6 +1527,31 @@ struct RecipeDetailView: View {
                 dismissButton: .default(Text(L.text("OK", language: appLanguage)))
             )
         }
+    }
+}
+
+struct RecipeIngredientMatchRow: View {
+    let ingredient: RecipeIngredient
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(ingredient.displayText)
+
+            if ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Label(L.text("Not matched", language: appLanguage), systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                Label(
+                    "\(L.text("Matched to", language: appLanguage)): \(ingredient.canonicalIngredientId)",
+                    systemImage: "checkmark.seal.fill"
+                )
+                .font(.caption)
+                .foregroundStyle(.green)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 
