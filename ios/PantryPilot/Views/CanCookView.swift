@@ -19,7 +19,7 @@ struct CanCookView: View {
     }
 
     private var almostReady: [CookAssessment] {
-        assessments.filter { $0.matchRatio < threshold }
+        assessments.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }
     }
 
     private var cloudReady: [CloudRecipeMatch] {
@@ -27,7 +27,7 @@ struct CanCookView: View {
     }
 
     private var cloudAlmostReady: [CloudRecipeMatch] {
-        cloudMatches.filter { $0.matchRatio < threshold }
+        cloudMatches.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }
     }
 
     private var useCloudMatches: Bool {
@@ -128,7 +128,10 @@ struct CanCookView: View {
                 NavigationLink {
                     RecipeDetailView(recipe: assessment.recipe, assessment: assessment)
                 } label: {
-                    CookAssessmentRow(assessment: assessment)
+                    CookAssessmentRow(
+                        assessment: assessment,
+                        fridgeRescueScore: FridgeRescueScorer.score(recipe: assessment.recipe, inventory: ingredients)
+                    )
                 }
                 .buttonStyle(.plain)
                 Divider()
@@ -154,7 +157,10 @@ struct CanCookView: View {
                 NavigationLink {
                     RecipeDetailView(recipe: assessment.recipe, assessment: assessment)
                 } label: {
-                    CookAssessmentRow(assessment: assessment)
+                    CookAssessmentRow(
+                        assessment: assessment,
+                        fridgeRescueScore: FridgeRescueScorer.score(recipe: assessment.recipe, inventory: ingredients)
+                    )
                 }
                 .buttonStyle(.plain)
                 Divider()
@@ -168,11 +174,15 @@ struct CanCookView: View {
             NavigationLink {
                 RecipeDetailView(recipe: recipe, cloudMatch: match)
             } label: {
-                CloudCookAssessmentRow(match: match, recipe: recipe)
+                CloudCookAssessmentRow(
+                    match: match,
+                    recipe: recipe,
+                    fridgeRescueScore: FridgeRescueScorer.score(recipe: recipe, inventory: ingredients)
+                )
             }
             .buttonStyle(.plain)
         } else {
-            CloudCookAssessmentRow(match: match, recipe: nil)
+            CloudCookAssessmentRow(match: match, recipe: nil, fridgeRescueScore: nil)
         }
     }
 
@@ -196,9 +206,9 @@ struct CanCookView: View {
 
     private var emptyAlmostReadyText: String {
         if appLanguage == AppLanguage.chinese.rawValue {
-            return "还没有低于 \(Int(threshold * 100))% 的匹配食谱。"
+            return "还没有 30%-\(Int(threshold * 100))% 的匹配食谱。"
         }
-        return "No matches below \(Int(threshold * 100))% yet."
+        return "No 30%-\(Int(threshold * 100))% matches yet."
     }
 
     private func refreshCloudMatches() async {
@@ -242,6 +252,7 @@ struct SummaryTile: View {
 
 struct CookAssessmentRow: View {
     let assessment: CookAssessment
+    let fridgeRescueScore: Int
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("almostCookThreshold") private var threshold = 0.7
 
@@ -273,14 +284,76 @@ struct CookAssessmentRow: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            RecipeDecisionMetrics(
+                matchPercent: Int((assessment.matchRatio * 100).rounded()),
+                fridgeRescueScore: fridgeRescueScore,
+                totalTimeMinutes: assessment.recipe.totalTimeMinutes,
+                activeTimeMinutes: assessment.recipe.activeTimeMinutes,
+                difficulty: assessment.recipe.difficulty,
+                leftoverScore: assessment.recipe.leftoverScore
+            )
         }
         .padding(.vertical, 6)
+    }
+}
+
+struct RecipeDecisionMetrics: View {
+    let matchPercent: Int
+    let fridgeRescueScore: Int?
+    let totalTimeMinutes: Int?
+    let activeTimeMinutes: Int?
+    let difficulty: RecipeDifficulty?
+    let leftoverScore: Double?
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], alignment: .leading, spacing: 8) {
+            metricChip(title: "Match", value: "\(matchPercent)%", systemImage: "scope")
+
+            if let fridgeRescueScore {
+                metricChip(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)", systemImage: "leaf.fill")
+            }
+
+            if let activeTimeMinutes {
+                metricChip(title: "Active Time", value: "\(activeTimeMinutes)m", systemImage: "hand.raised.fill")
+            }
+
+            if let totalTimeMinutes {
+                metricChip(title: "Total Time", value: "\(totalTimeMinutes)m", systemImage: "clock.fill")
+            }
+
+            if let difficulty {
+                metricChip(title: "Difficulty", value: difficulty.displayName(language: appLanguage), systemImage: "flame.fill")
+            }
+
+            if let leftoverScore {
+                metricChip(title: "Leftover Score", value: "\(Int(leftoverScore.rounded()))", systemImage: "takeoutbag.and.cup.and.straw.fill")
+            }
+        }
+    }
+
+    private func metricChip(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.caption2)
+            Text("\(L.text(title, language: appLanguage)): \(value)")
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
 struct CloudCookAssessmentRow: View {
     let match: CloudRecipeMatch
     let recipe: Recipe?
+    let fridgeRescueScore: Int?
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("almostCookThreshold") private var threshold = 0.7
 
@@ -316,6 +389,15 @@ struct CloudCookAssessmentRow: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                RecipeDecisionMetrics(
+                    matchPercent: Int(match.matchScorePercent.rounded()),
+                    fridgeRescueScore: fridgeRescueScore,
+                    totalTimeMinutes: recipe?.totalTimeMinutes,
+                    activeTimeMinutes: recipe?.activeTimeMinutes,
+                    difficulty: recipe?.difficulty,
+                    leftoverScore: recipe?.leftoverScore
+                )
             }
 
             Spacer()

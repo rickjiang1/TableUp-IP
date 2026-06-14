@@ -388,6 +388,7 @@ struct RecipeCloudSync {
             localRecipe.name = cloudRecipe.name
             localRecipe.imageURL = cloudRecipe.imageURL
             localRecipe.videoURL = cloudRecipe.videoURL
+            localRecipe.totalTimeMinutes = cloudRecipe.totalTimeMinutes
             localRecipe.activeTimeMinutes = cloudRecipe.activeTimeMinutes
             localRecipe.difficulty = cloudRecipe.recipeDifficulty
             localRecipe.leftoverScore = cloudRecipe.leftoverScore
@@ -573,6 +574,7 @@ struct CloudRecipeSavePayload: Encodable {
     let name: String
     let imageURL: String
     let videoURL: String
+    let totalTimeMinutes: Int
     let activeTimeMinutes: Int
     let difficulty: String
     let leftoverScore: Double
@@ -584,6 +586,7 @@ struct CloudRecipeSavePayload: Encodable {
         name = recipe.name
         imageURL = recipe.imageURL
         videoURL = recipe.videoURL
+        totalTimeMinutes = recipe.totalTimeMinutes
         activeTimeMinutes = recipe.activeTimeMinutes
         difficulty = recipe.difficulty.rawValue
         leftoverScore = recipe.leftoverScore
@@ -633,6 +636,7 @@ struct CloudRecipe: Decodable {
     let name: String
     let imageURL: String
     let videoURL: String
+    let totalTimeMinutes: Int
     let activeTimeMinutes: Int
     let difficulty: String
     let leftoverScore: Double
@@ -678,6 +682,7 @@ struct CloudRecipeStep: Decodable {
 }
 
 struct RecipeMetricsEditor: View {
+    @Binding var totalTimeMinutes: Int
     @Binding var activeTimeMinutes: Int
     @Binding var difficulty: RecipeDifficulty
     @Binding var leftoverScore: Double
@@ -685,6 +690,13 @@ struct RecipeMetricsEditor: View {
 
     var body: some View {
         Section(L.text("Recipe metrics", language: appLanguage)) {
+            Stepper(
+                "\(L.text("Total Time", language: appLanguage)): \(totalTimeMinutes) \(L.text("minutes", language: appLanguage))",
+                value: $totalTimeMinutes,
+                in: 0...720,
+                step: 5
+            )
+
             Stepper(
                 "\(L.text("Active Time", language: appLanguage)): \(activeTimeMinutes) \(L.text("minutes", language: appLanguage))",
                 value: $activeTimeMinutes,
@@ -724,6 +736,7 @@ struct AddRecipeView: View {
     ]
     @State private var stepsText = ""
     @State private var videoURL = ""
+    @State private var totalTimeMinutes = 30
     @State private var activeTimeMinutes = 20
     @State private var difficulty = RecipeDifficulty.medium
     @State private var leftoverScore = 50.0
@@ -742,6 +755,7 @@ struct AddRecipeView: View {
                 TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
 
                 RecipeMetricsEditor(
+                    totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
@@ -840,6 +854,7 @@ struct AddRecipeView: View {
             ingredients: ingredients,
             steps: steps,
             videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            totalTimeMinutes: totalTimeMinutes,
             activeTimeMinutes: activeTimeMinutes,
             difficulty: difficulty,
             leftoverScore: leftoverScore,
@@ -899,6 +914,7 @@ struct EditRecipeView: View {
     @State private var ingredientDrafts: [RecipeIngredientDraft]
     @State private var stepsText: String
     @State private var videoURL: String
+    @State private var totalTimeMinutes: Int
     @State private var activeTimeMinutes: Int
     @State private var difficulty: RecipeDifficulty
     @State private var leftoverScore: Double
@@ -922,6 +938,7 @@ struct EditRecipeView: View {
         _ingredientDrafts = State(initialValue: recipe.ingredients.map { RecipeIngredientDraft(ingredient: $0) })
         _stepsText = State(initialValue: recipe.steps.joined(separator: "\n"))
         _videoURL = State(initialValue: recipe.videoURL)
+        _totalTimeMinutes = State(initialValue: recipe.totalTimeMinutes)
         _activeTimeMinutes = State(initialValue: recipe.activeTimeMinutes)
         _difficulty = State(initialValue: recipe.difficulty)
         _leftoverScore = State(initialValue: recipe.leftoverScore)
@@ -937,6 +954,7 @@ struct EditRecipeView: View {
                 TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
 
                 RecipeMetricsEditor(
+                    totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
@@ -1043,6 +1061,7 @@ struct EditRecipeView: View {
 
         recipe.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         recipe.videoURL = videoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        recipe.totalTimeMinutes = totalTimeMinutes
         recipe.activeTimeMinutes = activeTimeMinutes
         recipe.difficulty = difficulty
         recipe.leftoverScore = leftoverScore
@@ -1221,6 +1240,7 @@ struct RecipeMetricsSection: View {
     var body: some View {
         Section(L.text("Recipe metrics", language: appLanguage)) {
             metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
+            metricRow(title: "Total Time", value: "\(recipe.totalTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Active Time", value: "\(recipe.activeTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Difficulty", value: recipe.difficulty.displayName(language: appLanguage))
             metricRow(title: "Leftover Score", value: "\(Int(recipe.leftoverScore.rounded()))")

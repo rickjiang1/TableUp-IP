@@ -11,6 +11,7 @@ final class Recipe {
     var steps: [String]
     var videoURL: String
     var imageURL: String
+    var totalTimeMinutes: Int = 0
     var activeTimeMinutes: Int = 0
     var difficultyRaw: String = RecipeDifficulty.medium.rawValue
     var leftoverScore: Double = 50
@@ -33,6 +34,7 @@ final class Recipe {
         steps: [String] = [],
         videoURL: String = "",
         imageURL: String = "",
+        totalTimeMinutes: Int = 0,
         activeTimeMinutes: Int = 0,
         difficulty: RecipeDifficulty = .medium,
         leftoverScore: Double = 50,
@@ -50,6 +52,7 @@ final class Recipe {
         self.steps = steps
         self.videoURL = videoURL
         self.imageURL = imageURL
+        self.totalTimeMinutes = totalTimeMinutes
         self.activeTimeMinutes = activeTimeMinutes
         self.difficultyRaw = difficulty.rawValue
         self.leftoverScore = leftoverScore
