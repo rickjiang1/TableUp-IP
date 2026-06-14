@@ -15,19 +15,19 @@ struct CanCookView: View {
     }
 
     private var ready: [CookAssessment] {
-        assessments.filter(\.canCook)
+        assessments.filter { $0.matchRatio >= threshold }
     }
 
     private var almostReady: [CookAssessment] {
-        assessments.filter { !$0.canCook && $0.matchRatio >= threshold }
+        assessments.filter { $0.matchRatio < threshold }
     }
 
     private var cloudReady: [CloudRecipeMatch] {
-        cloudMatches.filter(\.canCook)
+        cloudMatches.filter { $0.matchRatio >= threshold }
     }
 
     private var cloudAlmostReady: [CloudRecipeMatch] {
-        cloudMatches.filter { !$0.canCook && $0.matchRatio >= threshold }
+        cloudMatches.filter { $0.matchRatio < threshold }
     }
 
     private var useCloudMatches: Bool {
@@ -126,7 +126,7 @@ struct CanCookView: View {
         } else {
             ForEach(ready, id: \.recipe.id) { assessment in
                 NavigationLink {
-                    RecipeDetailView(recipe: assessment.recipe)
+                    RecipeDetailView(recipe: assessment.recipe, assessment: assessment)
                 } label: {
                     CookAssessmentRow(assessment: assessment)
                 }
@@ -152,7 +152,7 @@ struct CanCookView: View {
         } else {
             ForEach(almostReady, id: \.recipe.id) { assessment in
                 NavigationLink {
-                    RecipeDetailView(recipe: assessment.recipe)
+                    RecipeDetailView(recipe: assessment.recipe, assessment: assessment)
                 } label: {
                     CookAssessmentRow(assessment: assessment)
                 }
@@ -166,7 +166,7 @@ struct CanCookView: View {
     private func cloudRow(_ match: CloudRecipeMatch) -> some View {
         if let recipe = localRecipe(for: match) {
             NavigationLink {
-                RecipeDetailView(recipe: recipe)
+                RecipeDetailView(recipe: recipe, cloudMatch: match)
             } label: {
                 CloudCookAssessmentRow(match: match, recipe: recipe)
             }
@@ -196,9 +196,9 @@ struct CanCookView: View {
 
     private var emptyAlmostReadyText: String {
         if appLanguage == AppLanguage.chinese.rawValue {
-            return "还没有 \(Int(threshold * 100))%+ 匹配的食谱。"
+            return "还没有低于 \(Int(threshold * 100))% 的匹配食谱。"
         }
-        return "No \(Int(threshold * 100))%+ matches yet."
+        return "No matches below \(Int(threshold * 100))% yet."
     }
 
     private func refreshCloudMatches() async {
@@ -243,6 +243,7 @@ struct SummaryTile: View {
 struct CookAssessmentRow: View {
     let assessment: CookAssessment
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @AppStorage("almostCookThreshold") private var threshold = 0.7
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -257,7 +258,7 @@ struct CookAssessmentRow: View {
 
                 Spacer()
 
-                if assessment.canCook {
+                if assessment.matchRatio >= threshold {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
@@ -281,6 +282,7 @@ struct CloudCookAssessmentRow: View {
     let match: CloudRecipeMatch
     let recipe: Recipe?
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @AppStorage("almostCookThreshold") private var threshold = 0.7
 
     var body: some View {
         HStack(spacing: 12) {
@@ -319,7 +321,7 @@ struct CloudCookAssessmentRow: View {
             Spacer()
 
             VStack(spacing: 8) {
-                if match.canCook {
+                if match.matchRatio >= threshold {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)

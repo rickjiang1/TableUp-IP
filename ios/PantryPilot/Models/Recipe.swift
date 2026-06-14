@@ -11,6 +11,9 @@ final class Recipe {
     var steps: [String]
     var videoURL: String
     var imageURL: String
+    var activeTimeMinutes: Int = 0
+    var difficultyRaw: String = RecipeDifficulty.medium.rawValue
+    var leftoverScore: Double = 50
     @Attribute(.externalStorage) var imageData: Data?
     @Attribute(.externalStorage) var imageThumbnailData: Data?
     @Attribute(.externalStorage) var videoData: Data?
@@ -30,6 +33,9 @@ final class Recipe {
         steps: [String] = [],
         videoURL: String = "",
         imageURL: String = "",
+        activeTimeMinutes: Int = 0,
+        difficulty: RecipeDifficulty = .medium,
+        leftoverScore: Double = 50,
         imageData: Data? = nil,
         imageThumbnailData: Data? = nil,
         videoData: Data? = nil,
@@ -44,6 +50,9 @@ final class Recipe {
         self.steps = steps
         self.videoURL = videoURL
         self.imageURL = imageURL
+        self.activeTimeMinutes = activeTimeMinutes
+        self.difficultyRaw = difficulty.rawValue
+        self.leftoverScore = leftoverScore
         self.imageData = imageData
         self.imageThumbnailData = imageThumbnailData
         self.videoData = videoData
@@ -55,11 +64,24 @@ final class Recipe {
         get { RecipeSource(rawValue: sourceRaw) ?? .user }
         set { sourceRaw = newValue.rawValue }
     }
+
+    var difficulty: RecipeDifficulty {
+        get { RecipeDifficulty(rawValue: difficultyRaw) ?? .medium }
+        set { difficultyRaw = newValue.rawValue }
+    }
 }
 
 enum RecipeSource: String, CaseIterable, Identifiable {
     case central
     case user
+
+    var id: String { rawValue }
+}
+
+enum RecipeDifficulty: String, CaseIterable, Codable, Identifiable {
+    case easy = "Easy"
+    case medium = "Medium"
+    case hard = "Hard"
 
     var id: String { rawValue }
 }

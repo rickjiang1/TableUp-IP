@@ -388,6 +388,9 @@ struct RecipeCloudSync {
             localRecipe.name = cloudRecipe.name
             localRecipe.imageURL = cloudRecipe.imageURL
             localRecipe.videoURL = cloudRecipe.videoURL
+            localRecipe.activeTimeMinutes = cloudRecipe.activeTimeMinutes
+            localRecipe.difficulty = cloudRecipe.recipeDifficulty
+            localRecipe.leftoverScore = cloudRecipe.leftoverScore
             if !cloudRecipe.imageURL.isEmpty,
                (localRecipe.imageData == nil || previousImageURL != cloudRecipe.imageURL),
                let imageData = try? await fetchMediaData(pathOrURL: cloudRecipe.imageURL) {
@@ -570,6 +573,9 @@ struct CloudRecipeSavePayload: Encodable {
     let name: String
     let imageURL: String
     let videoURL: String
+    let activeTimeMinutes: Int
+    let difficulty: String
+    let leftoverScore: Double
     let ingredients: [Ingredient]
     let steps: [Step]
 
@@ -578,6 +584,9 @@ struct CloudRecipeSavePayload: Encodable {
         name = recipe.name
         imageURL = recipe.imageURL
         videoURL = recipe.videoURL
+        activeTimeMinutes = recipe.activeTimeMinutes
+        difficulty = recipe.difficulty.rawValue
+        leftoverScore = recipe.leftoverScore
         ingredients = recipe.ingredients.enumerated().map { index, ingredient in
             Ingredient(
                 role: ingredient.role.rawValueForCloud,
@@ -624,9 +633,16 @@ struct CloudRecipe: Decodable {
     let name: String
     let imageURL: String
     let videoURL: String
+    let activeTimeMinutes: Int
+    let difficulty: String
+    let leftoverScore: Double
     let updatedAt: String
     let ingredients: [CloudRecipeIngredient]
     let steps: [CloudRecipeStep]
+
+    var recipeDifficulty: RecipeDifficulty {
+        RecipeDifficulty.allCases.first { $0.rawValue.caseInsensitiveCompare(difficulty) == .orderedSame } ?? .medium
+    }
 }
 
 struct CloudRecipeIngredient: Decodable {
@@ -661,6 +677,37 @@ struct CloudRecipeStep: Decodable {
     let text: String
 }
 
+struct RecipeMetricsEditor: View {
+    @Binding var activeTimeMinutes: Int
+    @Binding var difficulty: RecipeDifficulty
+    @Binding var leftoverScore: Double
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        Section(L.text("Recipe metrics", language: appLanguage)) {
+            Stepper(
+                "\(L.text("Active Time", language: appLanguage)): \(activeTimeMinutes) \(L.text("minutes", language: appLanguage))",
+                value: $activeTimeMinutes,
+                in: 0...360,
+                step: 5
+            )
+
+            Picker(L.text("Difficulty", language: appLanguage), selection: $difficulty) {
+                ForEach(RecipeDifficulty.allCases) { difficulty in
+                    Text(difficulty.displayName(language: appLanguage)).tag(difficulty)
+                }
+            }
+            .pickerStyle(.menu)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(L.text("Leftover Score", language: appLanguage)): \(Int(leftoverScore.rounded()))")
+                Slider(value: $leftoverScore, in: 0...100, step: 5)
+                    .tint(.orange)
+            }
+        }
+    }
+}
+
 struct AddRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -677,6 +724,9 @@ struct AddRecipeView: View {
     ]
     @State private var stepsText = ""
     @State private var videoURL = ""
+    @State private var activeTimeMinutes = 20
+    @State private var difficulty = RecipeDifficulty.medium
+    @State private var leftoverScore = 50.0
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var selectedImageThumbnailData: Data?
@@ -690,6 +740,12 @@ struct AddRecipeView: View {
             Form {
                 TextField(L.text("Recipe name", language: appLanguage), text: $name)
                 TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
+
+                RecipeMetricsEditor(
+                    activeTimeMinutes: $activeTimeMinutes,
+                    difficulty: $difficulty,
+                    leftoverScore: $leftoverScore
+                )
 
                 Section(L.text("Photo", language: appLanguage)) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
@@ -784,6 +840,9 @@ struct AddRecipeView: View {
             ingredients: ingredients,
             steps: steps,
             videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            activeTimeMinutes: activeTimeMinutes,
+            difficulty: difficulty,
+            leftoverScore: leftoverScore,
             imageData: selectedImageData,
             imageThumbnailData: selectedImageThumbnailData,
             videoFileName: selectedVideoFileName
@@ -840,6 +899,9 @@ struct EditRecipeView: View {
     @State private var ingredientDrafts: [RecipeIngredientDraft]
     @State private var stepsText: String
     @State private var videoURL: String
+    @State private var activeTimeMinutes: Int
+    @State private var difficulty: RecipeDifficulty
+    @State private var leftoverScore: Double
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var selectedImageData: Data?
     @State private var selectedImageThumbnailData: Data?
@@ -860,6 +922,9 @@ struct EditRecipeView: View {
         _ingredientDrafts = State(initialValue: recipe.ingredients.map { RecipeIngredientDraft(ingredient: $0) })
         _stepsText = State(initialValue: recipe.steps.joined(separator: "\n"))
         _videoURL = State(initialValue: recipe.videoURL)
+        _activeTimeMinutes = State(initialValue: recipe.activeTimeMinutes)
+        _difficulty = State(initialValue: recipe.difficulty)
+        _leftoverScore = State(initialValue: recipe.leftoverScore)
         _selectedImageData = State(initialValue: recipe.imageData)
         _selectedImageThumbnailData = State(initialValue: recipe.imageThumbnailData)
         _selectedVideoFileName = State(initialValue: recipe.videoFileName)
@@ -870,6 +935,12 @@ struct EditRecipeView: View {
             Form {
                 TextField(L.text("Recipe name", language: appLanguage), text: $name)
                 TextField(L.text("Video URL", language: appLanguage), text: $videoURL)
+
+                RecipeMetricsEditor(
+                    activeTimeMinutes: $activeTimeMinutes,
+                    difficulty: $difficulty,
+                    leftoverScore: $leftoverScore
+                )
 
                 Section(L.text("Photo", language: appLanguage)) {
                     PhotosPicker(selection: $selectedPhoto, matching: .images) {
@@ -972,6 +1043,9 @@ struct EditRecipeView: View {
 
         recipe.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         recipe.videoURL = videoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        recipe.activeTimeMinutes = activeTimeMinutes
+        recipe.difficulty = difficulty
+        recipe.leftoverScore = leftoverScore
         recipe.imageData = selectedImageData
         recipe.imageThumbnailData = selectedImageThumbnailData
         if recipe.videoFileName != selectedVideoFileName {
@@ -1139,12 +1213,112 @@ private func recipeIngredients(from drafts: [RecipeIngredientDraft]) -> [RecipeI
     }
 }
 
+struct RecipeMetricsSection: View {
+    let recipe: Recipe
+    let fridgeRescueScore: Int
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        Section(L.text("Recipe metrics", language: appLanguage)) {
+            metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
+            metricRow(title: "Active Time", value: "\(recipe.activeTimeMinutes) \(L.text("minutes", language: appLanguage))")
+            metricRow(title: "Difficulty", value: recipe.difficulty.displayName(language: appLanguage))
+            metricRow(title: "Leftover Score", value: "\(Int(recipe.leftoverScore.rounded()))")
+        }
+    }
+
+    private func metricRow(title: String, value: String) -> some View {
+        HStack {
+            Text(L.text(title, language: appLanguage))
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct CloudMatchDetailSection: View {
+    let match: CloudRecipeMatch
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        Section(L.text("Match details", language: appLanguage)) {
+            HStack {
+                Text(L.text("Matched ingredients", language: appLanguage))
+                Spacer()
+                Text("\(Int(match.matchScorePercent.rounded()))%")
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(match.matchedIngredients) { item in
+                Label("\(item.recipeIngredient) - \(item.userInventoryIngredient)", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+
+            ForEach(match.substitutedIngredients) { item in
+                Label("\(item.recipeIngredient) -> \(item.userInventoryIngredient)", systemImage: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(.orange)
+            }
+
+            ForEach(match.missingRequiredIngredients) { item in
+                Label(item.recipeIngredient, systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+            }
+
+            ForEach(match.missingOptionalIngredients) { item in
+                Label(item.recipeIngredient, systemImage: "minus.circle")
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach(match.pantryMissing) { item in
+                Label(item.recipeIngredient, systemImage: "leaf")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct LocalMatchDetailSection: View {
+    let assessment: CookAssessment
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        Section(L.text("Match details", language: appLanguage)) {
+            HStack {
+                Text(L.text("Matched ingredients", language: appLanguage))
+                Spacer()
+                Text("\(Int((assessment.matchRatio * 100).rounded()))%")
+                    .foregroundStyle(.secondary)
+            }
+
+            if assessment.missing.isEmpty {
+                Label(L.text("Ready", language: appLanguage), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                ForEach(assessment.missing) { missing in
+                    Label("\(missing.name): \(missing.shortage.formatted()) \(missing.unit)", systemImage: "exclamationmark.circle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+}
+
 struct RecipeDetailView: View {
     @Bindable var recipe: Recipe
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @Query private var inventory: [StoredIngredient]
+    let cloudMatch: CloudRecipeMatch?
+    let assessment: CookAssessment?
     @State private var showingEditRecipe = false
     @State private var showingCookingMode = false
     @State private var recipeAlert: RecipeAlertMessage?
+
+    init(recipe: Recipe, cloudMatch: CloudRecipeMatch? = nil, assessment: CookAssessment? = nil) {
+        self.recipe = recipe
+        self.cloudMatch = cloudMatch
+        self.assessment = assessment
+    }
 
     var body: some View {
         List {
@@ -1156,6 +1330,14 @@ struct RecipeDetailView: View {
                     .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 280)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .listRowInsets(EdgeInsets())
+            }
+
+            RecipeMetricsSection(recipe: recipe, fridgeRescueScore: FridgeRescueScorer.score(recipe: recipe, inventory: inventory))
+
+            if let cloudMatch {
+                CloudMatchDetailSection(match: cloudMatch)
+            } else if let assessment {
+                LocalMatchDetailSection(assessment: assessment)
             }
 
             ForEach(RecipeIngredientRole.allCases) { role in

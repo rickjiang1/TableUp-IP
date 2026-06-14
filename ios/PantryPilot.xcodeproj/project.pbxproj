@@ -26,6 +26,7 @@
 		100000000000000000000011 /* StorageAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* StorageAdvisor.swift */; };
 		100000000000000000000012 /* GroceryPhotoExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* GroceryPhotoExtractor.swift */; };
 		100000000000000000000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* Assets.xcassets */; };
+		100000000000000000000014 /* FridgeRescueScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* FridgeRescueScorer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 		200000000000000000000012 /* GroceryPhotoExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroceryPhotoExtractor.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		200000000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		200000000000000000000015 /* FridgeRescueScorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FridgeRescueScorer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000012 /* GroceryPhotoExtractor.swift */,
+				200000000000000000000015 /* FridgeRescueScorer.swift */,
 				20000000000000000000000F /* IngredientNormalizer.swift */,
 				200000000000000000000010 /* RecipeMatcher.swift */,
 				200000000000000000000011 /* StorageAdvisor.swift */,
@@ -217,6 +220,7 @@
 				100000000000000000000010 /* RecipeMatcher.swift in Sources */,
 				100000000000000000000011 /* StorageAdvisor.swift in Sources */,
 				100000000000000000000012 /* GroceryPhotoExtractor.swift in Sources */,
+				100000000000000000000014 /* FridgeRescueScorer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

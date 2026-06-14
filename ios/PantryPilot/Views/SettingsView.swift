@@ -50,6 +50,21 @@ enum L {
         "Video selected": "已选择视频",
         "Ingredients": "食材",
         "Steps": "步骤",
+        "Recipe metrics": "食谱指标",
+        "Fridge Rescue Score": "冰箱拯救分数",
+        "Active Time": "实际操作时间",
+        "Difficulty": "难度",
+        "Leftover Score": "剩菜友好度",
+        "minutes": "分钟",
+        "Easy": "简单",
+        "Medium": "中等",
+        "Hard": "困难",
+        "Match details": "匹配详情",
+        "Matched ingredients": "已有食材",
+        "Missing required ingredients": "缺少必需食材",
+        "Missing optional ingredients": "缺少可选食材",
+        "Substituted ingredients": "替代食材",
+        "Missing pantry items": "缺少调料",
         "Add Recipe": "添加食谱",
         "Edit Recipe": "编辑食谱",
         "Cancel": "取消",
@@ -190,6 +205,12 @@ extension RecipeSource {
         case .user:
             return L.text("My Recipes", language: language)
         }
+    }
+}
+
+extension RecipeDifficulty {
+    func displayName(language: String) -> String {
+        L.text(rawValue, language: language)
     }
 }
 
