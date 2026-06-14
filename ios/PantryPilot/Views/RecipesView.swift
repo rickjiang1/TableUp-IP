@@ -315,11 +315,8 @@ struct RecipeCloudSync {
 
     func sync(into modelContext: ModelContext, existingRecipes: [Recipe]) async throws {
         let cloudRecipes = try await fetchRecipes()
-        let recipesByCloudId = Dictionary(
-            uniqueKeysWithValues: existingRecipes
-                .filter { !$0.cloudId.isEmpty }
-                .map { ($0.cloudId, $0) }
-        )
+        let latestRecipes = (try? modelContext.fetch(FetchDescriptor<Recipe>())) ?? existingRecipes
+        let recipesByCloudId = recipesByCloudId(from: latestRecipes + existingRecipes)
 
         for cloudRecipe in cloudRecipes {
             let localRecipe = recipesByCloudId[cloudRecipe.id] ?? Recipe(
@@ -468,6 +465,14 @@ struct RecipeCloudSync {
         case .seasoning:
             return 2
         }
+    }
+
+    private func recipesByCloudId(from recipes: [Recipe]) -> [String: Recipe] {
+        var output: [String: Recipe] = [:]
+        for recipe in recipes where !recipe.cloudId.isEmpty && output[recipe.cloudId] == nil {
+            output[recipe.cloudId] = recipe
+        }
+        return output
     }
 
     private func backendURL(for pathOrURL: String) -> URL {

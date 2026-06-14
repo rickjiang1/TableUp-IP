@@ -7,8 +7,9 @@ struct CanCookView: View {
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @Query private var ingredients: [StoredIngredient]
     @Query private var recipes: [Recipe]
-    @State private var cloudAssessments: [CloudCookAssessment] = []
+    @State private var cloudMatches: [CloudRecipeMatch] = []
     @State private var isRefreshing = false
+    @State private var hasSyncedCentralRecipes = false
     @State private var matchError: String?
 
     private var assessments: [CookAssessment] {
@@ -23,16 +24,16 @@ struct CanCookView: View {
         assessments.filter { !$0.canCook && $0.matchRatio >= threshold }
     }
 
-    private var cloudReady: [CloudCookAssessment] {
-        cloudAssessments.filter(\.canCook)
+    private var cloudReady: [CloudRecipeMatch] {
+        cloudMatches.filter(\.canCook)
     }
 
-    private var cloudAlmostReady: [CloudCookAssessment] {
-        cloudAssessments.filter { !$0.canCook && $0.matchRatio >= threshold }
+    private var cloudAlmostReady: [CloudRecipeMatch] {
+        cloudMatches.filter { !$0.canCook && $0.matchRatio >= threshold }
     }
 
     private var useCloudMatches: Bool {
-        !cloudAssessments.isEmpty
+        !cloudMatches.isEmpty
     }
 
     var body: some View {
@@ -62,11 +63,15 @@ struct CanCookView: View {
                             Text(L.text("No full matches yet.", language: appLanguage))
                                 .foregroundStyle(.secondary)
                         } else {
-                            ForEach(cloudReady, id: \.recipe.id) { assessment in
-                                NavigationLink {
-                                    RecipeDetailView(recipe: assessment.recipe)
-                                } label: {
-                                    CloudCookAssessmentRow(assessment: assessment)
+                            ForEach(cloudReady, id: \.recipeID) { match in
+                                if let recipe = recipe(for: match) {
+                                    NavigationLink {
+                                        RecipeDetailView(recipe: recipe)
+                                    } label: {
+                                        CloudCookAssessmentRow(match: match)
+                                    }
+                                } else {
+                                    CloudCookAssessmentRow(match: match)
                                 }
                             }
                         }
@@ -90,11 +95,15 @@ struct CanCookView: View {
                             Text(emptyAlmostReadyText)
                                 .foregroundStyle(.secondary)
                         } else {
-                            ForEach(cloudAlmostReady, id: \.recipe.id) { assessment in
-                                NavigationLink {
-                                    RecipeDetailView(recipe: assessment.recipe)
-                                } label: {
-                                    CloudCookAssessmentRow(assessment: assessment)
+                            ForEach(cloudAlmostReady, id: \.recipeID) { match in
+                                if let recipe = recipe(for: match) {
+                                    NavigationLink {
+                                        RecipeDetailView(recipe: recipe)
+                                    } label: {
+                                        CloudCookAssessmentRow(match: match)
+                                    }
+                                } else {
+                                    CloudCookAssessmentRow(match: match)
                                 }
                             }
                         }
@@ -131,7 +140,7 @@ struct CanCookView: View {
             .map { "\($0.name):\($0.quantity):\($0.unit)" }
             .sorted()
             .joined(separator: "|")
-        return "\(inventory)#\(recipes.count)"
+        return inventory
     }
 
     private func refreshCloudMatches() async {
@@ -140,27 +149,23 @@ struct CanCookView: View {
         defer { isRefreshing = false }
 
         do {
-            try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
-            let matches = try await CloudRecipeMatcher().matchRecipes(inventory: ingredients)
-            let latestRecipes = try modelContext.fetch(FetchDescriptor<Recipe>())
-            let recipesByCloudId = Dictionary(
-                uniqueKeysWithValues: latestRecipes
-                    .filter { !$0.cloudId.isEmpty }
-                    .map { ($0.cloudId, $0) }
-            )
-            cloudAssessments = matches.compactMap { match in
-                guard let recipe = recipesByCloudId[match.recipeID] else {
-                    return nil
-                }
-                return CloudCookAssessment(recipe: recipe, match: match)
+            if !hasSyncedCentralRecipes {
+                try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
+                hasSyncedCentralRecipes = true
             }
+            let matches = try await CloudRecipeMatcher().matchRecipes(inventory: ingredients)
+            cloudMatches = matches
             matchError = nil
         } catch {
-            cloudAssessments = []
+            cloudMatches = []
             matchError = appLanguage == AppLanguage.chinese.rawValue
                 ? "云端匹配暂时不可用，正在使用本地匹配。"
                 : "Cloud matching is unavailable. Using local matching."
         }
+    }
+
+    private func recipe(for match: CloudRecipeMatch) -> Recipe? {
+        recipes.first { $0.cloudId == match.recipeID }
     }
 }
 
@@ -221,33 +226,24 @@ struct CookAssessmentRow: View {
     }
 }
 
-struct CloudCookAssessment: Identifiable {
-    let recipe: Recipe
-    let match: CloudRecipeMatch
-
-    var id: PersistentIdentifier { recipe.id }
-    var matchRatio: Double { match.matchScorePercent / 100 }
-    var canCook: Bool { match.missingRequiredIngredients.isEmpty }
-}
-
 struct CloudCookAssessmentRow: View {
-    let assessment: CloudCookAssessment
+    let match: CloudRecipeMatch
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(assessment.recipe.name)
+                    Text(match.recipeName)
                         .fontWeight(.semibold)
-                    Text("\(Int(assessment.match.matchScorePercent.rounded()))% \(L.text("Ingredients", language: appLanguage).lowercased())")
+                    Text("\(Int(match.matchScorePercent.rounded()))% \(L.text("Ingredients", language: appLanguage).lowercased())")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                if assessment.canCook {
+                if match.canCook {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
@@ -255,13 +251,13 @@ struct CloudCookAssessmentRow: View {
                 }
             }
 
-            ForEach(assessment.match.substitutedIngredients.prefix(3), id: \.id) { item in
+            ForEach(match.substitutedIngredients.prefix(3), id: \.id) { item in
                 Text("\(item.recipeIngredient) -> \(item.userInventoryIngredient)")
                     .font(.footnote)
                     .foregroundStyle(.orange)
             }
 
-            ForEach(assessment.match.missingRequiredIngredients.prefix(3), id: \.id) { item in
+            ForEach(match.missingRequiredIngredients.prefix(3), id: \.id) { item in
                 Text("\(L.text("Missing", language: appLanguage)) \(item.recipeIngredient)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -326,6 +322,9 @@ struct CloudRecipeMatch: Decodable {
     let missingOptionalIngredients: [CloudRecipeMatchIngredient]
     let substitutedIngredients: [CloudRecipeMatchIngredient]
     let pantryMissing: [CloudRecipeMatchIngredient]
+
+    var matchRatio: Double { matchScorePercent / 100 }
+    var canCook: Bool { missingRequiredIngredients.isEmpty }
 
     enum CodingKeys: String, CodingKey {
         case recipeID = "recipe_id"
