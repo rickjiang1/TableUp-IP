@@ -197,11 +197,34 @@ export async function fetchMatchingRules() {
   return { ingredients, aliases, substitutions };
 }
 
-export async function fetchIngredientDictionary() {
-  return await restSelect(
+export async function fetchIngredientDictionary(language = "en") {
+  const ingredients = await restSelect(
     "ingredients",
     "select=ingredient_id,canonical_name,category&order=category.asc,canonical_name.asc"
   );
+  const normalizedLanguage = String(language || "en").trim().toLowerCase();
+  if (normalizedLanguage !== "zh") {
+    return ingredients.map((ingredient) => ({
+      ...ingredient,
+      display_name: ingredient.canonical_name
+    }));
+  }
+
+  const aliases = await restSelect(
+    "ingredient_aliases",
+    "select=alias_name,ingredient_id&language=eq.zh&verified=eq.true&order=alias_name.asc"
+  );
+  const aliasByIngredientId = new Map();
+  for (const alias of aliases) {
+    if (!aliasByIngredientId.has(alias.ingredient_id)) {
+      aliasByIngredientId.set(alias.ingredient_id, alias.alias_name);
+    }
+  }
+
+  return ingredients.map((ingredient) => ({
+    ...ingredient,
+    display_name: aliasByIngredientId.get(ingredient.ingredient_id) || ingredient.canonical_name
+  }));
 }
 
 export async function upsertUnknownIngredients(items) {

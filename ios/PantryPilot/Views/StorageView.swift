@@ -185,14 +185,30 @@ struct StorageView: View {
                 IngredientResolveInput(name: $0.name, source: "inventory")
             })
             async let unknowns = client.fetchPending(source: "inventory")
-            async let dictionary = client.fetchIngredientDictionary()
-            unmatchedIngredients = try await unknowns
+            async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
+            unmatchedIngredients = filterUnknowns(try await unknowns, against: ingredients.map(\.name))
             ingredientDictionary = try await dictionary
         } catch {
             unmatchedError = error.localizedDescription
         }
 
         isLoadingUnmatched = false
+    }
+
+    private func filterUnknowns(_ unknowns: [UnknownIngredient], against names: [String]) -> [UnknownIngredient] {
+        let currentNames = Set(names.map(normalizedUnknownKey))
+        return unknowns.filter { unknown in
+            currentNames.contains(normalizedUnknownKey(unknown.rawName)) ||
+            currentNames.contains(normalizedUnknownKey(unknown.normalizedName))
+        }
+    }
+
+    private func normalizedUnknownKey(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 
     @MainActor
@@ -355,8 +371,8 @@ struct UnknownIngredientsManagerView: View {
                 _ = try await client.resolve(items: itemsToScan)
             }
             async let unknowns = client.fetchPending(source: source)
-            async let dictionary = client.fetchIngredientDictionary()
-            unmatchedIngredients = try await unknowns
+            async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
+            unmatchedIngredients = filterUnknowns(try await unknowns)
             ingredientDictionary = try await dictionary
         } catch {
             errorMessage = error.localizedDescription
@@ -374,6 +390,23 @@ struct UnknownIngredientsManagerView: View {
             alert = StorageAlertMessage(title: "Save failed", message: error.localizedDescription)
         }
     }
+
+    private func filterUnknowns(_ unknowns: [UnknownIngredient]) -> [UnknownIngredient] {
+        guard !itemsToScan.isEmpty else { return unknowns }
+        let currentNames = Set(itemsToScan.map { normalizedUnknownKey($0.name) })
+        return unknowns.filter { unknown in
+            currentNames.contains(normalizedUnknownKey(unknown.rawName)) ||
+            currentNames.contains(normalizedUnknownKey(unknown.normalizedName))
+        }
+    }
+
+    private func normalizedUnknownKey(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
 }
 
 struct UnknownIngredientRow: View {
@@ -383,6 +416,7 @@ struct UnknownIngredientRow: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var selectedIngredientId = ""
     @State private var isResolving = false
+    @State private var showingIngredientPicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -413,13 +447,17 @@ struct UnknownIngredientRow: View {
             .foregroundStyle(.secondary)
 
             HStack {
-                Picker(L.text("Match to", language: appLanguage), selection: $selectedIngredientId) {
-                    Text(L.text("Choose ingredient", language: appLanguage)).tag("")
-                    ForEach(dictionary) { ingredient in
-                        Text("\(ingredient.canonicalName) (\(ingredient.category))").tag(ingredient.id)
+                Button {
+                    showingIngredientPicker = true
+                } label: {
+                    HStack {
+                        Text(selectedIngredientText)
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "magnifyingglass")
                     }
                 }
-                .pickerStyle(.menu)
+                .buttonStyle(.bordered)
 
                 Button {
                     guard let selected = dictionary.first(where: { $0.id == selectedIngredientId }) else { return }
@@ -443,6 +481,12 @@ struct UnknownIngredientRow: View {
                 selectedIngredientId = bestGuessIngredientId
             }
         }
+        .sheet(isPresented: $showingIngredientPicker) {
+            IngredientDictionaryPickerView(
+                dictionary: dictionary,
+                selectedIngredientId: $selectedIngredientId
+            )
+        }
     }
 
     private var sourceText: String {
@@ -461,8 +505,74 @@ struct UnknownIngredientRow: View {
         return dictionary.first {
             $0.id == ingredient.normalizedName ||
             $0.id.replacingOccurrences(of: "_", with: " ") == normalized ||
-            $0.canonicalName.localizedCaseInsensitiveCompare(normalized) == .orderedSame
+            $0.canonicalName.localizedCaseInsensitiveCompare(normalized) == .orderedSame ||
+            $0.displayName.localizedCaseInsensitiveCompare(normalized) == .orderedSame
         }?.id ?? ""
+    }
+
+    private var selectedIngredientText: String {
+        guard let selected = dictionary.first(where: { $0.id == selectedIngredientId }) else {
+            return L.text("Choose ingredient", language: appLanguage)
+        }
+        return "\(selected.displayName) (\(selected.category))"
+    }
+}
+
+struct IngredientDictionaryPickerView: View {
+    let dictionary: [CloudIngredient]
+    @Binding var selectedIngredientId: String
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @State private var searchText = ""
+
+    private var filteredDictionary: [CloudIngredient] {
+        let trimmedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSearch.isEmpty else { return dictionary }
+        return dictionary.filter {
+            $0.displayName.localizedCaseInsensitiveContains(trimmedSearch) ||
+            $0.canonicalName.localizedCaseInsensitiveContains(trimmedSearch) ||
+            $0.id.localizedCaseInsensitiveContains(trimmedSearch) ||
+            $0.category.localizedCaseInsensitiveContains(trimmedSearch)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(filteredDictionary) { ingredient in
+                Button {
+                    selectedIngredientId = ingredient.id
+                    dismiss()
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(ingredient.displayName)
+                                .fontWeight(.semibold)
+                            if ingredient.displayName != ingredient.canonicalName {
+                                Text(ingredient.canonicalName)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(ingredient.category)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if selectedIngredientId == ingredient.id {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.green)
+                        }
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
+            .searchable(text: $searchText, prompt: L.text("Search ingredients", language: appLanguage))
+            .navigationTitle(L.text("Choose ingredient", language: appLanguage))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L.text("Cancel", language: appLanguage)) { dismiss() }
+                }
+            }
+        }
     }
 }
 
@@ -488,8 +598,10 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(UnknownIngredientResponse.self, from: data).unknownIngredients
     }
 
-    func fetchIngredientDictionary() async throws -> [CloudIngredient] {
-        let endpoint = baseURL.appending(path: "api/ingredients")
+    func fetchIngredientDictionary(language: String) async throws -> [CloudIngredient] {
+        let endpoint = baseURL
+            .appending(path: "api/ingredients")
+            .appending(queryItems: [URLQueryItem(name: "language", value: language)])
         let (data, response) = try await session.data(from: endpoint)
 
         guard let httpResponse = response as? HTTPURLResponse,
@@ -564,11 +676,21 @@ struct CloudIngredientResponse: Decodable {
 struct CloudIngredient: Decodable, Identifiable {
     let id: String
     let canonicalName: String
+    let displayName: String
     let category: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        canonicalName = try container.decode(String.self, forKey: .canonicalName)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? canonicalName
+        category = try container.decode(String.self, forKey: .category)
+    }
 
     enum CodingKeys: String, CodingKey {
         case id = "ingredient_id"
         case canonicalName = "canonical_name"
+        case displayName = "display_name"
         case category
     }
 }

@@ -51,6 +51,7 @@ enum L {
         "Unmatched ingredients": "未匹配食材",
         "Match to": "匹配到",
         "Choose ingredient": "选择食材",
+        "Search ingredients": "搜索食材",
         "Matched to ingredient library": "已匹配到食材库",
         "Full product name": "完整商品名",
         "Description": "描述",

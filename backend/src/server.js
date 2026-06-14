@@ -45,7 +45,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/ingredients") {
-      const ingredients = await fetchIngredientDictionary();
+      const ingredients = await fetchIngredientDictionary(url.searchParams.get("language") || "en");
       sendJson(response, 200, { ingredients });
       return;
     }
