@@ -59,6 +59,7 @@ enum L {
         "Open video URL": "打开视频链接",
         "Ready to cook": "现在可做",
         "Almost there": "还差一点",
+        "Match Recipes": "匹配菜谱",
         "No full matches yet.": "还没有完全匹配的食谱。",
         "dishes ready": "道菜可做",
         "almost there": "接近可做",

@@ -36,45 +36,60 @@ struct CanCookView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    HStack {
-                        SummaryTile(value: useCloudMatches ? cloudReady.count : ready.count, label: L.text("dishes ready", language: appLanguage))
-                        SummaryTile(value: useCloudMatches ? cloudAlmostReady.count : almostReady.count, label: L.text("almost there", language: appLanguage))
-                    }
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        HStack {
+                            SummaryTile(value: useCloudMatches ? cloudReady.count : ready.count, label: L.text("dishes ready", language: appLanguage))
+                            SummaryTile(value: useCloudMatches ? cloudAlmostReady.count : almostReady.count, label: L.text("almost there", language: appLanguage))
+                        }
 
-                    if isRefreshing {
-                        ProgressView()
-                    }
+                        if isRefreshing {
+                            ProgressView()
+                        }
 
-                    if let matchError {
-                        Text(matchError)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                        if let matchError {
+                            Text(matchError)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
 
-                    canCookSection(title: L.text("Ready to cook", language: appLanguage)) {
-                        readyRows
-                    }
+                        canCookSection(title: L.text("Ready to cook", language: appLanguage)) {
+                            readyRows
+                        }
 
-                    canCookSection(title: L.text("Almost there", language: appLanguage)) {
-                        almostReadyRows
+                        canCookSection(title: L.text("Almost there", language: appLanguage)) {
+                            almostReadyRows
+                        }
                     }
+                    .padding()
                 }
-                .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(L.text("Can Cook", language: appLanguage))
-            .toolbar {
+                .background(Color(.systemGroupedBackground))
+
                 Button {
                     Task {
                         await refreshCloudMatches()
                     }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    HStack {
+                        if isRefreshing {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                        Text(L.text("Match Recipes", language: appLanguage))
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
                 .disabled(isRefreshing)
+                .frame(maxWidth: .infinity)
+                .controlSize(.large)
+                .padding()
+                .background(.bar)
             }
+            .navigationTitle(L.text("Can Cook", language: appLanguage))
         }
     }
 
@@ -147,8 +162,29 @@ struct CanCookView: View {
         }
     }
 
+    @ViewBuilder
     private func cloudRow(_ match: CloudRecipeMatch) -> some View {
-        CloudCookAssessmentRow(match: match)
+        if let recipe = localRecipe(for: match) {
+            NavigationLink {
+                RecipeDetailView(recipe: recipe)
+            } label: {
+                CloudCookAssessmentRow(match: match, recipe: recipe)
+            }
+            .buttonStyle(.plain)
+        } else {
+            CloudCookAssessmentRow(match: match, recipe: nil)
+        }
+    }
+
+    private func localRecipe(for match: CloudRecipeMatch) -> Recipe? {
+        if let recipe = recipes.first(where: { !$0.cloudId.isEmpty && $0.cloudId == match.recipeID }) {
+            return recipe
+        }
+
+        let normalizedMatchName = IngredientNormalizer.normalizeName(match.recipeName)
+        return recipes.first {
+            IngredientNormalizer.normalizeName($0.name) == normalizedMatchName
+        }
     }
 
     private func emptyRow(_ text: String) -> some View {
@@ -243,39 +279,58 @@ struct CookAssessmentRow: View {
 
 struct CloudCookAssessmentRow: View {
     let match: CloudRecipeMatch
+    let recipe: Recipe?
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        HStack(spacing: 12) {
+            if let recipe {
+                RecipeThumbnail(imageData: recipe.imageThumbnailData ?? recipe.imageData)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(match.recipeName)
                         .fontWeight(.semibold)
                     Text("\(Int(match.matchScorePercent.rounded()))% \(L.text("Ingredients", language: appLanguage).lowercased())")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                    if let recipe {
+                        Text(recipe.ingredients.map(\.displayText).joined(separator: " - "))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
 
-                Spacer()
+                ForEach(match.substitutedIngredients.prefix(3), id: \.id) { item in
+                    Text("\(item.recipeIngredient) -> \(item.userInventoryIngredient)")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
 
+                ForEach(match.missingRequiredIngredients.prefix(3), id: \.id) { item in
+                    Text("\(L.text("Missing", language: appLanguage)) \(item.recipeIngredient)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            VStack(spacing: 8) {
                 if match.canCook {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.green)
                 }
-            }
 
-            ForEach(match.substitutedIngredients.prefix(3), id: \.id) { item in
-                Text("\(item.recipeIngredient) -> \(item.userInventoryIngredient)")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
-
-            ForEach(match.missingRequiredIngredients.prefix(3), id: \.id) { item in
-                Text("\(L.text("Missing", language: appLanguage)) \(item.recipeIngredient)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if recipe != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .padding(.vertical, 6)
