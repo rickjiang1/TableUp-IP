@@ -1,6 +1,14 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
-import { deleteCloudRecipe, fetchCloudRecipes, readVolumeFile, uploadVolumeFile, upsertCloudRecipe } from "./supabase.js";
+import {
+  deleteCloudRecipe,
+  fetchCloudRecipes,
+  fetchPendingUnknownIngredients,
+  readVolumeFile,
+  uploadVolumeFile,
+  upsertCloudRecipe,
+  upsertIngredientAliasSuggestion
+} from "./supabase.js";
 import { matchRecipesForInventory } from "./recipeMatching.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
@@ -37,6 +45,20 @@ const server = createServer(async (request, response) => {
       const body = await readJsonRequest(request, 1024 * 1024);
       const matches = await matchRecipesForInventory(body.inventory);
       sendJson(response, 200, { matches });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/unknown-ingredients") {
+      const limit = Number(url.searchParams.get("limit") || 25);
+      const unknownIngredients = await fetchPendingUnknownIngredients(limit);
+      sendJson(response, 200, { unknownIngredients });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ingredient-aliases") {
+      const body = await readJsonRequest(request, 1024 * 1024);
+      await upsertIngredientAliasSuggestion(body);
+      sendJson(response, 201, { ok: true });
       return;
     }
 

@@ -1,4 +1,4 @@
-import { fetchCloudRecipes, fetchMatchingRules } from "./supabase.js";
+import { fetchCloudRecipes, fetchMatchingRules, upsertUnknownIngredients } from "./supabase.js";
 
 const requiredWeight = 1.0;
 const optionalWeight = 0.3;
@@ -13,6 +13,7 @@ export async function matchRecipesForInventory(inventoryInput) {
   const resolver = buildIngredientResolver(rules);
   const substitutions = buildSubstitutionMap(rules.substitutions);
   const inventory = normalizeInventory(inventoryInput, resolver);
+  await recordUnknownIngredients(inventory, recipes, resolver);
 
   return recipes
     .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions))
@@ -99,11 +100,12 @@ function normalizeInventory(input, resolver) {
     .map((item) => {
       const name = typeof item?.name === "string" ? item.name.trim() : "";
       const explicitId = typeof item?.ingredient_id === "string" ? item.ingredient_id.trim() : "";
-      const resolved = explicitId ? { ingredientId: explicitId, aliasMatched: false } : resolver.resolve(name);
+      const resolved = explicitId ? { ingredientId: explicitId, aliasMatched: false, known: true } : resolver.resolve(name);
       return {
         name,
         ingredientId: resolved.ingredientId,
         aliasMatched: resolved.aliasMatched,
+        known: resolved.known,
         quantity: Number(item?.quantity || 0),
         unit: typeof item?.unit === "string" ? item.unit : ""
       };
@@ -130,17 +132,58 @@ function buildIngredientResolver(rules) {
     resolve(name) {
       const normalized = normalizeName(name);
       if (byId.has(name)) {
-        return { ingredientId: name, aliasMatched: false };
+        return { ingredientId: name, aliasMatched: false, known: true };
       }
       if (byName.has(normalized)) {
-        return { ingredientId: byName.get(normalized), aliasMatched: false };
+        return { ingredientId: byName.get(normalized), aliasMatched: false, known: true };
       }
       if (aliases.has(normalized)) {
-        return { ingredientId: aliases.get(normalized), aliasMatched: true };
+        return { ingredientId: aliases.get(normalized), aliasMatched: true, known: true };
       }
-      return { ingredientId: canonicalIngredientId(name), aliasMatched: false };
+      return { ingredientId: canonicalIngredientId(name), aliasMatched: false, known: false };
     }
   };
+}
+
+async function recordUnknownIngredients(inventory, recipes, resolver) {
+  const unknowns = [];
+
+  for (const item of inventory) {
+    if (!item.known) {
+      unknowns.push({ rawName: item.name, source: "inventory" });
+    }
+  }
+
+  for (const recipe of recipes) {
+    for (const ingredient of recipe.ingredients || []) {
+      if (ingredient.canonicalIngredientId) {
+        continue;
+      }
+
+      const resolved = resolver.resolve(ingredient.name);
+      if (!resolved.known) {
+        unknowns.push({ rawName: ingredient.name, source: "recipe" });
+      }
+    }
+  }
+
+  await upsertUnknownIngredients(dedupeUnknowns(unknowns));
+}
+
+function dedupeUnknowns(items) {
+  const byKey = new Map();
+  for (const item of items) {
+    const rawName = typeof item.rawName === "string" ? item.rawName.trim() : "";
+    if (!rawName) {
+      continue;
+    }
+    const source = item.source || "inventory";
+    const key = `${source}:${normalizeName(rawName)}`;
+    const current = byKey.get(key) || { rawName, source, occurrenceCount: 0 };
+    current.occurrenceCount += 1;
+    byKey.set(key, current);
+  }
+  return [...byKey.values()];
 }
 
 function buildSubstitutionMap(substitutions) {

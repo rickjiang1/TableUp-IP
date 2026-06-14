@@ -197,6 +197,106 @@ export async function fetchMatchingRules() {
   return { ingredients, aliases, substitutions };
 }
 
+export async function upsertUnknownIngredients(items) {
+  const normalized = Array.isArray(items)
+    ? items
+        .map((item) => ({
+          raw_name: typeof item.rawName === "string" ? item.rawName.trim() : "",
+          normalized_name: canonicalIngredientId(item.rawName),
+          source: typeof item.source === "string" ? item.source : "inventory",
+          status: "pending",
+          occurrence_count: Number.isFinite(Number(item.occurrenceCount)) ? Number(item.occurrenceCount) : 1,
+          last_seen_at: new Date().toISOString()
+        }))
+        .filter((item) => item.raw_name && item.normalized_name)
+    : [];
+
+  if (normalized.length === 0) {
+    return;
+  }
+
+  await Promise.all(normalized.map(async (item) => {
+    try {
+      const existing = await restSelect(
+        "unknown_ingredients",
+        `select=id,occurrence_count&normalized_name=eq.${encodeURIComponent(item.normalized_name)}&source=eq.${encodeURIComponent(item.source)}&status=eq.pending&limit=1`
+      );
+
+      if (existing.length > 0) {
+        await restWrite(
+          `unknown_ingredients?id=eq.${encodeURIComponent(existing[0].id)}`,
+          "PATCH",
+          {
+            raw_name: item.raw_name,
+            occurrence_count: Number(existing[0].occurrence_count || 0) + item.occurrence_count,
+            last_seen_at: item.last_seen_at
+          }
+        );
+        return;
+      }
+
+      await restWrite("unknown_ingredients", "POST", [{
+        raw_name: item.raw_name,
+        normalized_name: item.normalized_name,
+        source: item.source,
+        status: item.status,
+        occurrence_count: item.occurrence_count,
+        first_seen_at: item.last_seen_at,
+        last_seen_at: item.last_seen_at
+      }]);
+    } catch (error) {
+      console.warn(`Unable to record unknown ingredient "${item.raw_name}": ${error.message}`);
+    }
+  }));
+}
+
+export async function fetchPendingUnknownIngredients(limit = 25) {
+  try {
+    return await restSelect(
+      "unknown_ingredients",
+      `select=id,raw_name,normalized_name,source,suggested_canonical_name,ai_confidence,status,occurrence_count,first_seen_at,last_seen_at&status=eq.pending&order=last_seen_at.desc&limit=${Math.max(1, Math.min(Number(limit) || 25, 100))}`
+    );
+  } catch (error) {
+    console.warn(`Unable to fetch pending unknown ingredients: ${error.message}`);
+    return [];
+  }
+}
+
+export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId, canonicalName, category = "other", confidenceScore = 0.7, verified = false, language = "mixed" }) {
+  const alias = String(aliasName || "").trim();
+  const canonical = String(canonicalName || ingredientId || "").trim();
+  const id = String(ingredientId || canonicalIngredientId(canonical)).trim();
+  if (!alias || !id || !canonical) {
+    throw new Error("aliasName and canonicalName are required.");
+  }
+
+  await restWrite(
+    "ingredients?on_conflict=ingredient_id",
+    "POST",
+    [{
+      ingredient_id: id,
+      canonical_name: canonical,
+      category
+    }],
+    { prefer: "resolution=merge-duplicates" }
+  );
+
+  await restWrite(
+    "ingredient_aliases?on_conflict=alias_name",
+    "POST",
+    [{
+      alias_name: alias,
+      ingredient_id: id,
+      canonical_name: canonical,
+      category,
+      language,
+      confidence_score: confidenceScore,
+      verified
+    }],
+    { prefer: "resolution=merge-duplicates" }
+  );
+}
+
 export async function restSelect(table, queryString) {
   return restRequest(`${table}?${queryString}`, { method: "GET" });
 }

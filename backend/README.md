@@ -60,6 +60,10 @@ pantry_recipes
 pantry_recipe_ingredients
 pantry_recipe_steps
 pantry_media
+ingredients
+ingredient_aliases
+ingredient_substitutions
+unknown_ingredients
 ```
 
 Media files are stored in `pantry_media` as base64 text for the MVP, and served back through:
@@ -69,6 +73,30 @@ GET /api/media/:fileName
 ```
 
 For the MVP, edit recipe rows directly in Supabase or through the iOS app. The iOS app syncs active recipes through this backend, and Supabase keys stay in `backend/.env` or Render environment variables.
+
+## Ingredient Alias Dictionary
+
+Recipe matching is rule-based. It first resolves inventory and recipe ingredient names through `ingredient_aliases`, then compares canonical ingredient IDs. For example:
+
+```text
+鸡胸 -> chicken_breast
+鸡胸肉 -> chicken_breast
+```
+
+Unknown inventory or recipe ingredients are recorded in `unknown_ingredients` with `status = pending` during `/api/recipe-matches`. Review these later and add approved aliases through:
+
+```text
+GET /api/unknown-ingredients
+POST /api/ingredient-aliases
+```
+
+Run the schema/seed script after setting `SUPABASE_DATABASE_URL` in `backend/.env` or your shell:
+
+```bash
+npm run seed:matching
+```
+
+AI suggestions for unknown aliases should be a review workflow, not part of live matching. Only enable an AI suggestion endpoint after you explicitly approve sending unknown ingredient names to the external AI service.
 
 ## Databricks Migration
 
