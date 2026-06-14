@@ -128,18 +128,21 @@ enum RecipeIngredientRole: String, CaseIterable, Codable, Identifiable {
 final class RecipeIngredient {
     var name: String
     var normalizedName: String
+    var canonicalIngredientId: String = ""
     var quantity: Double
     var unit: String
     var roleRaw: String = RecipeIngredientRole.main.rawValue
 
     init(
         name: String,
+        canonicalIngredientId: String = "",
         quantity: Double,
         unit: String,
         role: RecipeIngredientRole = .main
     ) {
         self.name = name
         self.normalizedName = IngredientNormalizer.normalizeName(name)
+        self.canonicalIngredientId = canonicalIngredientId
         self.quantity = quantity
         self.unit = IngredientNormalizer.normalizeUnit(unit)
         self.roleRaw = role.rawValue

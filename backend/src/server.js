@@ -6,6 +6,7 @@ import {
   fetchIngredientDictionary,
   fetchMatchingRules,
   fetchPendingUnknownIngredients,
+  markUnknownIngredientResolved,
   readVolumeFile,
   uploadVolumeFile,
   upsertCloudRecipe,
@@ -76,6 +77,13 @@ const server = createServer(async (request, response) => {
       const body = await readJsonRequest(request, 1024 * 1024);
       await upsertIngredientAliasSuggestion(body);
       sendJson(response, 201, { ok: true });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/unknown-ingredients/resolve") {
+      const body = await readJsonRequest(request, 1024 * 1024);
+      await markUnknownIngredientResolved(body);
+      sendJson(response, 200, { ok: true });
       return;
     }
 

@@ -206,7 +206,13 @@ struct RecipesView: View {
                 )
             }
             .sheet(isPresented: $showingUnmatchedIngredients) {
-                UnknownIngredientsManagerView(itemsToScan: recipeIngredientsToScan, source: "recipe")
+                UnknownIngredientsManagerView(
+                    itemsToScan: recipeIngredientsToScan,
+                    source: "recipe",
+                    onResolved: { unknown, ingredient in
+                        try await bindRecipeIngredient(named: unknown, to: ingredient)
+                    }
+                )
             }
             .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
                 TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)
@@ -241,8 +247,51 @@ struct RecipesView: View {
 
     private var recipeIngredientsToScan: [IngredientResolveInput] {
         recipes.flatMap { recipe in
-            recipe.ingredients.map { IngredientResolveInput(name: $0.name, source: "recipe") }
+            recipe.ingredients
+                .filter { $0.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map { IngredientResolveInput(name: $0.name, source: "recipe") }
         }
+    }
+
+    @MainActor
+    private func bindRecipeIngredient(named unknown: UnknownIngredient, to ingredient: CloudIngredient) async throws {
+        let targetNames = Set([
+            normalizedUnknownKey(unknown.rawName),
+            normalizedUnknownKey(unknown.normalizedName)
+        ])
+        var changedRecipes: [Recipe] = []
+
+        for recipe in recipes {
+            var recipeChanged = false
+            for recipeIngredient in recipe.ingredients {
+                let ingredientKeys = [
+                    normalizedUnknownKey(recipeIngredient.name),
+                    normalizedUnknownKey(recipeIngredient.normalizedName)
+                ]
+
+                if ingredientKeys.contains(where: { targetNames.contains($0) }) {
+                    recipeIngredient.canonicalIngredientId = ingredient.id
+                    recipeChanged = true
+                }
+            }
+
+            if recipeChanged {
+                changedRecipes.append(recipe)
+            }
+        }
+
+        try modelContext.save()
+        for recipe in changedRecipes where !recipe.cloudId.isEmpty {
+            _ = try await RecipeCloudSync().saveRecipe(recipe)
+        }
+    }
+
+    private func normalizedUnknownKey(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
     }
 
     private func folderSummary(for folder: RecipeFolder) -> String {
@@ -436,6 +485,7 @@ struct RecipeCloudSync {
                 .map { ingredient in
                     RecipeIngredient(
                         name: ingredient.name,
+                        canonicalIngredientId: ingredient.canonicalIngredientId,
                         quantity: ingredient.quantity,
                         unit: ingredient.unit,
                         role: ingredient.role.recipeRole
@@ -611,6 +661,7 @@ struct CloudRecipeSavePayload: Encodable {
             Ingredient(
                 role: ingredient.role.rawValueForCloud,
                 name: ingredient.name,
+                canonicalIngredientId: ingredient.canonicalIngredientId,
                 quantity: ingredient.quantity,
                 unit: ingredient.unit,
                 sortOrder: index + 1
@@ -624,6 +675,7 @@ struct CloudRecipeSavePayload: Encodable {
     struct Ingredient: Encodable {
         let role: String
         let name: String
+        let canonicalIngredientId: String
         let quantity: Double
         let unit: String
         let sortOrder: Int
@@ -687,9 +739,31 @@ struct CloudRecipeIngredient: Decodable {
     let id: String
     let role: Role
     let name: String
+    let canonicalIngredientId: String
     let quantity: Double
     let unit: String
     let sortOrder: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case name
+        case canonicalIngredientId
+        case quantity
+        case unit
+        case sortOrder
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        role = try container.decode(Role.self, forKey: .role)
+        name = try container.decode(String.self, forKey: .name)
+        canonicalIngredientId = try container.decodeIfPresent(String.self, forKey: .canonicalIngredientId) ?? ""
+        quantity = try container.decode(Double.self, forKey: .quantity)
+        unit = try container.decode(String.self, forKey: .unit)
+        sortOrder = try container.decode(Int.self, forKey: .sortOrder)
+    }
 }
 
 struct CloudRecipeStep: Decodable {
@@ -1138,6 +1212,7 @@ struct EditRecipeView: View {
 struct RecipeIngredientDraft: Identifiable {
     let id: UUID
     var name: String
+    var canonicalIngredientId: String
     var quantity: Double
     var unit: String
     var role: RecipeIngredientRole
@@ -1145,12 +1220,14 @@ struct RecipeIngredientDraft: Identifiable {
     init(
         id: UUID = UUID(),
         name: String = "",
+        canonicalIngredientId: String = "",
         quantity: Double = 1,
         unit: String = IngredientUnit.piece.rawValue,
         role: RecipeIngredientRole
     ) {
         self.id = id
         self.name = name
+        self.canonicalIngredientId = canonicalIngredientId
         self.quantity = quantity
         self.unit = IngredientUnit.normalizedSelection(for: unit)
         self.role = role
@@ -1159,6 +1236,7 @@ struct RecipeIngredientDraft: Identifiable {
     init(ingredient: RecipeIngredient) {
         self.init(
             name: ingredient.name,
+            canonicalIngredientId: ingredient.canonicalIngredientId,
             quantity: ingredient.quantity,
             unit: ingredient.unit,
             role: ingredient.role
@@ -1241,6 +1319,7 @@ private func recipeIngredients(from drafts: [RecipeIngredientDraft]) -> [RecipeI
                 guard !name.isEmpty else { return nil }
                 return RecipeIngredient(
                     name: name,
+                    canonicalIngredientId: draft.canonicalIngredientId,
                     quantity: draft.quantity,
                     unit: draft.unit,
                     role: draft.role

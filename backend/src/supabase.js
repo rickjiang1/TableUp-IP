@@ -343,6 +343,28 @@ export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId,
   }
 }
 
+export async function markUnknownIngredientResolved({ unknownIngredientId = "", ingredientId = "", canonicalName = "", confidenceScore = 1 }) {
+  const id = String(unknownIngredientId || "").trim();
+  const canonicalId = String(ingredientId || "").trim();
+  const canonical = String(canonicalName || canonicalId).trim();
+
+  if (!id || !canonicalId) {
+    throw new Error("unknownIngredientId and ingredientId are required.");
+  }
+
+  await restWrite(
+    `unknown_ingredients?id=eq.${encodeURIComponent(id)}`,
+    "PATCH",
+    {
+      suggested_canonical_name: canonical,
+      suggested_ingredient_id: canonicalId,
+      ai_confidence: Number(confidenceScore || 1),
+      status: "resolved",
+      last_seen_at: new Date().toISOString()
+    }
+  );
+}
+
 export async function restSelect(table, queryString) {
   return restRequest(`${table}?${queryString}`, { method: "GET" });
 }

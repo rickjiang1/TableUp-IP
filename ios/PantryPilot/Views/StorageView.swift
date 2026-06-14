@@ -142,7 +142,7 @@ struct StorageView: View {
             } header: {
                 Text(L.text("Not matched to ingredient dictionary", language: appLanguage))
             } footer: {
-                Text(L.text("Use these names to add aliases such as chicken breast = chicken or 鸡胸 = chicken breast.", language: appLanguage))
+                Text(L.text("Choose a dictionary ingredient to bind the local item without changing the global alias dictionary.", language: appLanguage))
             }
         }
     }
@@ -284,6 +284,7 @@ struct StorageAlertMessage: Identifiable {
 struct UnknownIngredientsManagerView: View {
     var itemsToScan: [IngredientResolveInput] = []
     var source: String = ""
+    var onResolved: ((UnknownIngredient, CloudIngredient) async throws -> Void)?
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var unmatchedIngredients: [UnknownIngredient] = []
@@ -383,6 +384,7 @@ struct UnknownIngredientsManagerView: View {
     @MainActor
     private func resolve(_ unknown: UnknownIngredient, as ingredient: CloudIngredient) async {
         do {
+            try await onResolved?(unknown, ingredient)
             try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
             unmatchedIngredients.removeAll { $0.id == unknown.id }
             alert = StorageAlertMessage(title: "Saved", message: "\(unknown.rawName) -> \(ingredient.canonicalName)")
@@ -392,7 +394,7 @@ struct UnknownIngredientsManagerView: View {
     }
 
     private func filterUnknowns(_ unknowns: [UnknownIngredient]) -> [UnknownIngredient] {
-        guard !itemsToScan.isEmpty else { return unknowns }
+        guard !itemsToScan.isEmpty else { return [] }
         let currentNames = Set(itemsToScan.map { normalizedUnknownKey($0.name) })
         return unknowns.filter { unknown in
             currentNames.contains(normalizedUnknownKey(unknown.rawName)) ||
@@ -536,34 +538,32 @@ struct IngredientDictionaryPickerView: View {
         }
     }
 
+    private var groupedDictionary: [(String, [CloudIngredient])] {
+        Dictionary(grouping: filteredDictionary, by: \.category)
+            .map { category, ingredients in
+                (
+                    category,
+                    ingredients.sorted {
+                        if $0.id == $1.id {
+                            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                        }
+                        return $0.id.localizedCaseInsensitiveCompare($1.id) == .orderedAscending
+                    }
+                )
+            }
+            .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
+    }
+
     var body: some View {
         NavigationStack {
-            List(filteredDictionary) { ingredient in
-                Button {
-                    selectedIngredientId = ingredient.id
-                    dismiss()
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(ingredient.displayName)
-                                .fontWeight(.semibold)
-                            if ingredient.displayName != ingredient.canonicalName {
-                                Text(ingredient.canonicalName)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text(ingredient.category)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if selectedIngredientId == ingredient.id {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.green)
+            List {
+                ForEach(groupedDictionary, id: \.0) { category, ingredients in
+                    Section(category) {
+                        ForEach(ingredients) { ingredient in
+                            ingredientButton(ingredient)
                         }
                     }
                 }
-                .foregroundStyle(.primary)
             }
             .searchable(text: $searchText, prompt: L.text("Search ingredients", language: appLanguage))
             .navigationTitle(L.text("Choose ingredient", language: appLanguage))
@@ -573,6 +573,34 @@ struct IngredientDictionaryPickerView: View {
                 }
             }
         }
+    }
+
+    private func ingredientButton(_ ingredient: CloudIngredient) -> some View {
+        Button {
+            selectedIngredientId = ingredient.id
+            dismiss()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ingredient.displayName)
+                        .fontWeight(.semibold)
+                    Text(ingredient.id)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if ingredient.displayName != ingredient.canonicalName {
+                        Text(ingredient.canonicalName)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if selectedIngredientId == ingredient.id {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .foregroundStyle(.primary)
     }
 }
 
@@ -631,19 +659,15 @@ struct UnknownIngredientClient {
     }
 
     func resolve(unknown: UnknownIngredient, as ingredient: CloudIngredient) async throws {
-        let endpoint = baseURL.appending(path: "api/ingredient-aliases")
+        let endpoint = baseURL.appending(path: "api/unknown-ingredients/resolve")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(IngredientAliasResolvePayload(
-            aliasName: unknown.rawName,
+        request.httpBody = try JSONEncoder().encode(UnknownIngredientResolvePayload(
+            unknownIngredientId: unknown.id,
             ingredientId: ingredient.id,
             canonicalName: ingredient.canonicalName,
-            category: ingredient.category,
-            confidenceScore: 1,
-            verified: true,
-            language: unknown.rawName.range(of: #"\p{Han}"#, options: .regularExpression) == nil ? "en" : "zh",
-            unknownIngredientId: unknown.id
+            confidenceScore: 1
         ))
 
         let (_, response) = try await session.data(for: request)
@@ -716,15 +740,11 @@ struct IngredientResolveResult: Decodable {
     let aliasMatched: Bool
 }
 
-struct IngredientAliasResolvePayload: Encodable {
-    let aliasName: String
+struct UnknownIngredientResolvePayload: Encodable {
+    let unknownIngredientId: String
     let ingredientId: String
     let canonicalName: String
-    let category: String
     let confidenceScore: Double
-    let verified: Bool
-    let language: String
-    let unknownIngredientId: String
 }
 
 struct UnknownIngredient: Decodable, Identifiable {
