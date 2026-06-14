@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { deleteCloudRecipe, fetchCloudRecipes, readVolumeFile, uploadVolumeFile, upsertCloudRecipe } from "./supabase.js";
+import { matchRecipesForInventory } from "./recipeMatching.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -29,6 +30,13 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/recipes") {
       const recipes = await fetchCloudRecipes();
       sendJson(response, 200, { recipes });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/recipe-matches") {
+      const body = await readJsonRequest(request, 1024 * 1024);
+      const matches = await matchRecipesForInventory(body.inventory);
+      sendJson(response, 200, { matches });
       return;
     }
 

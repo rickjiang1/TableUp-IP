@@ -6,8 +6,8 @@ export async function ensureSupabaseSchema() {
 
 export async function fetchCloudRecipes() {
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
-    restSelect("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at&active=eq.true&order=updated_at.desc,name.asc"),
-    restSelect("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,role,name,quantity,unit,sort_order&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
+    restSelect("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
+    restSelect("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
     restSelect("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
   ]);
 
@@ -27,13 +27,22 @@ export async function fetchCloudRecipes() {
     imageURL: recipe.image_url || "",
     videoURL: recipe.video_url || "",
     updatedAt: recipe.updated_at,
+    totalTimeMinutes: Number(recipe.total_time_minutes || 0),
+    activeTimeMinutes: Number(recipe.active_time_minutes || 0),
+    difficulty: recipe.difficulty || "",
+    leftoverScore: Number(recipe.leftover_score || 0),
+    cleanupScore: Number(recipe.cleanup_score || 0),
     ingredients: (ingredientsByRecipe.get(recipe.recipe_id) || []).map((ingredient) => ({
       id: ingredient.ingredient_id,
+      canonicalIngredientId: ingredient.canonical_ingredient_id || canonicalIngredientId(ingredient.name),
       role: normalizeRole(ingredient.role),
       name: ingredient.name,
       quantity: Number(ingredient.quantity || 1),
       unit: ingredient.unit || "piece",
-      sortOrder: Number(ingredient.sort_order || 0)
+      sortOrder: Number(ingredient.sort_order || 0),
+      requiredFlag: ingredient.required_flag ?? normalizeRole(ingredient.role) === "main",
+      optionalFlag: ingredient.optional_flag ?? normalizeRole(ingredient.role) === "secondary",
+      pantryFlag: ingredient.pantry_flag ?? normalizeRole(ingredient.role) === "seasoning"
     })),
     steps: (stepsByRecipe.get(recipe.recipe_id) || []).map((step) => ({
       id: step.step_id,
@@ -55,6 +64,11 @@ export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
       name: recipe.name,
       image_url: recipe.imageURL,
       video_url: recipe.videoURL,
+      total_time_minutes: recipe.totalTimeMinutes,
+      active_time_minutes: recipe.activeTimeMinutes,
+      difficulty: recipe.difficulty,
+      leftover_score: recipe.leftoverScore,
+      cleanup_score: recipe.cleanupScore,
       updated_at: now,
       active: true
     }],
@@ -73,9 +87,13 @@ export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
         recipe_id: recipe.id,
         role: normalizeRole(ingredient.role),
         name: ingredient.name,
+        canonical_ingredient_id: ingredient.canonicalIngredientId || canonicalIngredientId(ingredient.name),
         quantity: Number.isFinite(Number(ingredient.quantity)) ? Number(ingredient.quantity) : 1,
         unit: ingredient.unit || "piece",
-        sort_order: Number.isFinite(Number(ingredient.sortOrder)) ? Number(ingredient.sortOrder) : index + 1
+        sort_order: Number.isFinite(Number(ingredient.sortOrder)) ? Number(ingredient.sortOrder) : index + 1,
+        required_flag: ingredient.requiredFlag ?? normalizeRole(ingredient.role) === "main",
+        optional_flag: ingredient.optionalFlag ?? normalizeRole(ingredient.role) === "secondary",
+        pantry_flag: ingredient.pantryFlag ?? normalizeRole(ingredient.role) === "seasoning"
       }))
     );
   }
@@ -169,11 +187,21 @@ export async function recipeCount() {
   return rows.length;
 }
 
-async function restSelect(table, queryString) {
+export async function fetchMatchingRules() {
+  const [ingredients, aliases, substitutions] = await Promise.all([
+    restSelect("ingredients", "select=ingredient_id,canonical_name,category&order=ingredient_id.asc"),
+    restSelect("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
+    restSelect("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc")
+  ]);
+
+  return { ingredients, aliases, substitutions };
+}
+
+export async function restSelect(table, queryString) {
   return restRequest(`${table}?${queryString}`, { method: "GET" });
 }
 
-async function restWrite(path, method, body, options = {}) {
+export async function restWrite(path, method, body, options = {}) {
   return restRequest(path, {
     method,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -221,15 +249,24 @@ function normalizeRecipeInput(input, recipeId) {
     name,
     imageURL: typeof input.imageURL === "string" ? input.imageURL.trim() : "",
     videoURL: typeof input.videoURL === "string" ? input.videoURL.trim() : "",
+    totalTimeMinutes: Number(input.totalTimeMinutes || 0),
+    activeTimeMinutes: Number(input.activeTimeMinutes || 0),
+    difficulty: typeof input.difficulty === "string" ? input.difficulty.trim() : "",
+    leftoverScore: Number(input.leftoverScore || 0),
+    cleanupScore: Number(input.cleanupScore || 0),
     ingredients: Array.isArray(input.ingredients)
       ? input.ingredients
           .map((ingredient) => ({
             id: typeof ingredient.id === "string" ? ingredient.id : "",
+            canonicalIngredientId: typeof ingredient.canonicalIngredientId === "string" ? ingredient.canonicalIngredientId : "",
             role: ingredient.role,
             name: typeof ingredient.name === "string" ? ingredient.name.trim() : "",
             quantity: Number(ingredient.quantity || 1),
             unit: typeof ingredient.unit === "string" ? ingredient.unit.trim() : "piece",
-            sortOrder: Number(ingredient.sortOrder || 0)
+            sortOrder: Number(ingredient.sortOrder || 0),
+            requiredFlag: typeof ingredient.requiredFlag === "boolean" ? ingredient.requiredFlag : undefined,
+            optionalFlag: typeof ingredient.optionalFlag === "boolean" ? ingredient.optionalFlag : undefined,
+            pantryFlag: typeof ingredient.pantryFlag === "boolean" ? ingredient.pantryFlag : undefined
           }))
           .filter((ingredient) => ingredient.name)
       : [],
@@ -290,4 +327,13 @@ function normalizeRole(role) {
     return role;
   }
   return "main";
+}
+
+function canonicalIngredientId(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
