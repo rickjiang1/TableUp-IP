@@ -2,14 +2,12 @@ import SwiftData
 import SwiftUI
 
 struct CanCookView: View {
-    @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @Query private var ingredients: [StoredIngredient]
     @Query private var recipes: [Recipe]
     @State private var cloudMatches: [CloudRecipeMatch] = []
     @State private var isRefreshing = false
-    @State private var hasSyncedCentralRecipes = false
     @State private var matchError: String?
 
     private var assessments: [CookAssessment] {
@@ -149,10 +147,6 @@ struct CanCookView: View {
         defer { isRefreshing = false }
 
         do {
-            if !hasSyncedCentralRecipes {
-                try await RecipeCloudSync().sync(into: modelContext, existingRecipes: recipes)
-                hasSyncedCentralRecipes = true
-            }
             let matches = try await CloudRecipeMatcher().matchRecipes(inventory: ingredients)
             cloudMatches = matches
             matchError = nil

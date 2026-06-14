@@ -316,7 +316,7 @@ struct RecipeCloudSync {
     func sync(into modelContext: ModelContext, existingRecipes: [Recipe]) async throws {
         let cloudRecipes = try await fetchRecipes()
         let latestRecipes = (try? modelContext.fetch(FetchDescriptor<Recipe>())) ?? existingRecipes
-        let recipesByCloudId = recipesByCloudId(from: latestRecipes + existingRecipes)
+        let recipesByCloudId = recipesByCloudId(from: latestRecipes)
 
         for cloudRecipe in cloudRecipes {
             let localRecipe = recipesByCloudId[cloudRecipe.id] ?? Recipe(
