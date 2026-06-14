@@ -8,6 +8,7 @@ struct CanCookView: View {
     @Query private var recipes: [Recipe]
     @State private var cloudMatches: [CloudRecipeMatch] = []
     @State private var isRefreshing = false
+    @State private var hasMatched = false
     @State private var matchError: String?
 
     private var assessments: [CookAssessment] {
@@ -31,7 +32,17 @@ struct CanCookView: View {
     }
 
     private var useCloudMatches: Bool {
-        !cloudMatches.isEmpty
+        hasMatched && !cloudMatches.isEmpty
+    }
+
+    private var readyCount: Int {
+        guard hasMatched else { return 0 }
+        return useCloudMatches ? cloudReady.count : ready.count
+    }
+
+    private var almostReadyCount: Int {
+        guard hasMatched else { return 0 }
+        return useCloudMatches ? cloudAlmostReady.count : almostReady.count
     }
 
     var body: some View {
@@ -40,8 +51,8 @@ struct CanCookView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {
-                            SummaryTile(value: useCloudMatches ? cloudReady.count : ready.count, label: L.text("dishes ready", language: appLanguage))
-                            SummaryTile(value: useCloudMatches ? cloudAlmostReady.count : almostReady.count, label: L.text("almost there", language: appLanguage))
+                            SummaryTile(value: readyCount, label: L.text("dishes ready", language: appLanguage))
+                            SummaryTile(value: almostReadyCount, label: L.text("almost there", language: appLanguage))
                         }
 
                         if isRefreshing {
@@ -54,12 +65,14 @@ struct CanCookView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        canCookSection(title: L.text("Ready to cook", language: appLanguage)) {
-                            readyRows
-                        }
+                        if hasMatched {
+                            canCookSection(title: L.text("Ready to cook", language: appLanguage)) {
+                                readyRows
+                            }
 
-                        canCookSection(title: L.text("Almost there", language: appLanguage)) {
-                            almostReadyRows
+                            canCookSection(title: L.text("Almost there", language: appLanguage)) {
+                                almostReadyRows
+                            }
                         }
                     }
                     .padding()
@@ -214,14 +227,19 @@ struct CanCookView: View {
     private func refreshCloudMatches() async {
         guard !isRefreshing else { return }
         isRefreshing = true
+        hasMatched = false
+        cloudMatches = []
+        matchError = nil
         defer { isRefreshing = false }
 
         do {
             let matches = try await CloudRecipeMatcher().matchRecipes(inventory: ingredients)
             cloudMatches = matches
+            hasMatched = true
             matchError = nil
         } catch {
             cloudMatches = []
+            hasMatched = true
             matchError = appLanguage == AppLanguage.chinese.rawValue
                 ? "云端匹配暂时不可用，正在使用本地匹配。"
                 : "Cloud matching is unavailable. Using local matching."
