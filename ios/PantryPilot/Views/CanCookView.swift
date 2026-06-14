@@ -65,8 +65,15 @@ struct CanCookView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle(L.text("Can Cook", language: appLanguage))
-            .task(id: refreshSignature) {
-                await refreshCloudMatches()
+            .toolbar {
+                Button {
+                    Task {
+                        await refreshCloudMatches()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(isRefreshing)
             }
         }
     }
@@ -166,14 +173,6 @@ struct CanCookView: View {
             return "还没有 \(Int(threshold * 100))%+ 匹配的食谱。"
         }
         return "No \(Int(threshold * 100))%+ matches yet."
-    }
-
-    private var refreshSignature: String {
-        let inventory = ingredients
-            .map { "\($0.name):\($0.quantity):\($0.unit)" }
-            .sorted()
-            .joined(separator: "|")
-        return inventory
     }
 
     private func refreshCloudMatches() async {
@@ -304,7 +303,7 @@ struct CloudRecipeMatcher {
         let url = baseURL.appending(path: "api/recipe-matches")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 60
+        request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CloudRecipeMatchRequest(inventory: inventory))
 
