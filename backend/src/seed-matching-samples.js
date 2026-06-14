@@ -669,6 +669,39 @@ async function bootstrapSchema() {
   await query(`
     create extension if not exists pgcrypto;
 
+    create table if not exists pantry_recipes (
+      recipe_id text primary key,
+      name text not null,
+      image_url text not null default '',
+      video_url text not null default '',
+      updated_at timestamptz not null default now(),
+      active boolean not null default true
+    );
+
+    create table if not exists pantry_recipe_ingredients (
+      ingredient_id text primary key,
+      recipe_id text not null references pantry_recipes(recipe_id) on delete cascade,
+      role text not null default 'main',
+      name text not null,
+      quantity double precision not null default 1,
+      unit text not null default 'piece',
+      sort_order integer not null default 0
+    );
+
+    create table if not exists pantry_recipe_steps (
+      step_id text primary key,
+      recipe_id text not null references pantry_recipes(recipe_id) on delete cascade,
+      step_order integer not null default 0,
+      instruction text not null
+    );
+
+    create table if not exists pantry_media (
+      file_name text primary key,
+      mime_type text not null default 'application/octet-stream',
+      data_base64 text not null,
+      updated_at timestamptz not null default now()
+    );
+
     create table if not exists ingredients (
       ingredient_id text primary key,
       canonical_name text not null,
