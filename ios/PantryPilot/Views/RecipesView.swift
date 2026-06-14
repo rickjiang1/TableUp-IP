@@ -1239,10 +1239,10 @@ struct RecipeMetricsSection: View {
 
     var body: some View {
         Section(L.text("Recipe metrics", language: appLanguage)) {
-            metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
             metricRow(title: "Total Time", value: "\(recipe.totalTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Active Time", value: "\(recipe.activeTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Difficulty", value: recipe.difficulty.displayName(language: appLanguage))
+            metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
             metricRow(title: "Leftover Score", value: "\(Int(recipe.leftoverScore.rounded()))")
         }
     }
