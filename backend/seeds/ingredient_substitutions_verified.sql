@@ -20,7 +20,21 @@ values
   ('dried_oregano', 'Dried oregano', 'pantry', 'gram'),
   ('beef_broth', 'Beef broth', 'pantry', 'ml'),
   ('sweet_onion', 'Sweet onion', 'vegetable', 'gram'),
-  ('chervil', 'Chervil', 'vegetable', 'gram')
+  ('chervil', 'Chervil', 'vegetable', 'gram'),
+  ('dried_basil', 'Dried basil', 'pantry', 'gram'),
+  ('italian_seasoning', 'Italian seasoning', 'pantry', 'gram'),
+  ('powdered_buttermilk', 'Powdered buttermilk', 'dairy', 'gram'),
+  ('teriyaki_sauce', 'Teriyaki sauce', 'sauce', 'ml'),
+  ('alfalfa_sprouts', 'Alfalfa sprouts', 'vegetable', 'gram'),
+  ('broccoli_sprouts', 'Broccoli sprouts', 'vegetable', 'gram'),
+  ('fenugreek_sprouts', 'Fenugreek sprouts', 'vegetable', 'gram'),
+  ('buckwheat_sprouts', 'Buckwheat sprouts', 'vegetable', 'gram'),
+  ('sunflower_sprouts', 'Sunflower sprouts', 'vegetable', 'gram'),
+  ('alligator_tail_meat', 'Alligator tail meat', 'protein', 'gram'),
+  ('crocodile_meat', 'Crocodile meat', 'protein', 'gram'),
+  ('turtle_meat', 'Turtle meat', 'protein', 'gram'),
+  ('swordfish', 'Swordfish', 'seafood', 'gram'),
+  ('ammonium_bicarbonate', 'Ammonium bicarbonate', 'pantry', 'gram')
 on conflict (ingredient_id) do nothing;
 
 delete from ingredient_substitutions
@@ -122,7 +136,24 @@ with rows (
     ('barley', 'millet', 66, 'functional', '1:1 cooked volume in grain bowls or sides', 'cooking', 'Whole grain swap; millet is smaller and softer than barley.', 'EatingWell Test Kitchen', 'https://www.eatingwell.com/article/7740254/how-to-substitute-almost-any-ingredient/', 'medium'),
     ('chicken_broth', 'vegetable_stock', 66, 'functional', '1:1', 'soup', 'Vegetable stock can replace chicken broth when poultry flavor is not central.', 'EatingWell Test Kitchen', 'https://www.eatingwell.com/article/7740254/how-to-substitute-almost-any-ingredient/', 'high'),
     ('beef_broth', 'vegetable_stock', 58, 'emergency', '1:1', 'soup', 'Vegetable stock can replace beef broth in a pinch but loses beef flavor and body.', 'EatingWell Test Kitchen', 'https://www.eatingwell.com/article/7740254/how-to-substitute-almost-any-ingredient/', 'medium'),
-    ('chicken_broth', 'water', 42, 'emergency', '1:1 plus seasoning to taste', 'soup', 'Emergency-only broth replacement; add salt and aromatics if possible.', 'EatingWell Test Kitchen', 'https://www.eatingwell.com/article/7740254/how-to-substitute-almost-any-ingredient/', 'medium')
+    ('chicken_broth', 'water', 42, 'emergency', '1:1 plus seasoning to taste', 'soup', 'Emergency-only broth replacement; add salt and aromatics if possible.', 'EatingWell Test Kitchen', 'https://www.eatingwell.com/article/7740254/how-to-substitute-almost-any-ingredient/', 'medium'),
+
+    ('alfalfa_sprouts', 'broccoli_sprouts', 76, 'same_family', '1:1 by volume', 'vegetable', 'Book lists broccoli sprouts as a direct alfalfa sprouts substitute; flavor is more peppery.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alfalfa_sprouts', 'fenugreek_sprouts', 62, 'same_family', '1:1 by volume', 'vegetable', 'Book lists fenugreek sprouts as a substitute; flavor is slightly bitter.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alfalfa_sprouts', 'buckwheat_sprouts', 62, 'same_family', '1:1 by volume', 'vegetable', 'Book lists buckwheat sprouts as a substitute; flavor is nuttier.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alfalfa_sprouts', 'sunflower_sprouts', 62, 'same_family', '1:1 by volume', 'vegetable', 'Book lists sunflower sprouts as a substitute; flavor is nuttier.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alfalfa_sprouts', 'mung_bean_sprouts', 70, 'same_family', '1:1 by volume', 'vegetable', 'Book lists mung bean sprouts as a substitute; texture is thicker and crisper.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alligator_tail_meat', 'crocodile_meat', 92, 'same_family', '1:1 by weight', 'protein', 'Book lists crocodile tail meat as the closest alligator tail meat substitute.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alligator_tail_meat', 'turtle_meat', 72, 'same_family', '1:1 by weight', 'protein', 'Book lists turtle meat as an alligator tail meat substitute.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alligator_tail_meat', 'chicken_breast', 66, 'texture_similar', '1:1 by weight', 'protein', 'Book compares alligator to chicken or mild white fish and lists chicken breast as a substitute.', 'The Food Substitutions Bible', '', 'medium'),
+    ('alligator_tail_meat', 'swordfish', 66, 'texture_similar', '1:1 by weight', 'protein', 'Book lists swordfish as a substitute for alligator tail meat.', 'The Food Substitutions Bible', '', 'medium'),
+    ('baking_powder', 'ammonium_bicarbonate', 55, 'functional', '1 tsp double-acting baking powder = 1 tsp ammonium bicarbonate for small baked goods', 'baking', 'Book notes ammonium bicarbonate works best for light, airy small baked goods so ammonia odor can evaporate.', 'The Food Substitutions Bible', '', 'medium'),
+    ('basil', 'dried_basil', 88, 'functional', '1 tbsp chopped fresh basil = 1 tsp dried basil', 'cooking', 'Book gives a direct fresh-to-dried basil substitution ratio.', 'The Food Substitutions Bible', '', 'high'),
+    ('basil', 'italian_seasoning', 72, 'flavor_similar', '1 tbsp chopped fresh basil = 1 tsp dried Italian seasoning', 'cooking', 'Book lists dried Italian seasoning as a fresh basil substitute.', 'The Food Substitutions Bible', '', 'medium'),
+    ('basil', 'mint', 55, 'flavor_similar', '1:1 by volume', 'cooking', 'Book lists fresh mint as a basil flavor variation, especially in Thai dishes.', 'The Food Substitutions Bible', '', 'medium'),
+    ('buttermilk', 'kefir', 88, 'functional', '1:1 by volume', 'baking', 'Book lists kefir as a direct buttermilk substitute.', 'The Food Substitutions Bible', '', 'high'),
+    ('soy_sauce', 'maggi_seasoning', 74, 'flavor_similar', '1:1 by volume', 'sauce', 'Book lists Maggi seasoning as a soy sauce substitute; flavor is darker and more complex.', 'The Food Substitutions Bible', '', 'medium'),
+    ('soy_sauce', 'teriyaki_sauce', 58, 'flavor_similar', '1:1 by volume', 'sauce', 'Book lists teriyaki sauce as a soy sauce substitute; it is sweeter and thicker.', 'The Food Substitutions Bible', '', 'medium')
 )
 insert into ingredient_substitutions (
   ingredient_id,
@@ -178,7 +209,10 @@ with combos (
     ('baking_powder__cream_of_tartar_baking_soda__baking', 'baking_powder', 'Cream of tartar plus baking soda', 84, 'functional', '1 tsp baking powder = 1/2 tsp cream of tartar plus 1/4 tsp baking soda', 'baking', 'Functional homemade leavening substitute.', 'Better Homes & Gardens Test Kitchen', 'https://www.bhg.com/recipes/how-to/bake/ingredient-substitutions/', 'high'),
     ('brown_sugar__sugar_molasses__baking', 'brown_sugar', 'Granulated sugar plus molasses', 86, 'functional', '1 cup packed brown sugar = 1 cup granulated sugar plus 2 tbsp molasses', 'baking', 'Strong functional substitute for brown sugar flavor and moisture.', 'Better Homes & Gardens Test Kitchen', 'https://www.bhg.com/recipes/how-to/bake/ingredient-substitutions/', 'high'),
     ('cake_flour__flour_cornstarch__baking', 'cake_flour', 'All-purpose flour plus cornstarch', 80, 'functional', 'Common method: replace 2 tbsp per cup flour with cornstarch, then sift; use when cake flour is unavailable', 'baking', 'Functional approximation intended to lower protein effect and improve tenderness.', 'Better Homes & Gardens Test Kitchen', 'https://www.bhg.com/recipes/how-to/bake/ingredient-substitutions/', 'medium'),
-    ('egg__flaxseed_water__baking', 'egg', 'Ground flaxseed plus water', 58, 'emergency', '1 egg = 1 tbsp ground flaxseed plus 3 tbsp water', 'baking', 'Vegan/emergency binder; not equivalent for egg-forward recipes or aeration.', 'Better Homes & Gardens Test Kitchen', 'https://www.bhg.com/recipes/how-to/bake/ingredient-substitutions/', 'medium')
+    ('egg__flaxseed_water__baking', 'egg', 'Ground flaxseed plus water', 58, 'emergency', '1 egg = 1 tbsp ground flaxseed plus 3 tbsp water', 'baking', 'Vegan/emergency binder; not equivalent for egg-forward recipes or aeration.', 'Better Homes & Gardens Test Kitchen', 'https://www.bhg.com/recipes/how-to/bake/ingredient-substitutions/', 'medium'),
+    ('buttermilk__water_powdered_buttermilk__baking', 'buttermilk', 'Water plus powdered buttermilk', 86, 'functional', '1 cup buttermilk = 1 cup water plus 1/4 cup powdered buttermilk', 'baking', 'Book lists powdered buttermilk plus water as a buttermilk substitute.', 'The Food Substitutions Bible', '', 'high'),
+    ('soy_sauce__kosher_salt_sugar_water__sauce', 'soy_sauce', 'Kosher salt plus sugar in hot water', 46, 'emergency', '1 tbsp soy sauce = scant 3/4 tsp kosher salt plus 1/2 tsp sugar dissolved in 1 tbsp hot water', 'sauce', 'Book lists this as a lighter-color, less complex emergency soy sauce substitute.', 'The Food Substitutions Bible', '', 'medium'),
+    ('baking_powder__baking_soda_cornstarch_cream_of_tartar__baking', 'baking_powder', 'Baking soda plus cornstarch plus cream of tartar', 86, 'functional', '1 tsp double-acting baking powder = 1/4 tsp baking soda plus 1/4 tsp cornstarch plus 1/2 tsp cream of tartar', 'baking', 'Book gives a more complete homemade double-acting baking powder replacement formula.', 'The Food Substitutions Bible', '', 'high')
 )
 insert into ingredient_substitution_combinations (
   combination_id,
@@ -236,7 +270,15 @@ with components (combination_id, sequence_number, component_ingredient_id, quant
     ('cake_flour__flour_cornstarch__baking', 1, 'flour', 0.875, 'cup', '1 cup minus 2 tbsp.'),
     ('cake_flour__flour_cornstarch__baking', 2, 'cornstarch', 2, 'tbsp', 'Sift with flour.'),
     ('egg__flaxseed_water__baking', 1, 'flaxseed', 1, 'tbsp', 'Use ground flaxseed.'),
-    ('egg__flaxseed_water__baking', 2, 'water', 3, 'tbsp', 'Rest until gelled.')
+    ('egg__flaxseed_water__baking', 2, 'water', 3, 'tbsp', 'Rest until gelled.'),
+    ('buttermilk__water_powdered_buttermilk__baking', 1, 'water', 1, 'cup', ''),
+    ('buttermilk__water_powdered_buttermilk__baking', 2, 'powdered_buttermilk', 0.25, 'cup', ''),
+    ('soy_sauce__kosher_salt_sugar_water__sauce', 1, 'kosher_salt', 0.75, 'tsp', 'Use scant measure.'),
+    ('soy_sauce__kosher_salt_sugar_water__sauce', 2, 'sugar', 0.5, 'tsp', ''),
+    ('soy_sauce__kosher_salt_sugar_water__sauce', 3, 'water', 1, 'tbsp', 'Use hot water to dissolve.'),
+    ('baking_powder__baking_soda_cornstarch_cream_of_tartar__baking', 1, 'baking_soda', 0.25, 'tsp', ''),
+    ('baking_powder__baking_soda_cornstarch_cream_of_tartar__baking', 2, 'cornstarch', 0.25, 'tsp', ''),
+    ('baking_powder__baking_soda_cornstarch_cream_of_tartar__baking', 3, 'cream_of_tartar', 0.5, 'tsp', '')
 )
 insert into ingredient_substitution_components (
   combination_id,
