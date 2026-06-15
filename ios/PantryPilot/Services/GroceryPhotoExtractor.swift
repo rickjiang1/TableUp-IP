@@ -5,7 +5,7 @@ struct GroceryPhotoExtractor {
     var baseURL: URL = BackendConfiguration.baseURL
     var session: URLSession = .shared
 
-    func extract(from imageData: Data) async throws -> GroceryPhotoExtractionResponse {
+    func extract(from imageData: Data, language: String = "en") async throws -> GroceryPhotoExtractionResponse {
         let uploadImageData = Self.preparedJPEGData(from: imageData) ?? imageData
         let boundary = "Boundary-\(UUID().uuidString)"
         let url = baseURL.appending(path: "api/extract-grocery-photo")
@@ -18,7 +18,8 @@ struct GroceryPhotoExtractor {
             boundary: boundary,
             fieldName: "photo",
             fileName: "grocery-photo.jpg",
-            mimeType: "image/jpeg"
+            mimeType: "image/jpeg",
+            language: language
         )
 
         let (data, response) = try await session.data(for: request)
@@ -43,9 +44,14 @@ struct GroceryPhotoExtractor {
         boundary: String,
         fieldName: String,
         fileName: String,
-        mimeType: String
+        mimeType: String,
+        language: String
     ) -> Data {
         var body = Data()
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
+        body.append(language)
+        body.append("\r\n")
         body.append("--\(boundary)\r\n")
         body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n")
         body.append("Content-Type: \(mimeType)\r\n\r\n")
@@ -114,12 +120,14 @@ struct ExtractedGroceryItem: Decodable {
     let confidence: Double
     let sourceText: String
     let canonicalIngredientId: String?
+    let canonicalIngredientDisplayName: String?
     let matchedToIngredientLibrary: Bool?
     let ingredientMatchType: String?
     let ingredientMatchScore: Double?
     let matchedAlias: String?
     let suggestedCanonicalIngredientId: String?
     let suggestedCanonicalName: String?
+    let suggestedCanonicalDisplayName: String?
     let suggestedMatchType: String?
     let suggestedMatchScore: Double?
     let suggestedMatchedAlias: String?
@@ -131,11 +139,13 @@ struct ExtractedGroceryItem: Decodable {
             description: description ?? "",
             sourceText: sourceText,
             canonicalIngredientId: canonicalIngredientId ?? "",
+            canonicalIngredientDisplayName: canonicalIngredientDisplayName ?? "",
             ingredientMatchType: ingredientMatchType ?? "",
             ingredientMatchScore: ingredientMatchScore ?? 0,
             matchedAlias: matchedAlias ?? "",
             suggestedCanonicalIngredientId: suggestedCanonicalIngredientId ?? "",
             suggestedCanonicalName: suggestedCanonicalName ?? "",
+            suggestedCanonicalDisplayName: suggestedCanonicalDisplayName ?? "",
             suggestedMatchType: suggestedMatchType ?? "",
             suggestedMatchScore: suggestedMatchScore ?? 0,
             suggestedMatchedAlias: suggestedMatchedAlias ?? "",
@@ -157,12 +167,14 @@ struct ExtractedGroceryItem: Decodable {
         case confidence
         case sourceText
         case canonicalIngredientId
+        case canonicalIngredientDisplayName
         case matchedToIngredientLibrary
         case ingredientMatchType
         case ingredientMatchScore
         case matchedAlias
         case suggestedCanonicalIngredientId
         case suggestedCanonicalName
+        case suggestedCanonicalDisplayName
         case suggestedMatchType
         case suggestedMatchScore
         case suggestedMatchedAlias

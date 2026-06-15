@@ -176,7 +176,7 @@ struct ScanView: View {
             var extractedItems: [DetectedIngredient] = []
             let extractor = GroceryPhotoExtractor()
             for imageData in selectedImageDataList {
-                let response = try await extractor.extract(from: imageData)
+                let response = try await extractor.extract(from: imageData, language: appLanguage)
                 extractedItems.append(contentsOf: response.items.map(\.detectedIngredient))
             }
 
@@ -297,11 +297,13 @@ struct DetectedIngredient: Identifiable {
     var description: String = ""
     var sourceText: String = ""
     var canonicalIngredientId: String = ""
+    var canonicalIngredientDisplayName: String = ""
     var ingredientMatchType: String = ""
     var ingredientMatchScore: Double = 0
     var matchedAlias: String = ""
     var suggestedCanonicalIngredientId: String = ""
     var suggestedCanonicalName: String = ""
+    var suggestedCanonicalDisplayName: String = ""
     var suggestedMatchType: String = ""
     var suggestedMatchScore: Double = 0
     var suggestedMatchedAlias: String = ""
@@ -338,8 +340,25 @@ struct DetectedIngredient: Identifiable {
                 guard !value.isEmpty && value != name && !seen.contains(value) else { return false }
                 seen.insert(value)
                 return true
-            }
+        }
         return pieces.joined(separator: " - ")
+    }
+
+    var matchedIngredientDisplayName: String {
+        if !canonicalIngredientDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return canonicalIngredientDisplayName
+        }
+        return canonicalIngredientId
+    }
+
+    var suggestedIngredientDisplayName: String {
+        if !suggestedCanonicalDisplayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return suggestedCanonicalDisplayName
+        }
+        if !suggestedCanonicalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return suggestedCanonicalName
+        }
+        return suggestedCanonicalIngredientId
     }
 }
 
@@ -458,9 +477,14 @@ struct DetectedItemsReviewView: View {
 
                         if !item.canonicalIngredientId.isEmpty {
                             VStack(alignment: .leading, spacing: 5) {
-                                Label(item.canonicalIngredientId, systemImage: "checkmark.seal.fill")
+                                Label(item.matchedIngredientDisplayName, systemImage: "checkmark.seal.fill")
                                     .font(.footnote.weight(.semibold))
                                     .foregroundStyle(.green)
+                                if appLanguage != AppLanguage.chinese.rawValue && item.matchedIngredientDisplayName != item.canonicalIngredientId {
+                                    Text(item.canonicalIngredientId)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                                 if item.ingredientMatchScore > 0 {
                                     Text(matchSummary(type: item.ingredientMatchType, score: item.ingredientMatchScore))
                                         .font(.caption)
@@ -475,7 +499,7 @@ struct DetectedItemsReviewView: View {
                         } else if !item.suggestedCanonicalIngredientId.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Label(
-                                    "\(L.text("Possible match", language: appLanguage)): \(item.suggestedCanonicalName.isEmpty ? item.suggestedCanonicalIngredientId : item.suggestedCanonicalName)",
+                                    "\(L.text("Possible match", language: appLanguage)): \(item.suggestedIngredientDisplayName)",
                                     systemImage: "questionmark.circle.fill"
                                 )
                                 .font(.footnote.weight(.semibold))
@@ -490,6 +514,7 @@ struct DetectedItemsReviewView: View {
                                 }
                                 Button(L.text("Use suggestion", language: appLanguage)) {
                                     item.canonicalIngredientId = item.suggestedCanonicalIngredientId
+                                    item.canonicalIngredientDisplayName = item.suggestedIngredientDisplayName
                                     item.ingredientMatchType = item.suggestedMatchType
                                     item.ingredientMatchScore = item.suggestedMatchScore
                                     item.matchedAlias = item.suggestedMatchedAlias

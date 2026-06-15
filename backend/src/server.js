@@ -156,6 +156,7 @@ const server = createServer(async (request, response) => {
 
       const body = await readRequestBody(request, 8 * 1024 * 1024);
       const photo = parseMultipartFile(request.headers["content-type"], body, ["photo"]);
+      const language = parseMultipartField(request.headers["content-type"], body, "language") || "en";
 
       if (!photo) {
         sendJson(response, 400, { error: "photo is required" });
@@ -190,7 +191,7 @@ const server = createServer(async (request, response) => {
         ]
       });
 
-      sendJson(response, 200, await normalizeGroceryExtraction(parseStructuredOutput(result)));
+      sendJson(response, 200, await normalizeGroceryExtraction(parseStructuredOutput(result), language));
       return;
     }
 
@@ -276,9 +277,13 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
-async function normalizeGroceryExtraction(output) {
-  const rules = await fetchMatchingRules();
+async function normalizeGroceryExtraction(output, language = "en") {
+  const [rules, dictionary] = await Promise.all([
+    fetchMatchingRules(),
+    fetchIngredientDictionary(language)
+  ]);
   const resolver = buildIngredientResolver(rules);
+  const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
   return {
     items: (output.items || []).map((item) => {
       const name = String(item.name || "").trim();
@@ -299,18 +304,24 @@ async function normalizeGroceryExtraction(output) {
         quantity: normalizedAmount.quantity,
         unit: normalizedAmount.unit,
         canonicalIngredientId: resolved.autoMatched ? resolved.ingredientId : "",
+        canonicalIngredientDisplayName: resolved.autoMatched ? displayNameForIngredient(dictionaryById, resolved.ingredientId, resolved.canonicalName) : "",
         matchedToIngredientLibrary: Boolean(resolved.autoMatched),
         ingredientMatchType: resolved.autoMatched ? resolved.matchType : "",
         ingredientMatchScore: resolved.autoMatched ? resolved.matchScore : 0,
         matchedAlias: resolved.autoMatched ? resolved.matchedAlias : "",
         suggestedCanonicalIngredientId: resolved.autoMatched ? "" : resolved.ingredientId,
         suggestedCanonicalName: resolved.autoMatched ? "" : resolved.canonicalName,
+        suggestedCanonicalDisplayName: resolved.autoMatched ? "" : displayNameForIngredient(dictionaryById, resolved.ingredientId, resolved.canonicalName),
         suggestedMatchType: resolved.autoMatched ? "" : resolved.matchType,
         suggestedMatchScore: resolved.autoMatched ? 0 : resolved.matchScore,
         suggestedMatchedAlias: resolved.autoMatched ? "" : resolved.matchedAlias
       };
     })
   };
+}
+
+function displayNameForIngredient(dictionaryById, ingredientId, fallbackName) {
+  return dictionaryById.get(ingredientId)?.display_name || fallbackName || ingredientId;
 }
 
 function resolveExtractedIngredient({ names, rules, resolver }) {
@@ -803,6 +814,48 @@ function parseMultipartFile(contentType, body, fieldNames) {
   }
 
   return null;
+}
+
+function parseMultipartField(contentType, body, fieldName) {
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || "")?.slice(1).find(Boolean);
+  if (!boundary) {
+    return "";
+  }
+
+  const fieldPattern = new RegExp(`name="${escapeRegExp(fieldName)}"`);
+  const marker = Buffer.from(`--${boundary}`);
+  let offset = 0;
+
+  while (offset < body.length) {
+    const partStart = body.indexOf(marker, offset);
+    if (partStart === -1) {
+      break;
+    }
+
+    let contentStart = body.indexOf(Buffer.from("\r\n\r\n"), partStart);
+    if (contentStart === -1) {
+      break;
+    }
+    contentStart += 4;
+
+    const nextPart = body.indexOf(marker, contentStart);
+    if (nextPart === -1) {
+      break;
+    }
+
+    const headerText = body.slice(partStart, contentStart).toString("latin1");
+    if (fieldPattern.test(headerText)) {
+      let dataEnd = nextPart;
+      if (body[dataEnd - 2] === 13 && body[dataEnd - 1] === 10) {
+        dataEnd -= 2;
+      }
+      return body.slice(contentStart, dataEnd).toString("utf8").trim();
+    }
+
+    offset = nextPart + marker.length;
+  }
+
+  return "";
 }
 
 function extensionForMimeType(mimeType) {
