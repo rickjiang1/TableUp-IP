@@ -20,7 +20,7 @@ struct GroceryPhotoExtractor {
         request.httpBody = makeMultipartBody(
             imageDataList: uploadImageDataList,
             boundary: boundary,
-            fieldName: "photos",
+            fieldName: "photo",
             mimeType: "image/jpeg",
             language: language
         )
