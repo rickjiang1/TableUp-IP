@@ -4,4 +4,5 @@ DerivedData/
 *.xcuserstate
 *.xcuserdata/
 backend/.env
+backend/.env.*.local
 node_modules/

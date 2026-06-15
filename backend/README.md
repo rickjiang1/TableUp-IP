@@ -42,6 +42,22 @@ The health check includes the active environment:
 
 For MVP deployment, use separate Render services and separate Supabase projects for `dev` and `prod`. See `../docs/DEPLOYMENT.md`.
 
+## Import Ingredients
+
+Ingredient imports must always target an explicit environment. The import script refuses to write if the Supabase project ref does not match the selected environment.
+
+```bash
+node src/import-ingredients-csv.js --env dev /path/to/Ingredient.csv
+```
+
+For local dev imports, put the DEV Supabase values in ignored file `backend/.env.dev.local`.
+
+Production imports are blocked unless they are intentional:
+
+```bash
+node src/import-ingredients-csv.js --env prod --allow-prod-write /path/to/Ingredient.csv
+```
+
 ## Endpoints
 
 ```text

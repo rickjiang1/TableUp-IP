@@ -1,12 +1,36 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-loadEnv();
+const environmentTargets = {
+  dev: {
+    projectRef: "tochbwhcyoqqdepghisc",
+    label: "TableUp-DEV"
+  },
+  prod: {
+    projectRef: "oapybkblltlyugmmtqjr",
+    label: "TableUp"
+  }
+};
+
+const args = parseArgs(process.argv.slice(2));
+loadEnv(args.environment);
 
 async function main() {
-  const csvPath = process.argv[2] ? resolve(process.argv[2]) : "";
+  if (!args.environment || !environmentTargets[args.environment]) {
+    console.error("Usage: node backend/src/import-ingredients-csv.js --env dev /path/to/Ingredient.csv");
+    console.error("Use --env prod --allow-prod-write only for an intentional production import.");
+    process.exit(1);
+  }
+  if (args.environment === "prod" && !args.allowProdWrite) {
+    console.error("Refusing to write production data without --allow-prod-write.");
+    process.exit(1);
+  }
+
+  assertTargetEnvironment(args.environment);
+
+  const csvPath = args.csvPath ? resolve(args.csvPath) : "";
   if (!csvPath || !existsSync(csvPath)) {
-    console.error("Usage: node backend/src/import-ingredients-csv.js /path/to/Ingredient.csv");
+    console.error("CSV path is required.");
     process.exit(1);
   }
 
@@ -20,15 +44,72 @@ async function main() {
 
   const aliases = buildAliasRows(ingredients);
 
-  await upsertRows("ingredients?on_conflict=ingredient_id", ingredients, 200);
-  await upsertRows("ingredient_aliases?on_conflict=alias_name", aliases, 200);
-  const updatedRecipeIngredients = await backfillRecipeIngredientIds(ingredients, aliases);
+  console.log(`Target Supabase project: ${environmentTargets[args.environment].label} (${environmentTargets[args.environment].projectRef})`);
+
+  let updatedRecipeIngredients = 0;
+  if (!args.dryRun) {
+    await upsertRows("ingredients?on_conflict=ingredient_id", ingredients, 200);
+    await upsertRows("ingredient_aliases?on_conflict=alias_name", aliases, 200);
+    updatedRecipeIngredients = await backfillRecipeIngredientIds(ingredients, aliases);
+  }
 
   console.log(JSON.stringify({
+    environment: args.environment,
+    target: environmentTargets[args.environment].label,
+    dryRun: args.dryRun,
     ingredients: ingredients.length,
     aliases: aliases.length,
     recipeIngredientsBackfilled: updatedRecipeIngredients
   }, null, 2));
+}
+
+function parseArgs(argv) {
+  const parsed = {
+    environment: "",
+    csvPath: "",
+    allowProdWrite: false,
+    dryRun: false
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === "--env") {
+      parsed.environment = String(argv[index + 1] || "").trim().toLowerCase();
+      index += 1;
+      continue;
+    }
+    if (value.startsWith("--env=")) {
+      parsed.environment = value.slice("--env=".length).trim().toLowerCase();
+      continue;
+    }
+    if (value === "--allow-prod-write") {
+      parsed.allowProdWrite = true;
+      continue;
+    }
+    if (value === "--dry-run") {
+      parsed.dryRun = true;
+      continue;
+    }
+    if (!value.startsWith("--") && !parsed.csvPath) {
+      parsed.csvPath = value;
+    }
+  }
+
+  return parsed;
+}
+
+function assertTargetEnvironment(environment) {
+  const target = environmentTargets[environment];
+  const url = requiredEnv("SUPABASE_URL");
+  let host = "";
+  try {
+    host = new URL(url).host;
+  } catch {
+    throw new Error("SUPABASE_URL must be a valid Supabase URL.");
+  }
+  if (!host.startsWith(`${target.projectRef}.`)) {
+    throw new Error(`Refusing to write ${target.label}. SUPABASE_URL points to ${host}, expected project ref ${target.projectRef}.`);
+  }
 }
 
 
@@ -362,23 +443,30 @@ function requiredEnv(name) {
   return value;
 }
 
-function loadEnv() {
-  const envPath = new URL("../.env", import.meta.url);
-  if (!existsSync(envPath)) {
-    return;
-  }
-  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
+function loadEnv(environment) {
+  const paths = [
+    new URL("../.env", import.meta.url),
+    environment ? new URL(`../.env.${environment}`, import.meta.url) : null,
+    environment ? new URL(`../.env.${environment}.local`, import.meta.url) : null
+  ].filter(Boolean);
+
+  for (const envPath of paths) {
+    if (!existsSync(envPath)) {
       continue;
     }
-    const index = trimmed.indexOf("=");
-    if (index === -1) {
-      continue;
+    for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+      const index = trimmed.indexOf("=");
+      if (index === -1) {
+        continue;
+      }
+      const key = trimmed.slice(0, index).trim();
+      const value = trimmed.slice(index + 1).trim().replace(/^["']|["']$/g, "");
+      process.env[key] = value;
     }
-    const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim().replace(/^["']|["']$/g, "");
-    process.env[key] ||= value;
   }
 }
 
