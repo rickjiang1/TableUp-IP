@@ -14,6 +14,9 @@ struct IngredientDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(.green)
                 }
+                LabeledContent(L.text("Amount", language: appLanguage)) {
+                    Text("\(ingredient.quantity.formatted()) \(IngredientUnit.normalizedSelection(for: ingredient.unit))")
+                }
                 Picker(L.text("Unit", language: appLanguage), selection: $ingredient.unit) {
                     ForEach(IngredientUnit.allCases) { unit in
                         Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
@@ -22,6 +25,36 @@ struct IngredientDetailView: View {
                 .pickerStyle(.menu)
                 TextField(L.text("Quantity", language: appLanguage), value: $ingredient.quantity, format: .number)
                     .keyboardType(.decimalPad)
+            }
+
+            if ingredient.isMatchedToIngredientLibrary {
+                Section(L.text("Unit conversion", language: appLanguage)) {
+                    if ingredient.unitConversionNeedsReview {
+                        LabeledContent(L.text("Canonical unit", language: appLanguage)) {
+                            Text(L.text("Needs review", language: appLanguage))
+                                .foregroundStyle(.orange)
+                        }
+                        if !ingredient.unitConversionReviewReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(L.text(ingredient.unitConversionReviewReason, language: appLanguage))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if !ingredient.canonicalUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        LabeledContent(L.text("Canonical unit", language: appLanguage)) {
+                            Text("\(ingredient.canonicalQuantity.formatted()) \(ingredient.canonicalUnit)")
+                                .fontWeight(.semibold)
+                        }
+                        if ingredient.unitConversionRatio > 0 {
+                            LabeledContent(L.text("Conversion ratio", language: appLanguage)) {
+                                Text("x \(ingredient.unitConversionRatio.formatted())")
+                            }
+                        }
+                    } else {
+                        Text(L.text("Match again to calculate canonical unit.", language: appLanguage))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section(L.text("Storage", language: appLanguage)) {
@@ -68,6 +101,7 @@ struct IngredientDetailView: View {
         .onChange(of: ingredient.name) { _, newValue in
             ingredient.normalizedName = IngredientNormalizer.normalizeName(newValue)
             ingredient.canonicalIngredientId = ""
+            clearUnitConversion()
             resolveIngredientName(newValue)
         }
         .onAppear {
@@ -93,6 +127,14 @@ struct IngredientDetailView: View {
             location: ingredient.location,
             enteredDate: ingredient.enteredDate
         )
+    }
+
+    private func clearUnitConversion() {
+        ingredient.canonicalQuantity = 0
+        ingredient.canonicalUnit = ""
+        ingredient.unitConversionRatio = 0
+        ingredient.unitConversionNeedsReview = false
+        ingredient.unitConversionReviewReason = ""
     }
 
     private var datePickerLocale: Locale {

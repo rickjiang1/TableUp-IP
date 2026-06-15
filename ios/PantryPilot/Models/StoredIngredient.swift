@@ -30,6 +30,11 @@ final class StoredIngredient {
     var normalizedName: String
     var descriptionText: String = ""
     var canonicalIngredientId: String = ""
+    var canonicalQuantity: Double = 0
+    var canonicalUnit: String = ""
+    var unitConversionRatio: Double = 0
+    var unitConversionNeedsReview: Bool = false
+    var unitConversionReviewReason: String = ""
     var quantity: Double
     var unit: String
     var categoryRaw: String
@@ -42,6 +47,11 @@ final class StoredIngredient {
         name: String,
         descriptionText: String = "",
         canonicalIngredientId: String = "",
+        canonicalQuantity: Double = 0,
+        canonicalUnit: String = "",
+        unitConversionRatio: Double = 0,
+        unitConversionNeedsReview: Bool = false,
+        unitConversionReviewReason: String = "",
         quantity: Double,
         unit: String,
         category: IngredientCategory,
@@ -53,6 +63,11 @@ final class StoredIngredient {
         self.normalizedName = IngredientNormalizer.normalizeName(name)
         self.descriptionText = descriptionText
         self.canonicalIngredientId = canonicalIngredientId
+        self.canonicalQuantity = canonicalQuantity
+        self.canonicalUnit = canonicalUnit
+        self.unitConversionRatio = unitConversionRatio
+        self.unitConversionNeedsReview = unitConversionNeedsReview
+        self.unitConversionReviewReason = unitConversionReviewReason
         self.quantity = quantity
         self.unit = IngredientNormalizer.normalizeUnit(unit)
         self.categoryRaw = category.rawValue

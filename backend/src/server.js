@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import {
   deleteCloudRecipe,
   fetchCloudRecipes,
+  fetchIngredientUnitConversions,
   fetchIngredientDictionary,
   fetchMatchingRules,
   fetchPendingUnknownIngredients,
@@ -13,6 +14,7 @@ import {
   upsertIngredientAliasSuggestion,
   upsertUnknownIngredients
 } from "./supabase.js";
+import { normalizeIngredientQuantity } from "./ingredientUnitConversion.js";
 import { matchRecipesForInventory } from "./recipeMatching.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
@@ -64,6 +66,13 @@ const server = createServer(async (request, response) => {
         limit: Number(url.searchParams.get("limit") || 10)
       });
       sendJson(response, 200, { candidates });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/normalize-ingredient-quantity") {
+      const body = await readJsonRequest(request, 1024 * 1024);
+      const normalized = await normalizeMatchedIngredientQuantity(body);
+      sendJson(response, 200, normalized);
       return;
     }
 
@@ -578,6 +587,33 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
         reason: candidate.reason
       };
     })
+}
+
+async function normalizeMatchedIngredientQuantity(body) {
+  const rules = await getCachedMatchingRules();
+  const resolver = buildIngredientResolver(rules);
+  const ingredientName = String(body?.ingredientName || body?.name || "").trim();
+  let ingredientId = String(body?.ingredientId || "").trim();
+
+  if (!ingredientId && ingredientName) {
+    const resolved = resolver.resolve(ingredientName);
+    ingredientId = resolved.known ? resolved.ingredientId : "";
+  }
+
+  const ingredient = (rules.ingredients || []).find((item) => item.ingredient_id === ingredientId);
+  const conversions = ingredientId ? await fetchIngredientUnitConversions(ingredientId) : [];
+  return normalizeIngredientQuantity(
+    {
+      ingredientName,
+      ingredientId,
+      quantity: body?.quantity,
+      unit: body?.unit
+    },
+    {
+      ingredient,
+      conversions
+    }
+  );
 }
 
 function rankIngredientCandidatesFromRules({ query, rules, limit = 10 }) {

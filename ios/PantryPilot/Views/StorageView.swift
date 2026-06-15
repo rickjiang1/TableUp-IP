@@ -343,7 +343,7 @@ struct StorageView: View {
             if !unknown.id.hasPrefix("local-inventory-") {
                 try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
             }
-            markLocalInventoryItems(named: unknown, as: ingredient)
+            await markLocalInventoryItems(named: unknown, as: ingredient)
             unmatchedIngredients.removeAll {
                 $0.id == unknown.id ||
                 normalizedUnknownKey($0.rawName) == normalizedUnknownKey(unknown.rawName) ||
@@ -387,7 +387,7 @@ struct StorageView: View {
                 if !unknown.id.hasPrefix("local-inventory-") {
                     try await client.resolve(unknown: unknown, as: candidate.ingredient)
                 }
-                markLocalInventoryItems(named: unknown, as: candidate.ingredient)
+                await markLocalInventoryItems(named: unknown, as: candidate.ingredient)
                 unmatchedIngredients.removeAll {
                     $0.id == unknown.id ||
                     normalizedUnknownKey($0.rawName) == normalizedUnknownKey(unknown.rawName) ||
@@ -406,21 +406,54 @@ struct StorageView: View {
         )
     }
 
-    private func markLocalInventoryItems(named unknown: UnknownIngredient, as ingredient: CloudIngredient) {
+    private func markLocalInventoryItems(named unknown: UnknownIngredient, as ingredient: CloudIngredient) async {
         let targetNames = Set([
             unknown.rawName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
             unknown.normalizedName.replacingOccurrences(of: "_", with: " ").lowercased()
         ])
 
+        let client = UnknownIngredientClient()
         for item in ingredients {
             let itemName = item.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             let normalized = item.normalizedName.replacingOccurrences(of: "_", with: " ").lowercased()
             if targetNames.contains(itemName) || targetNames.contains(normalized) {
                 item.canonicalIngredientId = ingredient.id
+                do {
+                    let normalizedQuantity = try await client.normalizeIngredientQuantity(
+                        ingredientName: item.name,
+                        ingredientId: ingredient.id,
+                        quantity: item.quantity,
+                        unit: item.unit
+                    )
+                    applyUnitConversion(normalizedQuantity, to: item)
+                } catch {
+                    item.canonicalQuantity = 0
+                    item.canonicalUnit = ingredient.canonicalUnit
+                    item.unitConversionRatio = 0
+                    item.unitConversionNeedsReview = true
+                    item.unitConversionReviewReason = "Missing conversion rule"
+                }
             }
         }
 
         try? modelContext.save()
+    }
+
+    private func applyUnitConversion(_ conversion: NormalizedIngredientQuantity, to item: StoredIngredient) {
+        if conversion.needsReview {
+            item.canonicalQuantity = 0
+            item.canonicalUnit = conversion.canonicalUnit
+            item.unitConversionRatio = 0
+            item.unitConversionNeedsReview = true
+            item.unitConversionReviewReason = conversion.reason
+            return
+        }
+
+        item.canonicalQuantity = conversion.canonicalQuantity
+        item.canonicalUnit = conversion.canonicalUnit
+        item.unitConversionRatio = conversion.conversionRatio
+        item.unitConversionNeedsReview = false
+        item.unitConversionReviewReason = ""
     }
 
     private func clearAllIngredients() {
@@ -937,6 +970,32 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(IngredientCandidateResponse.self, from: data).candidates
     }
 
+    func normalizeIngredientQuantity(
+        ingredientName: String,
+        ingredientId: String,
+        quantity: Double,
+        unit: String
+    ) async throws -> NormalizedIngredientQuantity {
+        let endpoint = baseURL.appending(path: "api/normalize-ingredient-quantity")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(IngredientQuantityNormalizeRequest(
+            ingredientName: ingredientName,
+            ingredientId: ingredientId,
+            quantity: quantity,
+            unit: unit
+        ))
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UnknownIngredientClientError.badResponse
+        }
+
+        return try JSONDecoder().decode(NormalizedIngredientQuantity.self, from: data)
+    }
+
     func resolve(items: [IngredientResolveInput]) async throws -> [IngredientResolveResult] {
         guard !items.isEmpty else { return [] }
 
@@ -988,6 +1047,47 @@ enum UnknownIngredientClientError: LocalizedError {
 
 struct UnknownIngredientResponse: Decodable {
     let unknownIngredients: [UnknownIngredient]
+}
+
+struct IngredientQuantityNormalizeRequest: Encodable {
+    let ingredientName: String
+    let ingredientId: String
+    let quantity: Double
+    let unit: String
+}
+
+struct NormalizedIngredientQuantity: Decodable {
+    let ingredientName: String
+    let rawQuantity: Double
+    let rawUnit: String
+    let canonicalQuantity: Double
+    let canonicalUnit: String
+    let conversionRatio: Double
+    let needsReview: Bool
+    let reason: String
+
+    enum CodingKeys: String, CodingKey {
+        case ingredientName
+        case rawQuantity
+        case rawUnit
+        case canonicalQuantity
+        case canonicalUnit
+        case conversionRatio
+        case needsReview
+        case reason
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientName = try container.decodeIfPresent(String.self, forKey: .ingredientName) ?? ""
+        rawQuantity = try container.decodeIfPresent(Double.self, forKey: .rawQuantity) ?? 0
+        rawUnit = try container.decodeIfPresent(String.self, forKey: .rawUnit) ?? ""
+        canonicalQuantity = try container.decodeIfPresent(Double.self, forKey: .canonicalQuantity) ?? 0
+        canonicalUnit = try container.decodeIfPresent(String.self, forKey: .canonicalUnit) ?? ""
+        conversionRatio = try container.decodeIfPresent(Double.self, forKey: .conversionRatio) ?? 0
+        needsReview = try container.decodeIfPresent(Bool.self, forKey: .needsReview) ?? false
+        reason = try container.decodeIfPresent(String.self, forKey: .reason) ?? ""
+    }
 }
 
 struct CloudIngredientResponse: Decodable {

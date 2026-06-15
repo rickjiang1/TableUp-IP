@@ -197,6 +197,17 @@ export async function fetchMatchingRules() {
   return { ingredients, aliases, substitutions };
 }
 
+export async function fetchIngredientUnitConversions(ingredientId) {
+  const id = String(ingredientId || "").trim();
+  if (!id) {
+    return [];
+  }
+  return await restSelectAll(
+    "ingredient_unit_conversion",
+    `select=ingredient_id,from_unit,to_unit,ratio,conversion_type,is_default,notes&ingredient_id=eq.${encodeURIComponent(id)}&order=from_unit.asc`
+  );
+}
+
 export async function fetchIngredientDictionary(language = "en") {
   const ingredients = await restSelectAll(
     "ingredients",

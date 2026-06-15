@@ -173,6 +173,7 @@ export function normalizeIngredientQuantity(input, options = {}) {
       ingredientName,
       rawQuantity,
       rawUnit,
+      canonicalUnit: toUnit,
       needsReview: true,
       reason: "Missing conversion rule"
     };
