@@ -297,6 +297,14 @@ struct DetectedIngredient: Identifiable {
     var description: String = ""
     var sourceText: String = ""
     var canonicalIngredientId: String = ""
+    var ingredientMatchType: String = ""
+    var ingredientMatchScore: Double = 0
+    var matchedAlias: String = ""
+    var suggestedCanonicalIngredientId: String = ""
+    var suggestedCanonicalName: String = ""
+    var suggestedMatchType: String = ""
+    var suggestedMatchScore: Double = 0
+    var suggestedMatchedAlias: String = ""
     var quantity: Double
     var unit: String
     var category: IngredientCategory
@@ -449,9 +457,45 @@ struct DetectedItemsReviewView: View {
                         }
 
                         if !item.canonicalIngredientId.isEmpty {
-                            Label(item.canonicalIngredientId, systemImage: "checkmark.seal.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.green)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Label(item.canonicalIngredientId, systemImage: "checkmark.seal.fill")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.green)
+                                if item.ingredientMatchScore > 0 {
+                                    Text(matchSummary(type: item.ingredientMatchType, score: item.ingredientMatchScore))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                if !item.matchedAlias.isEmpty {
+                                    Text("\(L.text("Matched alias", language: appLanguage)): \(item.matchedAlias)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        } else if !item.suggestedCanonicalIngredientId.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(
+                                    "\(L.text("Possible match", language: appLanguage)): \(item.suggestedCanonicalName.isEmpty ? item.suggestedCanonicalIngredientId : item.suggestedCanonicalName)",
+                                    systemImage: "questionmark.circle.fill"
+                                )
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.orange)
+                                Text(matchSummary(type: item.suggestedMatchType, score: item.suggestedMatchScore))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if !item.suggestedMatchedAlias.isEmpty {
+                                    Text("\(L.text("Matched alias", language: appLanguage)): \(item.suggestedMatchedAlias)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Button(L.text("Use suggestion", language: appLanguage)) {
+                                    item.canonicalIngredientId = item.suggestedCanonicalIngredientId
+                                    item.ingredientMatchType = item.suggestedMatchType
+                                    item.ingredientMatchScore = item.suggestedMatchScore
+                                    item.matchedAlias = item.suggestedMatchedAlias
+                                }
+                                .buttonStyle(.bordered)
+                            }
                         }
 
                         HStack {
@@ -503,5 +547,23 @@ struct DetectedItemsReviewView: View {
                 }
             }
         }
+    }
+
+    private func matchSummary(type: String, score: Double) -> String {
+        let percent = Int((score * 100).rounded())
+        let label: String
+        switch type {
+        case "exact":
+            label = L.text("Exact match", language: appLanguage)
+        case "alias":
+            label = L.text("Alias match", language: appLanguage)
+        case "fuzzy_alias":
+            label = L.text("Fuzzy alias match", language: appLanguage)
+        case "fuzzy":
+            label = L.text("Fuzzy match", language: appLanguage)
+        default:
+            label = L.text("Match", language: appLanguage)
+        }
+        return "\(label) \(percent)%"
     }
 }

@@ -115,6 +115,14 @@ struct ExtractedGroceryItem: Decodable {
     let sourceText: String
     let canonicalIngredientId: String?
     let matchedToIngredientLibrary: Bool?
+    let ingredientMatchType: String?
+    let ingredientMatchScore: Double?
+    let matchedAlias: String?
+    let suggestedCanonicalIngredientId: String?
+    let suggestedCanonicalName: String?
+    let suggestedMatchType: String?
+    let suggestedMatchScore: Double?
+    let suggestedMatchedAlias: String?
 
     var detectedIngredient: DetectedIngredient {
         DetectedIngredient(
@@ -123,6 +131,14 @@ struct ExtractedGroceryItem: Decodable {
             description: description ?? "",
             sourceText: sourceText,
             canonicalIngredientId: canonicalIngredientId ?? "",
+            ingredientMatchType: ingredientMatchType ?? "",
+            ingredientMatchScore: ingredientMatchScore ?? 0,
+            matchedAlias: matchedAlias ?? "",
+            suggestedCanonicalIngredientId: suggestedCanonicalIngredientId ?? "",
+            suggestedCanonicalName: suggestedCanonicalName ?? "",
+            suggestedMatchType: suggestedMatchType ?? "",
+            suggestedMatchScore: suggestedMatchScore ?? 0,
+            suggestedMatchedAlias: suggestedMatchedAlias ?? "",
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
@@ -142,6 +158,14 @@ struct ExtractedGroceryItem: Decodable {
         case sourceText
         case canonicalIngredientId
         case matchedToIngredientLibrary
+        case ingredientMatchType
+        case ingredientMatchScore
+        case matchedAlias
+        case suggestedCanonicalIngredientId
+        case suggestedCanonicalName
+        case suggestedMatchType
+        case suggestedMatchScore
+        case suggestedMatchedAlias
     }
 }
 

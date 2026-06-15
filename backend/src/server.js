@@ -283,21 +283,87 @@ async function normalizeGroceryExtraction(output) {
     items: (output.items || []).map((item) => {
       const name = String(item.name || "").trim();
       const rawName = String(item.rawName || item.sourceText || name).trim();
+      const sourceText = String(item.sourceText || "").trim();
       const normalizedAmount = normalizeExtractedAmount(item.quantity, item.unit);
-      const nameResolved = resolver.resolve(name);
-      const resolved = nameResolved.known ? nameResolved : resolver.resolve(rawName);
+      const resolved = resolveExtractedIngredient({
+        names: [name, rawName, sourceText],
+        rules,
+        resolver
+      });
       return {
         ...item,
         name,
         rawName,
+        sourceText,
         description: String(item.description || "").trim(),
         quantity: normalizedAmount.quantity,
         unit: normalizedAmount.unit,
-        canonicalIngredientId: resolved.known ? resolved.ingredientId : "",
-        matchedToIngredientLibrary: Boolean(resolved.known)
+        canonicalIngredientId: resolved.autoMatched ? resolved.ingredientId : "",
+        matchedToIngredientLibrary: Boolean(resolved.autoMatched),
+        ingredientMatchType: resolved.autoMatched ? resolved.matchType : "",
+        ingredientMatchScore: resolved.autoMatched ? resolved.matchScore : 0,
+        matchedAlias: resolved.autoMatched ? resolved.matchedAlias : "",
+        suggestedCanonicalIngredientId: resolved.autoMatched ? "" : resolved.ingredientId,
+        suggestedCanonicalName: resolved.autoMatched ? "" : resolved.canonicalName,
+        suggestedMatchType: resolved.autoMatched ? "" : resolved.matchType,
+        suggestedMatchScore: resolved.autoMatched ? 0 : resolved.matchScore,
+        suggestedMatchedAlias: resolved.autoMatched ? "" : resolved.matchedAlias
       };
     })
   };
+}
+
+function resolveExtractedIngredient({ names, rules, resolver }) {
+  for (const name of names) {
+    const resolved = resolver.resolve(name);
+    if (resolved.known) {
+      return {
+        ingredientId: resolved.ingredientId,
+        canonicalName: canonicalNameForIngredient(rules, resolved.ingredientId),
+        matchType: resolved.aliasMatched ? "alias" : "exact",
+        matchScore: 1,
+        matchedAlias: resolved.aliasMatched ? String(name || "").trim() : "",
+        autoMatched: true
+      };
+    }
+  }
+
+  const best = bestIngredientCandidateFromRules({ queries: names, rules });
+  if (!best) {
+    return {
+      ingredientId: "",
+      canonicalName: "",
+      matchType: "",
+      matchScore: 0,
+      matchedAlias: "",
+      autoMatched: false
+    };
+  }
+
+  return {
+    ...best,
+    autoMatched: best.matchScore >= 0.9
+  };
+}
+
+function bestIngredientCandidateFromRules({ queries, rules }) {
+  let best = null;
+  for (const query of queries) {
+    const trimmedQuery = String(query || "").trim();
+    if (!trimmedQuery) {
+      continue;
+    }
+    for (const candidate of rankIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: 1 })) {
+      if (!best || candidate.matchScore > best.matchScore) {
+        best = candidate;
+      }
+    }
+  }
+  return best && best.matchScore >= 0.6 ? best : null;
+}
+
+function canonicalNameForIngredient(rules, ingredientId) {
+  return (rules.ingredients || []).find((ingredient) => ingredient.ingredient_id === ingredientId)?.canonical_name || ingredientId;
 }
 
 function normalizeExtractedAmount(quantity, unit) {
@@ -427,8 +493,26 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
   ]);
   const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
   const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
-  const queryCandidates = ingredientNameCandidates(trimmedQuery);
-  const normalizedQuery = queryCandidates[0] || normalizeIngredientName(trimmedQuery);
+  return rankIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: resultLimit })
+    .map((candidate) => {
+      const localized = dictionaryById.get(candidate.ingredientId);
+      const ingredient = ingredientsById.get(candidate.ingredientId);
+      const canonicalName = ingredient?.canonical_name || localized?.canonical_name || candidate.ingredientId;
+      return {
+        ingredient_id: candidate.ingredientId,
+        canonical_name: canonicalName,
+        display_name: localized?.display_name || canonicalName,
+        category: localized?.category || ingredient?.category || "other",
+        matched_alias: candidate.matchedAlias,
+        score: Number(candidate.matchScore.toFixed(3)),
+        reason: candidate.reason
+      };
+    })
+}
+
+function rankIngredientCandidatesFromRules({ query, rules, limit = 10 }) {
+  const queryCandidates = ingredientNameCandidates(query);
+  const normalizedQuery = queryCandidates[0] || normalizeIngredientName(query);
   const bestByIngredientId = new Map();
 
   function consider(entry) {
@@ -437,11 +521,13 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
       return;
     }
     const previous = bestByIngredientId.get(entry.ingredientId);
-    if (!previous || scored.score > previous.score) {
+    if (!previous || scored.score > previous.matchScore) {
       bestByIngredientId.set(entry.ingredientId, {
         ingredientId: entry.ingredientId,
+        canonicalName: canonicalNameForIngredient(rules, entry.ingredientId),
         matchedAlias: entry.kind === "alias" ? entry.term : "",
-        score: scored.score,
+        matchType: matchTypeForCandidate(entry.kind, scored.reason),
+        matchScore: scored.score,
         reason: scored.reason
       });
     }
@@ -457,22 +543,18 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
   }
 
   return [...bestByIngredientId.values()]
-    .map((candidate) => {
-      const localized = dictionaryById.get(candidate.ingredientId);
-      const ingredient = ingredientsById.get(candidate.ingredientId);
-      const canonicalName = ingredient?.canonical_name || localized?.canonical_name || candidate.ingredientId;
-      return {
-        ingredient_id: candidate.ingredientId,
-        canonical_name: canonicalName,
-        display_name: localized?.display_name || canonicalName,
-        category: localized?.category || ingredient?.category || "other",
-        matched_alias: candidate.matchedAlias,
-        score: Number(candidate.score.toFixed(3)),
-        reason: candidate.reason
-      };
-    })
-    .sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name))
-    .slice(0, resultLimit);
+    .sort((a, b) => b.matchScore - a.matchScore || a.ingredientId.localeCompare(b.ingredientId))
+    .slice(0, limit);
+}
+
+function matchTypeForCandidate(kind, reason) {
+  if (kind === "alias") {
+    return reason === "alias_exact" ? "alias" : "fuzzy_alias";
+  }
+  if (reason === "exact") {
+    return "exact";
+  }
+  return "fuzzy";
 }
 
 function scoreIngredientCandidate(entry, queryCandidates, normalizedQuery) {
