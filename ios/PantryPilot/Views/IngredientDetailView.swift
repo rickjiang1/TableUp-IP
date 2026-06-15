@@ -4,6 +4,7 @@ struct IngredientDetailView: View {
     @Bindable var ingredient: StoredIngredient
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var resolveTask: Task<Void, Never>?
+    @State private var isUnitConversionExpanded = false
 
     var body: some View {
         Form {
@@ -15,7 +16,14 @@ struct IngredientDetailView: View {
                         .foregroundStyle(.green)
                 }
                 LabeledContent(L.text("Amount", language: appLanguage)) {
-                    Text("\(ingredient.quantity.formatted()) \(IngredientUnit.normalizedSelection(for: ingredient.unit))")
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(InventoryQuantityFormatter.primaryAmount(for: ingredient, language: appLanguage))
+                        if let canonicalAmount = InventoryQuantityFormatter.secondaryCanonicalAmount(for: ingredient, language: appLanguage) {
+                            Text("≈ \(canonicalAmount)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 Picker(L.text("Unit", language: appLanguage), selection: $ingredient.unit) {
                     ForEach(IngredientUnit.allCases) { unit in
@@ -28,31 +36,42 @@ struct IngredientDetailView: View {
             }
 
             if ingredient.isMatchedToIngredientLibrary {
-                Section(L.text("Unit conversion", language: appLanguage)) {
-                    if ingredient.unitConversionNeedsReview {
-                        LabeledContent(L.text("Canonical unit", language: appLanguage)) {
-                            Text(L.text("Needs review", language: appLanguage))
-                                .foregroundStyle(.orange)
-                        }
-                        if !ingredient.unitConversionReviewReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(L.text(ingredient.unitConversionReviewReason, language: appLanguage))
+                Section {
+                    DisclosureGroup(
+                        L.text("Unit conversion details", language: appLanguage),
+                        isExpanded: $isUnitConversionExpanded
+                    ) {
+                        if ingredient.unitConversionNeedsReview {
+                            LabeledContent(L.text("Canonical unit", language: appLanguage)) {
+                                Text(L.text("Needs review", language: appLanguage))
+                                    .foregroundStyle(.orange)
+                            }
+                            if !ingredient.unitConversionReviewReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(L.text(ingredient.unitConversionReviewReason, language: appLanguage))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if !ingredient.canonicalUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            LabeledContent(L.text("Raw unit", language: appLanguage)) {
+                                Text(InventoryQuantityFormatter.primaryAmount(for: ingredient, language: appLanguage))
+                            }
+                            LabeledContent(L.text("Standard unit", language: appLanguage)) {
+                                Text(InventoryQuantityFormatter.amount(
+                                    quantity: ingredient.canonicalQuantity,
+                                    unit: ingredient.canonicalUnit,
+                                    language: appLanguage
+                                ))
+                            }
+                            if let ruleText = InventoryQuantityFormatter.conversionRuleText(for: ingredient, language: appLanguage) {
+                                LabeledContent(L.text("Conversion rule", language: appLanguage)) {
+                                    Text(ruleText)
+                                }
+                            }
+                        } else {
+                            Text(L.text("Match again to calculate canonical unit.", language: appLanguage))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
-                    } else if !ingredient.canonicalUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        LabeledContent(L.text("Canonical unit", language: appLanguage)) {
-                            Text("\(ingredient.canonicalQuantity.formatted()) \(ingredient.canonicalUnit)")
-                                .fontWeight(.semibold)
-                        }
-                        if ingredient.unitConversionRatio > 0 {
-                            LabeledContent(L.text("Conversion ratio", language: appLanguage)) {
-                                Text("x \(ingredient.unitConversionRatio.formatted())")
-                            }
-                        }
-                    } else {
-                        Text(L.text("Match again to calculate canonical unit.", language: appLanguage))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -103,6 +122,12 @@ struct IngredientDetailView: View {
             ingredient.canonicalIngredientId = ""
             clearUnitConversion()
             resolveIngredientName(newValue)
+        }
+        .onChange(of: ingredient.quantity) { _, _ in
+            clearUnitConversion()
+        }
+        .onChange(of: ingredient.unit) { _, _ in
+            clearUnitConversion()
         }
         .onAppear {
             ingredient.unit = IngredientUnit.normalizedSelection(for: ingredient.unit)

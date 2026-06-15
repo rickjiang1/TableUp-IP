@@ -1613,7 +1613,11 @@ struct CloudMatchDetailSection: View {
         }
 
         let inventoryAmount = inventoryAmountText(for: item, recipeIngredient: recipeIngredient)
-        let neededAmount = "\(recipeIngredient.quantity.formatted()) \(recipeIngredient.unit)"
+        let neededAmount = InventoryQuantityFormatter.amount(
+            quantity: recipeIngredient.quantity,
+            unit: recipeIngredient.unit,
+            language: appLanguage
+        )
         return "\(L.text("Inventory", language: appLanguage)): \(inventoryAmount). \(L.text("Use", language: appLanguage)): \(neededAmount)"
     }
 
@@ -1652,11 +1656,15 @@ struct CloudMatchDetailSection: View {
             .filter { $0.unit == recipeIngredient.unit }
             .reduce(0) { $0 + $1.quantity }
         if sameUnitTotal > 0 {
-            return "\(sameUnitTotal.formatted()) \(recipeIngredient.unit)"
+            return InventoryQuantityFormatter.amount(
+                quantity: sameUnitTotal,
+                unit: recipeIngredient.unit,
+                language: appLanguage
+            )
         }
 
         return matchingInventory
-            .map { "\($0.quantity.formatted()) \($0.unit)" }
+            .map { InventoryQuantityFormatter.inlineInventoryAmount(for: $0, language: appLanguage) }
             .joined(separator: ", ")
     }
 }
@@ -1679,7 +1687,7 @@ struct LocalMatchDetailSection: View {
                 Label(L.text("Ready", language: appLanguage), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 ForEach(RecipeMatcher.usagePreview(recipe: assessment.recipe, inventory: inventory)) { item in
-                    Text("\(item.name): \(L.text("Inventory", language: appLanguage)) \(item.available.formatted()) \(item.unit). \(L.text("Use", language: appLanguage)) \(item.needed.formatted()) \(item.unit)")
+                    Text("\(item.name): \(L.text("Inventory", language: appLanguage)) \(inventoryText(for: item)). \(L.text("Use", language: appLanguage)) \(InventoryQuantityFormatter.amount(quantity: item.needed, unit: item.unit, language: appLanguage))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1688,7 +1696,7 @@ struct LocalMatchDetailSection: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("\(missing.name): \(missing.shortage.formatted()) \(missing.unit)", systemImage: "exclamationmark.circle.fill")
                             .foregroundStyle(.red)
-                        Text("\(L.text("Inventory", language: appLanguage)): \(missing.available.formatted()) \(missing.unit). \(L.text("Use", language: appLanguage)): \(missing.needed.formatted()) \(missing.unit)")
+                        Text("\(L.text("Inventory", language: appLanguage)): \(missing.available.formatted()) \(InventoryQuantityFormatter.displayUnit(missing.unit, language: appLanguage)). \(L.text("Use", language: appLanguage)): \(InventoryQuantityFormatter.amount(quantity: missing.needed, unit: missing.unit, language: appLanguage))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .padding(.leading, 28)
@@ -1696,6 +1704,26 @@ struct LocalMatchDetailSection: View {
                 }
             }
         }
+    }
+
+    private func inventoryText(for item: IngredientUsagePreview) -> String {
+        let matching = inventory.filter { stored in
+            stored.normalizedName == IngredientNormalizer.normalizeName(item.name)
+        }
+        guard !matching.isEmpty else {
+            return InventoryQuantityFormatter.amount(quantity: item.available, unit: item.unit, language: appLanguage)
+        }
+
+        let sameUnitTotal = matching
+            .filter { $0.unit == item.unit }
+            .reduce(0) { $0 + $1.quantity }
+        if sameUnitTotal > 0 {
+            return InventoryQuantityFormatter.amount(quantity: sameUnitTotal, unit: item.unit, language: appLanguage)
+        }
+
+        return matching
+            .map { InventoryQuantityFormatter.inlineInventoryAmount(for: $0, language: appLanguage) }
+            .joined(separator: ", ")
     }
 }
 
@@ -1902,7 +1930,7 @@ struct RecipeIngredientMatchRow: View {
                 Text(ingredient.name)
                     .fontWeight(.semibold)
 
-                Text("\(L.text("Needed", language: appLanguage)): \(ingredient.quantity.formatted()) \(ingredient.unit)")
+                Text("\(L.text("Needed", language: appLanguage)): \(InventoryQuantityFormatter.amount(quantity: ingredient.quantity, unit: ingredient.unit, language: appLanguage))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -2017,10 +2045,14 @@ struct RecipeIngredientMatchRow: View {
             .filter { $0.unit == ingredient.unit }
             .reduce(0) { $0 + $1.quantity }
         if sameUnitTotal > 0 {
-            return "\(sameUnitTotal.formatted()) \(ingredient.unit)"
+            return InventoryQuantityFormatter.amount(
+                quantity: sameUnitTotal,
+                unit: ingredient.unit,
+                language: appLanguage
+            )
         }
         return matching
-            .map { "\($0.quantity.formatted()) \($0.unit)" }
+            .map { InventoryQuantityFormatter.inlineInventoryAmount(for: $0, language: appLanguage) }
             .joined(separator: ", ")
     }
 }
