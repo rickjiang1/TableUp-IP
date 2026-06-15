@@ -22,6 +22,15 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 ```
 
+Optional extraction speed controls:
+
+```env
+OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS=2500
+OPENAI_VISION_DETAIL=low
+MATCHING_RULES_CACHE_TTL_MS=60000
+INGREDIENT_DICTIONARY_CACHE_TTL_MS=60000
+```
+
 ## Run
 
 ```bash

@@ -22,6 +22,11 @@ const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 const appEnv = process.env.APP_ENV || "dev";
+const matchingRulesCacheTtlMs = Number(process.env.MATCHING_RULES_CACHE_TTL_MS || 60_000);
+const ingredientDictionaryCacheTtlMs = Number(process.env.INGREDIENT_DICTIONARY_CACHE_TTL_MS || 60_000);
+const openAIExtractionMaxOutputTokens = Number(process.env.OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS || 2500);
+let matchingRulesCache = { expiresAt: 0, value: null, promise: null };
+const ingredientDictionaryCache = new Map();
 
 const server = createServer(async (request, response) => {
   try {
@@ -47,7 +52,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/ingredients") {
-      const ingredients = await fetchIngredientDictionary(url.searchParams.get("language") || "en");
+      const ingredients = await getCachedIngredientDictionary(url.searchParams.get("language") || "en");
       sendJson(response, 200, { ingredients });
       return;
     }
@@ -154,6 +159,7 @@ const server = createServer(async (request, response) => {
         return;
       }
 
+      const startedAt = Date.now();
       const body = await readRequestBody(request, 12 * 1024 * 1024);
       const photos = parseMultipartFiles(request.headers["content-type"], body, ["photo", "photos", "images"]);
       const language = parseMultipartField(request.headers["content-type"], body, "language") || "en";
@@ -171,6 +177,7 @@ const server = createServer(async (request, response) => {
       const result = await createOpenAIResponse({
         schemaName: "grocery_extraction",
         schema: groceryExtractionSchema,
+        maxOutputTokens: openAIExtractionMaxOutputTokens,
         content: [
           {
             type: "input_text",
@@ -191,7 +198,17 @@ const server = createServer(async (request, response) => {
         ]
       });
 
-      sendJson(response, 200, await normalizeGroceryExtraction(parseStructuredOutput(result), language));
+      const openAICompletedAt = Date.now();
+      const normalized = await normalizeGroceryExtraction(parseStructuredOutput(result), language);
+      console.log(JSON.stringify({
+        event: "grocery_photo_extraction_timing",
+        photoCount: photos.length,
+        bodyBytes: body.length,
+        openAIMs: openAICompletedAt - startedAt,
+        normalizeMs: Date.now() - openAICompletedAt,
+        totalMs: Date.now() - startedAt
+      }));
+      sendJson(response, 200, normalized);
       return;
     }
 
@@ -277,10 +294,70 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+async function getCachedMatchingRules() {
+  const now = Date.now();
+  if (matchingRulesCache.value && matchingRulesCache.expiresAt > now) {
+    return matchingRulesCache.value;
+  }
+  if (matchingRulesCache.promise) {
+    return matchingRulesCache.promise;
+  }
+
+  matchingRulesCache.promise = fetchMatchingRules()
+    .then((rules) => {
+      matchingRulesCache = {
+        value: rules,
+        expiresAt: Date.now() + matchingRulesCacheTtlMs,
+        promise: null
+      };
+      return rules;
+    })
+    .catch((error) => {
+      matchingRulesCache.promise = null;
+      throw error;
+    });
+
+  return matchingRulesCache.promise;
+}
+
+async function getCachedIngredientDictionary(language = "en") {
+  const normalizedLanguage = String(language || "en").trim().toLowerCase() || "en";
+  const now = Date.now();
+  const cached = ingredientDictionaryCache.get(normalizedLanguage);
+  if (cached?.value && cached.expiresAt > now) {
+    return cached.value;
+  }
+  if (cached?.promise) {
+    return cached.promise;
+  }
+
+  const promise = fetchIngredientDictionary(normalizedLanguage)
+    .then((dictionary) => {
+      ingredientDictionaryCache.set(normalizedLanguage, {
+        value: dictionary,
+        expiresAt: Date.now() + ingredientDictionaryCacheTtlMs,
+        promise: null
+      });
+      return dictionary;
+    })
+    .catch((error) => {
+      ingredientDictionaryCache.delete(normalizedLanguage);
+      throw error;
+    });
+
+  ingredientDictionaryCache.set(normalizedLanguage, {
+    value: cached?.value || null,
+    expiresAt: cached?.expiresAt || 0,
+    promise
+  });
+
+  return promise;
+}
+
 async function normalizeGroceryExtraction(output, language = "en") {
   const [rules, dictionary] = await Promise.all([
-    fetchMatchingRules(),
-    fetchIngredientDictionary(language)
+    getCachedMatchingRules(),
+    getCachedIngredientDictionary(language)
   ]);
   const resolver = buildIngredientResolver(rules);
   const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
@@ -463,7 +540,7 @@ function normalizeExtractedAmount(quantity, unit) {
 }
 
 async function resolveIngredientItems(inputItems) {
-  const rules = await fetchMatchingRules();
+  const rules = await getCachedMatchingRules();
   const resolver = buildIngredientResolver(rules);
   const items = Array.isArray(inputItems) ? inputItems : [];
 
@@ -499,8 +576,8 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
 
   const resultLimit = Math.min(Math.max(Number(limit) || 10, 1), 25);
   const [rules, dictionary] = await Promise.all([
-    fetchMatchingRules(),
-    fetchIngredientDictionary(language)
+    getCachedMatchingRules(),
+    getCachedIngredientDictionary(language)
   ]);
   const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
   const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
@@ -878,7 +955,7 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function createOpenAIResponse({ schemaName, schema, content }) {
+async function createOpenAIResponse({ schemaName, schema, content, maxOutputTokens }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || apiKey === "replace_with_a_new_key") {
     throw new Error("OPENAI_API_KEY is missing. Add it to backend/.env.");
@@ -898,6 +975,7 @@ async function createOpenAIResponse({ schemaName, schema, content }) {
           content
         }
       ],
+      ...(Number.isFinite(maxOutputTokens) && maxOutputTokens > 0 ? { max_output_tokens: maxOutputTokens } : {}),
       text: {
         format: {
           type: "json_schema",
