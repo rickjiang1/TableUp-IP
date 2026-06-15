@@ -572,6 +572,7 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
         canonical_name: canonicalName,
         display_name: localized?.display_name || canonicalName,
         category: localized?.category || ingredient?.category || "other",
+        canonical_unit: localized?.canonical_unit || ingredient?.canonical_unit || "",
         matched_alias: candidate.matchedAlias,
         score: Number(candidate.matchScore.toFixed(3)),
         reason: candidate.reason

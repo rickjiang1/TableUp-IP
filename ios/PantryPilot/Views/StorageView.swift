@@ -1003,6 +1003,7 @@ struct IngredientCandidate: Decodable, Identifiable {
     let canonicalName: String
     let displayName: String
     let category: String
+    let canonicalUnit: String
     let matchedAlias: String?
     let score: Double
     let reason: String
@@ -1014,8 +1015,21 @@ struct IngredientCandidate: Decodable, Identifiable {
             id: ingredientId,
             canonicalName: canonicalName,
             displayName: displayName,
-            category: category
+            category: category,
+            canonicalUnit: canonicalUnit
         )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientId = try container.decode(String.self, forKey: .ingredientId)
+        canonicalName = try container.decode(String.self, forKey: .canonicalName)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? canonicalName
+        category = try container.decodeIfPresent(String.self, forKey: .category) ?? "other"
+        canonicalUnit = try container.decodeIfPresent(String.self, forKey: .canonicalUnit) ?? ""
+        matchedAlias = try container.decodeIfPresent(String.self, forKey: .matchedAlias)
+        score = try container.decode(Double.self, forKey: .score)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason) ?? ""
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1023,6 +1037,7 @@ struct IngredientCandidate: Decodable, Identifiable {
         case canonicalName = "canonical_name"
         case displayName = "display_name"
         case category
+        case canonicalUnit = "canonical_unit"
         case matchedAlias = "matched_alias"
         case score
         case reason
@@ -1034,12 +1049,14 @@ struct CloudIngredient: Decodable, Identifiable {
     let canonicalName: String
     let displayName: String
     let category: String
+    let canonicalUnit: String
 
-    init(id: String, canonicalName: String, displayName: String, category: String) {
+    init(id: String, canonicalName: String, displayName: String, category: String, canonicalUnit: String = "") {
         self.id = id
         self.canonicalName = canonicalName
         self.displayName = displayName
         self.category = category
+        self.canonicalUnit = canonicalUnit
     }
 
     init(from decoder: Decoder) throws {
@@ -1048,6 +1065,7 @@ struct CloudIngredient: Decodable, Identifiable {
         canonicalName = try container.decode(String.self, forKey: .canonicalName)
         displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? canonicalName
         category = try container.decode(String.self, forKey: .category)
+        canonicalUnit = try container.decodeIfPresent(String.self, forKey: .canonicalUnit) ?? ""
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1055,6 +1073,7 @@ struct CloudIngredient: Decodable, Identifiable {
         case canonicalName = "canonical_name"
         case displayName = "display_name"
         case category
+        case canonicalUnit = "canonical_unit"
     }
 }
 

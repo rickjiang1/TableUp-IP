@@ -67,6 +67,15 @@ Production imports are blocked unless they are intentional:
 node src/import-ingredients-csv.js --env prod --allow-prod-write /path/to/Ingredient.csv
 ```
 
+Unit conversion seed data is also environment-gated:
+
+```bash
+npm run seed:unit-conversions -- --env dev
+npm run seed:unit-conversions -- --env prod --allow-prod-write
+```
+
+This adds `ingredients.canonical_unit`, `unit_aliases`, and `ingredient_unit_conversion`. AI extraction should keep raw quantity/unit; canonical quantity conversion happens after the inventory item is matched to the ingredient library.
+
 ## Endpoints
 
 ```text

@@ -705,8 +705,11 @@ async function bootstrapSchema() {
     create table if not exists ingredients (
       ingredient_id text primary key,
       canonical_name text not null,
-      category text not null
+      category text not null,
+      canonical_unit text not null default 'gram'
     );
+
+    alter table ingredients add column if not exists canonical_unit text not null default 'gram';
 
     create table if not exists ingredient_aliases (
       alias_name text primary key,
