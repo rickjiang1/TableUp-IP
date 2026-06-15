@@ -154,16 +154,20 @@ const server = createServer(async (request, response) => {
         return;
       }
 
-      const body = await readRequestBody(request, 8 * 1024 * 1024);
-      const photo = parseMultipartFile(request.headers["content-type"], body, ["photo"]);
+      const body = await readRequestBody(request, 12 * 1024 * 1024);
+      const photos = parseMultipartFiles(request.headers["content-type"], body, ["photo", "photos", "images"]);
       const language = parseMultipartField(request.headers["content-type"], body, "language") || "en";
 
-      if (!photo) {
+      if (photos.length === 0) {
         sendJson(response, 400, { error: "photo is required" });
         return;
       }
 
-      const imageUrl = `data:${photo.mimeType};base64,${photo.data.toString("base64")}`;
+      const imageContent = photos.map((photo) => ({
+        type: "input_image",
+        image_url: `data:${photo.mimeType};base64,${photo.data.toString("base64")}`,
+        detail: process.env.OPENAI_VISION_DETAIL || "low"
+      }));
       const result = await createOpenAIResponse({
         schemaName: "grocery_extraction",
         schema: groceryExtractionSchema,
@@ -171,7 +175,7 @@ const server = createServer(async (request, response) => {
           {
             type: "input_text",
             text: [
-              "Extract grocery inventory items from this image.",
+              "Extract grocery inventory items from the image(s).",
               "Use name for the core food only, not brand, origin, grade, packaging, or preparation adjectives.",
               "Put the full visible product name and modifiers in rawName and description.",
               "Example: 美国和牛 无骨牛肋条 => name: 牛肋条, rawName: 美国和牛 无骨牛肋条, description: 美国和牛; 无骨.",
@@ -183,11 +187,7 @@ const server = createServer(async (request, response) => {
               "If quantity is unclear, estimate conservatively and lower confidence."
             ].join(" ")
           },
-          {
-            type: "input_image",
-            image_url: imageUrl,
-            detail: process.env.OPENAI_VISION_DETAIL || "low"
-          }
+          ...imageContent
         ]
       });
 
@@ -769,15 +769,20 @@ function readRequestBody(request, maxBytes) {
 }
 
 function parseMultipartFile(contentType, body, fieldNames) {
+  return parseMultipartFiles(contentType, body, fieldNames)[0] || null;
+}
+
+function parseMultipartFiles(contentType, body, fieldNames) {
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || "")?.slice(1).find(Boolean);
   if (!boundary) {
-    return null;
+    return [];
   }
 
   const fieldPattern = new RegExp(`name="(?:${fieldNames.map(escapeRegExp).join("|")})"`);
 
   const marker = Buffer.from(`--${boundary}`);
   let offset = 0;
+  const files = [];
 
   while (offset < body.length) {
     const partStart = body.indexOf(marker, offset);
@@ -804,16 +809,16 @@ function parseMultipartFile(contentType, body, fieldNames) {
         dataEnd -= 2;
       }
 
-      return {
+      files.push({
         mimeType,
         data: body.slice(contentStart, dataEnd)
-      };
+      });
     }
 
     offset = nextPart;
   }
 
-  return null;
+  return files;
 }
 
 function parseMultipartField(contentType, body, fieldName) {

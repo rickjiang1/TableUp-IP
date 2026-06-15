@@ -190,33 +190,29 @@ struct ScanView: View {
     }
 
     private func extractSelectedImages(with extractor: GroceryPhotoExtractor) async throws -> [DetectedIngredient] {
-        let batchSize = 3
-        var extractedItems: [DetectedIngredient] = []
-
-        for batchStart in stride(from: 0, to: selectedImageDataList.count, by: batchSize) {
+        let batchSize = 4
+        let language = appLanguage
+        let imageBatches = stride(from: 0, to: selectedImageDataList.count, by: batchSize).map { batchStart in
             let batchEnd = min(batchStart + batchSize, selectedImageDataList.count)
-            let batch = Array(selectedImageDataList[batchStart..<batchEnd].enumerated())
-
-            let batchResults = try await withThrowingTaskGroup(of: (Int, [DetectedIngredient]).self) { group in
-                for (offset, imageData) in batch {
-                    let originalIndex = batchStart + offset
-                    group.addTask {
-                        let response = try await extractor.extract(from: imageData, language: appLanguage)
-                        return (originalIndex, response.items.map(\.detectedIngredient))
-                    }
-                }
-
-                var results: [(Int, [DetectedIngredient])] = []
-                for try await result in group {
-                    results.append(result)
-                }
-                return results.sorted { $0.0 < $1.0 }
-            }
-
-            extractedItems.append(contentsOf: batchResults.flatMap(\.1))
+            return (batchStart, Array(selectedImageDataList[batchStart..<batchEnd]))
         }
 
-        return extractedItems
+        let batchResults = try await withThrowingTaskGroup(of: (Int, [DetectedIngredient]).self) { group in
+            for (batchStart, imageDataList) in imageBatches {
+                group.addTask {
+                    let response = try await extractor.extract(from: imageDataList, language: language)
+                    return (batchStart, response.items.map(\.detectedIngredient))
+                }
+            }
+
+            var results: [(Int, [DetectedIngredient])] = []
+            for try await result in group {
+                results.append(result)
+            }
+            return results.sorted { $0.0 < $1.0 }
+        }
+
+        return batchResults.flatMap(\.1)
     }
 
     private func saveManualIngredient(_ input: IngredientInput) -> Bool {

@@ -6,7 +6,11 @@ struct GroceryPhotoExtractor {
     var session: URLSession = .shared
 
     func extract(from imageData: Data, language: String = "en") async throws -> GroceryPhotoExtractionResponse {
-        let uploadImageData = Self.preparedJPEGData(from: imageData) ?? imageData
+        try await extract(from: [imageData], language: language)
+    }
+
+    func extract(from imageDataList: [Data], language: String = "en") async throws -> GroceryPhotoExtractionResponse {
+        let uploadImageDataList = imageDataList.map { Self.preparedJPEGData(from: $0) ?? $0 }
         let boundary = "Boundary-\(UUID().uuidString)"
         let url = baseURL.appending(path: "api/extract-grocery-photo")
         var request = URLRequest(url: url)
@@ -14,10 +18,9 @@ struct GroceryPhotoExtractor {
         request.timeoutInterval = 150
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = makeMultipartBody(
-            imageData: uploadImageData,
+            imageDataList: uploadImageDataList,
             boundary: boundary,
-            fieldName: "photo",
-            fileName: "grocery-photo.jpg",
+            fieldName: "photos",
             mimeType: "image/jpeg",
             language: language
         )
@@ -40,10 +43,9 @@ struct GroceryPhotoExtractor {
     }
 
     private func makeMultipartBody(
-        imageData: Data,
+        imageDataList: [Data],
         boundary: String,
         fieldName: String,
-        fileName: String,
         mimeType: String,
         language: String
     ) -> Data {
@@ -52,11 +54,16 @@ struct GroceryPhotoExtractor {
         body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
         body.append(language)
         body.append("\r\n")
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(fileName)\"\r\n")
-        body.append("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(imageData)
-        body.append("\r\n--\(boundary)--\r\n")
+
+        for (index, imageData) in imageDataList.enumerated() {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"grocery-photo-\(index + 1).jpg\"\r\n")
+            body.append("Content-Type: \(mimeType)\r\n\r\n")
+            body.append(imageData)
+            body.append("\r\n")
+        }
+
+        body.append("--\(boundary)--\r\n")
         return body
     }
 
@@ -66,14 +73,14 @@ struct GroceryPhotoExtractor {
         let largestSide = max(image.size.width, image.size.height)
         guard largestSide > 0 else { return nil }
 
-        let maxDimension: CGFloat = 1024
+        let maxDimension: CGFloat = 768
         let scale = min(maxDimension / largestSide, 1)
         let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: targetSize)
         let resizedImage = renderer.image { _ in
             image.draw(in: CGRect(origin: .zero, size: targetSize))
         }
-        return resizedImage.jpegData(compressionQuality: 0.55)
+        return resizedImage.jpegData(compressionQuality: 0.45)
     }
 }
 
