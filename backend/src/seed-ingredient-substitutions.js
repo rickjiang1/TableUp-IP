@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { buildIngredientSubstitutionSeedRows } from "./ingredientSubstitutionSeeds.js";
-import { query, sqlNumber, sqlString } from "./postgres.js";
+import { query } from "./postgres.js";
 
 const environmentTargets = {
   dev: {
@@ -29,12 +28,13 @@ assertTargetEnvironment(args.environment);
 
 await bootstrapSubstitutionSchema();
 const ingredients = await fetchIngredients();
-const substitutions = buildIngredientSubstitutionSeedRows(ingredients);
 const existingCount = await countExistingSubstitutions();
 
 if (!args.dryRun) {
-  await seedSubstitutions(substitutions);
+  await applyVerifiedSeed();
 }
+const finalCount = args.dryRun ? existingCount : await countExistingSubstitutions();
+const combinationCount = args.dryRun ? 0 : await countCombinationSubstitutions();
 
 console.log(JSON.stringify({
   environment: args.environment,
@@ -42,8 +42,9 @@ console.log(JSON.stringify({
   dryRun: args.dryRun,
   ingredients: ingredients.length,
   existingSubstitutions: existingCount,
-  generatedSubstitutions: substitutions.length,
-  sample: substitutions.slice(0, 20)
+  finalSubstitutions: finalCount,
+  combinationSubstitutions: combinationCount,
+  sample: args.dryRun ? [] : await sampleSubstitutions()
 }, null, 2));
 
 function parseArgs(argv) {
@@ -122,16 +123,7 @@ function assertTargetEnvironment(environment) {
 }
 
 async function bootstrapSubstitutionSchema() {
-  await query(`
-    create table if not exists ingredient_substitutions (
-      ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      substitute_ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      confidence_score numeric not null,
-      primary key (ingredient_id, substitute_ingredient_id)
-    );
-
-    grant select, insert, update, delete on ingredient_substitutions to anon;
-  `);
+  await query(readFileSync("backend/migrations/20260615_ingredient_substitutions_enrichment.sql", "utf8"));
 }
 
 async function fetchIngredients() {
@@ -147,16 +139,27 @@ async function countExistingSubstitutions() {
   return Number(rows[0]?.count || 0);
 }
 
-async function seedSubstitutions(substitutions) {
-  if (!substitutions.length) return;
-  const batchSize = 400;
-  for (let index = 0; index < substitutions.length; index += batchSize) {
-    const batch = substitutions.slice(index, index + batchSize);
-    await query(`
-      insert into ingredient_substitutions (ingredient_id, substitute_ingredient_id, confidence_score)
-      values ${batch.map((item) => `(${sqlString(item.ingredient_id)}, ${sqlString(item.substitute_ingredient_id)}, ${sqlNumber(item.confidence_score, 0)})`).join(",\n")}
-      on conflict (ingredient_id, substitute_ingredient_id) do update set
-        confidence_score = greatest(ingredient_substitutions.confidence_score, excluded.confidence_score)
-    `);
-  }
+async function countCombinationSubstitutions() {
+  const rows = await query("select count(*)::int as count from ingredient_substitution_combinations where active = true");
+  return Number(rows[0]?.count || 0);
+}
+
+async function applyVerifiedSeed() {
+  await query(readFileSync("backend/seeds/ingredient_substitutions_verified.sql", "utf8"));
+}
+
+async function sampleSubstitutions() {
+  return await query(`
+    select
+      ingredient_id,
+      substitute_ingredient_id,
+      substitution_score,
+      substitution_type,
+      recipe_category,
+      source_name
+    from ingredient_substitutions
+    where source_name <> ''
+    order by ingredient_id, substitution_score desc
+    limit 20
+  `);
 }
