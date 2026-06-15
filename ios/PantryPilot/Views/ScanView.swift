@@ -17,6 +17,8 @@ struct ScanView: View {
     @State private var scanAlert: ScanAlertMessage?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
+    @State private var photoLoadTask: Task<Void, Never>?
+    @State private var extractionTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -75,9 +77,7 @@ struct ScanView: View {
 
                         if !selectedImageDataList.isEmpty {
                             Button {
-                                Task {
-                                    await extractIngredients()
-                                }
+                                startExtractionTask()
                             } label: {
                                 Image(systemName: isExtracting ? "hourglass" : "sparkles")
                                     .font(.title3)
@@ -106,8 +106,8 @@ struct ScanView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
-            .task(id: selectedPhotos) {
-                await loadSelectedPhotos()
+            .onChange(of: selectedPhotos) { _, _ in
+                startPhotoLoadTask()
             }
             .sheet(isPresented: $showingCamera) {
                 ImagePicker(sourceType: .camera, imageData: $capturedImageData)
@@ -115,7 +115,7 @@ struct ScanView: View {
             }
             .sheet(isPresented: $showingDetectedItems) {
                 DetectedItemsReviewView(items: $detectedItems) {
-                    let result = saveDetectedItems()
+                    let result = await saveDetectedItems()
                     if result.didSave {
                         showingDetectedItems = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -139,11 +139,23 @@ struct ScanView: View {
                     selectedImageDataList = [newValue]
                     scanMessage = "Photo ready."
                     detectedItems = []
-                    Task {
-                        await extractIngredients()
-                    }
+                    startExtractionTask()
                 }
             }
+        }
+    }
+
+    private func startPhotoLoadTask() {
+        photoLoadTask?.cancel()
+        photoLoadTask = Task {
+            await loadSelectedPhotos()
+        }
+    }
+
+    private func startExtractionTask() {
+        extractionTask?.cancel()
+        extractionTask = Task {
+            await extractIngredients()
         }
     }
 
@@ -160,7 +172,7 @@ struct ScanView: View {
         scanMessage = imageDataList.isEmpty ? "Could not load those photos." : "\(imageDataList.count) photo(s) ready."
         detectedItems = []
         guard !imageDataList.isEmpty else { return }
-        await extractIngredients()
+        startExtractionTask()
     }
 
     private func extractIngredients() async {
@@ -231,8 +243,9 @@ struct ScanView: View {
         }
     }
 
-    private func saveDetectedItems() -> ReviewSaveResult {
+    private func saveDetectedItems() async -> ReviewSaveResult {
         do {
+            await matchDetectedItemsBeforeSave()
             let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
@@ -252,6 +265,40 @@ struct ScanView: View {
                 didSave: false,
                 alert: ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
             )
+        }
+    }
+
+    private func matchDetectedItemsBeforeSave() async {
+        let client = UnknownIngredientClient()
+        let language = appLanguage
+
+        await withTaskGroup(of: (UUID, IngredientCandidate?).self) { group in
+            for item in detectedItems where item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let query = item.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.name : item.rawName
+                let itemID = item.id
+                group.addTask {
+                    guard let candidate = try? await client.fetchIngredientCandidates(
+                        query: query,
+                        language: language,
+                        limit: 1
+                    ).first, candidate.score >= 0.6 else {
+                        return (itemID, nil)
+                    }
+                    return (itemID, candidate)
+                }
+            }
+
+            for await (itemID, candidate) in group {
+                guard let candidate,
+                      let index = detectedItems.firstIndex(where: { $0.id == itemID }) else {
+                    continue
+                }
+                detectedItems[index].canonicalIngredientId = candidate.ingredientId
+                detectedItems[index].canonicalIngredientDisplayName = candidate.displayName
+                detectedItems[index].ingredientMatchType = candidate.reason.contains("alias") ? "fuzzy_alias" : "fuzzy"
+                detectedItems[index].ingredientMatchScore = candidate.score
+                detectedItems[index].matchedAlias = candidate.matchedAlias ?? ""
+            }
         }
     }
 }
@@ -461,7 +508,8 @@ struct DetectedItemsReviewView: View {
     @Binding var items: [DetectedIngredient]
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    let save: () -> Void
+    @State private var isSaving = false
+    let save: () async -> Void
 
     var body: some View {
         NavigationStack {
@@ -588,9 +636,15 @@ struct DetectedItemsReviewView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(L.text("Save", language: appLanguage)) { save() }
+                    Button(isSaving ? L.text("Saving...", language: appLanguage) : L.text("Save", language: appLanguage)) {
+                        isSaving = true
+                        Task {
+                            await save()
+                            isSaving = false
+                        }
+                    }
                         .fontWeight(.semibold)
-                        .disabled(items.isEmpty)
+                        .disabled(items.isEmpty || isSaving)
                 }
             }
         }

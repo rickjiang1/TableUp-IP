@@ -107,6 +107,7 @@ enum L {
         "Edit Recipe": "编辑食谱",
         "Cancel": "取消",
         "Save": "保存",
+        "Saving...": "保存中...",
         "Cook": "烹饪",
         "Edit": "编辑",
         "Open video URL": "打开视频链接",

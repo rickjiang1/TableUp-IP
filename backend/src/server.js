@@ -355,23 +355,12 @@ async function getCachedIngredientDictionary(language = "en") {
 }
 
 async function normalizeGroceryExtraction(output, language = "en") {
-  const [rules, dictionary] = await Promise.all([
-    getCachedMatchingRules(),
-    getCachedIngredientDictionary(language)
-  ]);
-  const resolver = buildIngredientResolver(rules);
-  const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
   return {
     items: (output.items || []).map((item) => {
       const name = String(item.name || "").trim();
       const rawName = String(item.rawName || item.sourceText || name).trim();
       const sourceText = String(item.sourceText || "").trim();
       const normalizedAmount = normalizeExtractedAmount(item.quantity, item.unit);
-      const resolved = resolveExtractedIngredient({
-        names: [name, rawName, sourceText],
-        rules,
-        resolver
-      });
       return {
         ...item,
         name,
@@ -380,18 +369,18 @@ async function normalizeGroceryExtraction(output, language = "en") {
         description: String(item.description || "").trim(),
         quantity: normalizedAmount.quantity,
         unit: normalizedAmount.unit,
-        canonicalIngredientId: resolved.autoMatched ? resolved.ingredientId : "",
-        canonicalIngredientDisplayName: resolved.autoMatched ? displayNameForIngredient(dictionaryById, resolved.ingredientId, resolved.canonicalName) : "",
-        matchedToIngredientLibrary: Boolean(resolved.autoMatched),
-        ingredientMatchType: resolved.autoMatched ? resolved.matchType : "",
-        ingredientMatchScore: resolved.autoMatched ? resolved.matchScore : 0,
-        matchedAlias: resolved.autoMatched ? resolved.matchedAlias : "",
-        suggestedCanonicalIngredientId: resolved.autoMatched ? "" : resolved.ingredientId,
-        suggestedCanonicalName: resolved.autoMatched ? "" : resolved.canonicalName,
-        suggestedCanonicalDisplayName: resolved.autoMatched ? "" : displayNameForIngredient(dictionaryById, resolved.ingredientId, resolved.canonicalName),
-        suggestedMatchType: resolved.autoMatched ? "" : resolved.matchType,
-        suggestedMatchScore: resolved.autoMatched ? 0 : resolved.matchScore,
-        suggestedMatchedAlias: resolved.autoMatched ? "" : resolved.matchedAlias
+        canonicalIngredientId: "",
+        canonicalIngredientDisplayName: "",
+        matchedToIngredientLibrary: false,
+        ingredientMatchType: "",
+        ingredientMatchScore: 0,
+        matchedAlias: "",
+        suggestedCanonicalIngredientId: "",
+        suggestedCanonicalName: "",
+        suggestedCanonicalDisplayName: "",
+        suggestedMatchType: "",
+        suggestedMatchScore: 0,
+        suggestedMatchedAlias: ""
       };
     })
   };
