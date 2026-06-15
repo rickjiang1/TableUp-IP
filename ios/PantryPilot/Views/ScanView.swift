@@ -295,6 +295,7 @@ struct DetectedIngredient: Identifiable {
     var name: String
     var rawName: String = ""
     var description: String = ""
+    var sourceText: String = ""
     var canonicalIngredientId: String = ""
     var quantity: Double
     var unit: String
@@ -323,7 +324,7 @@ struct DetectedIngredient: Identifiable {
 
     private var displayDescription: String {
         var seen = Set<String>()
-        let pieces = [rawName, description]
+        let pieces = [rawName, description, sourceText]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { value in
                 guard !value.isEmpty && value != name && !seen.contains(value) else { return false }
@@ -418,12 +419,34 @@ struct DetectedItemsReviewView: View {
             Form {
                 ForEach($items) { $item in
                     Section {
-                        TextField(L.text("Name", language: appLanguage), text: $item.name)
-                        if !item.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            TextField(L.text("Full product name", language: appLanguage), text: $item.rawName)
+                        LabeledContent(L.text("Ingredient name", language: appLanguage)) {
+                            TextField(L.text("Ingredient name", language: appLanguage), text: $item.name)
+                                .multilineTextAlignment(.trailing)
                         }
-                        TextField(L.text("Description", language: appLanguage), text: $item.description, axis: .vertical)
-                            .lineLimit(2...4)
+
+                        LabeledContent(L.text("Full product name", language: appLanguage)) {
+                            TextField(L.text("Full product name", language: appLanguage), text: $item.rawName)
+                                .multilineTextAlignment(.trailing)
+                        }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(L.text("Description", language: appLanguage))
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            TextField(L.text("Description", language: appLanguage), text: $item.description, axis: .vertical)
+                                .lineLimit(2...4)
+                        }
+
+                        if !item.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L.text("Original detected text", language: appLanguage))
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(item.sourceText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
 
                         if !item.canonicalIngredientId.isEmpty {
                             Label(item.canonicalIngredientId, systemImage: "checkmark.seal.fill")

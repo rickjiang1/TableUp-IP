@@ -121,9 +121,10 @@ struct ExtractedGroceryItem: Decodable {
             name: name,
             rawName: rawName ?? sourceText,
             description: description ?? "",
+            sourceText: sourceText,
             canonicalIngredientId: canonicalIngredientId ?? "",
             quantity: quantity,
-            unit: unit,
+            unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
             location: location
         )

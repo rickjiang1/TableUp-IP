@@ -165,6 +165,10 @@ const server = createServer(async (request, response) => {
               "Put the full visible product name and modifiers in rawName and description.",
               "Example: 美国和牛 无骨牛肋条 => name: 牛肋条, rawName: 美国和牛 无骨牛肋条, description: 美国和牛; 无骨.",
               "Return item name, rawName, description, quantity, unit, category, storage location, confidence, and source text when visible.",
+              "Always infer quantity and unit from visible package text when possible.",
+              "Use only these unit values: piece, g, kg, lb, oz, ml, l, tsp, tbsp, cup, clove, bunch, bottle, can, bag, pack.",
+              "Convert Chinese units to supported units: 克=>g, 千克/公斤=>kg, 毫升=>ml, 升=>l, 磅=>lb, 盎司=>oz, 瓶=>bottle, 罐=>can, 袋=>bag, 包=>pack, 斤=>500 g.",
+              "If the image shows package count but no weight or volume, use quantity 1 and unit pack/bag/bottle/can as appropriate.",
               "If quantity is unclear, estimate conservatively and lower confidence."
             ].join(" ")
           },
@@ -269,6 +273,7 @@ async function normalizeGroceryExtraction(output) {
     items: (output.items || []).map((item) => {
       const name = String(item.name || "").trim();
       const rawName = String(item.rawName || item.sourceText || name).trim();
+      const normalizedAmount = normalizeExtractedAmount(item.quantity, item.unit);
       const nameResolved = resolver.resolve(name);
       const resolved = nameResolved.known ? nameResolved : resolver.resolve(rawName);
       return {
@@ -276,11 +281,98 @@ async function normalizeGroceryExtraction(output) {
         name,
         rawName,
         description: String(item.description || "").trim(),
+        quantity: normalizedAmount.quantity,
+        unit: normalizedAmount.unit,
         canonicalIngredientId: resolved.known ? resolved.ingredientId : "",
         matchedToIngredientLibrary: Boolean(resolved.known)
       };
     })
   };
+}
+
+function normalizeExtractedAmount(quantity, unit) {
+  const numericQuantity = Number.isFinite(Number(quantity)) && Number(quantity) > 0 ? Number(quantity) : 1;
+  const cleanUnit = String(unit || "piece").trim().toLowerCase();
+  const compact = cleanUnit.replace(/\s+/g, "");
+  const aliases = new Map([
+    ["pieces", "piece"],
+    ["piece", "piece"],
+    ["pcs", "piece"],
+    ["pc", "piece"],
+    ["个", "piece"],
+    ["根", "piece"],
+    ["颗", "piece"],
+    ["只", "piece"],
+    ["条", "piece"],
+    ["片", "piece"],
+    ["g", "g"],
+    ["gram", "g"],
+    ["grams", "g"],
+    ["克", "g"],
+    ["kg", "kg"],
+    ["kilogram", "kg"],
+    ["kilograms", "kg"],
+    ["千克", "kg"],
+    ["公斤", "kg"],
+    ["lb", "lb"],
+    ["lbs", "lb"],
+    ["pound", "lb"],
+    ["pounds", "lb"],
+    ["磅", "lb"],
+    ["oz", "oz"],
+    ["ounce", "oz"],
+    ["ounces", "oz"],
+    ["盎司", "oz"],
+    ["ml", "ml"],
+    ["milliliter", "ml"],
+    ["milliliters", "ml"],
+    ["毫升", "ml"],
+    ["l", "l"],
+    ["liter", "l"],
+    ["liters", "l"],
+    ["升", "l"],
+    ["tsp", "tsp"],
+    ["teaspoon", "tsp"],
+    ["teaspoons", "tsp"],
+    ["茶匙", "tsp"],
+    ["tbsp", "tbsp"],
+    ["tablespoon", "tbsp"],
+    ["tablespoons", "tbsp"],
+    ["汤匙", "tbsp"],
+    ["cup", "cup"],
+    ["cups", "cup"],
+    ["杯", "cup"],
+    ["clove", "clove"],
+    ["cloves", "clove"],
+    ["瓣", "clove"],
+    ["bunch", "bunch"],
+    ["bunches", "bunch"],
+    ["把", "bunch"],
+    ["bottle", "bottle"],
+    ["bottles", "bottle"],
+    ["瓶", "bottle"],
+    ["can", "can"],
+    ["cans", "can"],
+    ["罐", "can"],
+    ["bag", "bag"],
+    ["bags", "bag"],
+    ["袋", "bag"],
+    ["pack", "pack"],
+    ["packs", "pack"],
+    ["package", "pack"],
+    ["packages", "pack"],
+    ["包", "pack"],
+    ["盒", "pack"],
+    ["盒装", "pack"],
+    ["tray", "pack"],
+    ["trays", "pack"]
+  ]);
+
+  if (compact === "斤") {
+    return { quantity: numericQuantity * 500, unit: "g" };
+  }
+
+  return { quantity: numericQuantity, unit: aliases.get(compact) || aliases.get(cleanUnit) || "piece" };
 }
 
 async function resolveIngredientItems(inputItems) {

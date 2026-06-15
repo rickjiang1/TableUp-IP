@@ -55,6 +55,7 @@ enum L {
         "Matched to ingredient library": "已匹配到食材库",
         "Full product name": "完整商品名",
         "Description": "描述",
+        "Original detected text": "原始识别文字",
         "Recipe name": "食谱名称",
         "Video URL": "视频 URL",
         "Photo": "图片",

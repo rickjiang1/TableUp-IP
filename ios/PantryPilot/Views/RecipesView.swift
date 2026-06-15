@@ -1763,8 +1763,8 @@ struct RecipeIngredientMatchRow: View {
                             .foregroundStyle(.secondary)
                     } else if isMissing {
                         Text(L.text("Missing", language: appLanguage))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.red)
                     }
                 }
 
