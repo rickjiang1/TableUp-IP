@@ -12,11 +12,12 @@ export async function matchRecipesForInventory(inventoryInput) {
 
   const resolver = buildIngredientResolver(rules);
   const substitutions = buildSubstitutionMap(rules.substitutions);
+  const substitutionContexts = buildSubstitutionContextMap(rules.substitutionContexts);
   const inventory = normalizeInventory(inventoryInput, resolver);
   await recordUnknownIngredients(inventory, recipes, resolver);
 
   return recipes
-    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions))
+    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions, substitutionContexts))
     .sort((left, right) => {
       if (right.match_score_percent !== left.match_score_percent) {
         return right.match_score_percent - left.match_score_percent;
@@ -25,7 +26,7 @@ export async function matchRecipesForInventory(inventoryInput) {
     });
 }
 
-function matchRecipe(recipe, inventory, resolver, substitutions) {
+function matchRecipe(recipe, inventory, resolver, substitutions, substitutionContexts) {
   const details = recipe.ingredients.map((ingredient) => {
     const recipeIngredientId = resolveRecipeIngredientId(ingredient, resolver);
     const exactItem = inventory.find((item) => !item.aliasMatched && item.ingredientId === recipeIngredientId);
@@ -40,11 +41,28 @@ function matchRecipe(recipe, inventory, resolver, substitutions) {
     }
 
     const candidates = substitutions.get(recipeIngredientId) || [];
+    let bestSubstitute = null;
     for (const candidate of candidates) {
       const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
       if (substituteItem) {
-        return ingredientMatch(ingredient, substituteItem, "substitute", candidate.confidenceScore);
+        const scored = scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts);
+        if (!bestSubstitute || scored.score > bestSubstitute.score) {
+          bestSubstitute = {
+            substituteItem,
+            score: scored.score,
+            context: scored.context,
+            methodCompatible: scored.methodCompatible
+          };
+        }
       }
+    }
+
+    if (bestSubstitute) {
+      return ingredientMatch(ingredient, bestSubstitute.substituteItem, "substitute", bestSubstitute.score, {
+        substitution_method: normalizeCookingMethod(recipe.primaryCookingMethod),
+        substitution_method_compatible: bestSubstitute.methodCompatible,
+        substitution_context: bestSubstitute.context
+      });
     }
 
     return {
@@ -82,7 +100,7 @@ function matchRecipe(recipe, inventory, resolver, substitutions) {
   };
 }
 
-function ingredientMatch(ingredient, inventoryItem, matchType, score) {
+function ingredientMatch(ingredient, inventoryItem, matchType, score, extra = {}) {
   return {
     recipe_ingredient: ingredient.name,
     recipe_ingredient_id: ingredient.canonicalIngredientId || "",
@@ -90,7 +108,8 @@ function ingredientMatch(ingredient, inventoryItem, matchType, score) {
     user_inventory_ingredient_id: inventoryItem.ingredientId,
     match_type: matchType,
     match_score: score,
-    weight: ingredientWeight(ingredient)
+    weight: ingredientWeight(ingredient),
+    ...extra
   };
 }
 
@@ -251,11 +270,61 @@ function buildSubstitutionMap(substitutions) {
       map.set(ingredientId, []);
     }
     map.get(ingredientId).push({
+      ingredientId,
       substituteIngredientId: substitution.substitute_ingredient_id,
       confidenceScore: Number(substitution.confidence_score || 0)
     });
   }
   return map;
+}
+
+function buildSubstitutionContextMap(contexts) {
+  const map = new Map();
+  for (const context of contexts || []) {
+    const ingredientId = String(context.ingredient_id || "").trim();
+    const substituteIngredientId = String(context.substitute_ingredient_id || "").trim();
+    if (!ingredientId || !substituteIngredientId) {
+      continue;
+    }
+    map.set(`${ingredientId}|${substituteIngredientId}`, {
+      compatibleMethods: Array.isArray(context.compatible_methods) ? context.compatible_methods.map(normalizeCookingMethod).filter(Boolean) : [],
+      timeAdjustment: context.time_adjustment || "same",
+      textureImpact: context.texture_impact || "",
+      fatImpact: context.fat_impact || "",
+      notes: context.notes || ""
+    });
+  }
+  return map;
+}
+
+function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
+  const baseScore = clampScore(candidate.confidenceScore);
+  const method = normalizeCookingMethod(recipe.primaryCookingMethod);
+  const context = substitutionContexts.get(`${candidate.ingredientId}|${candidate.substituteIngredientId}`);
+
+  if (!context || !method || context.compatibleMethods.length === 0) {
+    return { score: baseScore, context: context || null, methodCompatible: null };
+  }
+
+  const methodCompatible = context.compatibleMethods.includes(method);
+  const multiplier = methodCompatible ? 1 : 0.45;
+  return {
+    score: Math.round(clampScore(baseScore * multiplier) * 100) / 100,
+    context,
+    methodCompatible
+  };
+}
+
+function normalizeCookingMethod(method) {
+  return String(method || "").trim().toLowerCase();
+}
+
+function clampScore(value) {
+  const score = Number(value || 0);
+  if (!Number.isFinite(score)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, score));
 }
 
 function resolveRecipeIngredientId(ingredient, resolver) {

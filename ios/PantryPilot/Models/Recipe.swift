@@ -14,6 +14,7 @@ final class Recipe {
     var imageURL: String
     var totalTimeMinutes: Int = 0
     var activeTimeMinutes: Int = 0
+    var primaryCookingMethodRaw: String = RecipeCookingMethod.none.rawValue
     var difficultyRaw: String = RecipeDifficulty.medium.rawValue
     var leftoverScore: Double = 50
     @Attribute(.externalStorage) var imageData: Data?
@@ -37,6 +38,7 @@ final class Recipe {
         imageURL: String = "",
         totalTimeMinutes: Int = 0,
         activeTimeMinutes: Int = 0,
+        primaryCookingMethod: RecipeCookingMethod = .none,
         difficulty: RecipeDifficulty = .medium,
         leftoverScore: Double = 50,
         imageData: Data? = nil,
@@ -56,6 +58,7 @@ final class Recipe {
         self.imageURL = imageURL
         self.totalTimeMinutes = totalTimeMinutes
         self.activeTimeMinutes = activeTimeMinutes
+        self.primaryCookingMethodRaw = primaryCookingMethod.rawValue
         self.difficultyRaw = difficulty.rawValue
         self.leftoverScore = leftoverScore
         self.imageData = imageData
@@ -75,6 +78,11 @@ final class Recipe {
         set { difficultyRaw = newValue.rawValue }
     }
 
+    var primaryCookingMethod: RecipeCookingMethod {
+        get { RecipeCookingMethod(rawValue: primaryCookingMethodRaw) ?? .none }
+        set { primaryCookingMethodRaw = newValue.rawValue }
+    }
+
     var workflowSteps: [RecipeWorkflowStep] {
         let decoded = RecipeWorkflowStep.decode(workflowStepsJSON)
         if !decoded.isEmpty {
@@ -89,6 +97,67 @@ final class Recipe {
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.imageURLs.isEmpty }
         workflowStepsJSON = RecipeWorkflowStep.encode(cleanedSteps)
         steps = cleanedSteps.map(\.text).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+}
+
+enum RecipeCookingMethod: String, CaseIterable, Identifiable {
+    case none = ""
+    case stirFry = "stir_fry"
+    case panFry = "pan_fry"
+    case grill = "grill"
+    case bake = "bake"
+    case roast = "roast"
+    case braise = "braise"
+    case stew = "stew"
+    case slowCook = "slow_cook"
+    case soup = "soup"
+    case steam = "steam"
+    case boil = "boil"
+    case hotPot = "hot_pot"
+    case airFry = "air_fry"
+    case deepFry = "deep_fry"
+    case sauce = "sauce"
+    case raw = "raw"
+
+    var id: String { rawValue }
+
+    func displayName(language: String) -> String {
+        switch self {
+        case .none:
+            return L.text("Not specified", language: language)
+        case .stirFry:
+            return L.text("Stir fry", language: language)
+        case .panFry:
+            return L.text("Pan fry", language: language)
+        case .grill:
+            return L.text("Grill", language: language)
+        case .bake:
+            return L.text("Bake", language: language)
+        case .roast:
+            return L.text("Roast", language: language)
+        case .braise:
+            return L.text("Braise", language: language)
+        case .stew:
+            return L.text("Stew", language: language)
+        case .slowCook:
+            return L.text("Slow cook", language: language)
+        case .soup:
+            return L.text("Soup", language: language)
+        case .steam:
+            return L.text("Steam", language: language)
+        case .boil:
+            return L.text("Boil", language: language)
+        case .hotPot:
+            return L.text("Hot pot", language: language)
+        case .airFry:
+            return L.text("Air fry", language: language)
+        case .deepFry:
+            return L.text("Deep fry", language: language)
+        case .sauce:
+            return L.text("Sauce method", language: language)
+        case .raw:
+            return L.text("Raw", language: language)
+        }
     }
 }
 

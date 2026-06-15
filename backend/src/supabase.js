@@ -6,7 +6,7 @@ export async function ensureSupabaseSchema() {
 
 export async function fetchCloudRecipes() {
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
-    restSelectAll("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
+    restSelectAll("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,primary_cooking_method,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
     restSelectAll("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
     restSelectAll("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
   ]);
@@ -29,6 +29,7 @@ export async function fetchCloudRecipes() {
     updatedAt: recipe.updated_at,
     totalTimeMinutes: Number(recipe.total_time_minutes || 0),
     activeTimeMinutes: Number(recipe.active_time_minutes || 0),
+    primaryCookingMethod: recipe.primary_cooking_method || "",
     difficulty: recipe.difficulty || "",
     leftoverScore: Number(recipe.leftover_score || 0),
     cleanupScore: Number(recipe.cleanup_score || 0),
@@ -62,6 +63,7 @@ export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
       video_url: recipe.videoURL,
       total_time_minutes: recipe.totalTimeMinutes,
       active_time_minutes: recipe.activeTimeMinutes,
+      primary_cooking_method: recipe.primaryCookingMethod,
       difficulty: recipe.difficulty,
       leftover_score: recipe.leftoverScore,
       cleanup_score: recipe.cleanupScore,
@@ -188,13 +190,28 @@ export async function recipeCount() {
 }
 
 export async function fetchMatchingRules() {
-  const [ingredients, aliases, substitutions] = await Promise.all([
+  const [ingredients, aliases, substitutions, substitutionContexts] = await Promise.all([
     restSelectAll("ingredients", "select=ingredient_id,canonical_name,category,canonical_unit&order=ingredient_id.asc"),
     restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
-    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc")
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc"),
+    fetchSubstitutionContexts()
   ]);
 
-  return { ingredients, aliases, substitutions };
+  return { ingredients, aliases, substitutions, substitutionContexts };
+}
+
+async function fetchSubstitutionContexts() {
+  try {
+    return await restSelectAll(
+      "ingredient_substitution_contexts",
+      "select=ingredient_id,substitute_ingredient_id,compatible_methods,time_adjustment,texture_impact,fat_impact,notes&order=ingredient_id.asc,substitute_ingredient_id.asc"
+    );
+  } catch (error) {
+    if (String(error?.message || "").includes("ingredient_substitution_contexts")) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function fetchIngredientUnitConversions(ingredientId) {
@@ -445,6 +462,7 @@ function normalizeRecipeInput(input, recipeId) {
     videoURL: typeof input.videoURL === "string" ? input.videoURL.trim() : "",
     totalTimeMinutes: Number(input.totalTimeMinutes || 0),
     activeTimeMinutes: Number(input.activeTimeMinutes || 0),
+    primaryCookingMethod: normalizeCookingMethod(input.primaryCookingMethod),
     difficulty: typeof input.difficulty === "string" ? input.difficulty.trim() : "",
     leftoverScore: Number(input.leftoverScore || 0),
     cleanupScore: Number(input.cleanupScore || 0),
@@ -517,6 +535,34 @@ function normalizeStepPhase(phase) {
     return "FINISH";
   }
   return ["PLANNING", "PREP", "COOK", "FINISH"].includes(value) ? value : "COOK";
+}
+
+function normalizeCookingMethod(method) {
+  const value = String(method || "").trim().toLowerCase();
+  const allowed = new Set([
+    "",
+    "stir_fry",
+    "pan_fry",
+    "grill",
+    "bake",
+    "roast",
+    "braise",
+    "stew",
+    "slow_cook",
+    "soup",
+    "steam",
+    "boil",
+    "hot_pot",
+    "air_fry",
+    "deep_fry",
+    "poach",
+    "smoke",
+    "quick_boil",
+    "sauce",
+    "stuffing",
+    "raw"
+  ]);
+  return allowed.has(value) ? value : "";
 }
 
 function sanitizeFileName(fileName) {

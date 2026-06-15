@@ -457,6 +457,7 @@ struct RecipeCloudSync {
             localRecipe.videoURL = cloudRecipe.videoURL
             localRecipe.totalTimeMinutes = cloudRecipe.totalTimeMinutes
             localRecipe.activeTimeMinutes = cloudRecipe.activeTimeMinutes
+            localRecipe.primaryCookingMethod = cloudRecipe.recipeCookingMethod
             localRecipe.difficulty = cloudRecipe.recipeDifficulty
             localRecipe.leftoverScore = cloudRecipe.leftoverScore
             if !cloudRecipe.imageURL.isEmpty,
@@ -645,6 +646,7 @@ struct CloudRecipeSavePayload: Encodable {
     let videoURL: String
     let totalTimeMinutes: Int
     let activeTimeMinutes: Int
+    let primaryCookingMethod: String
     let difficulty: String
     let leftoverScore: Double
     let ingredients: [Ingredient]
@@ -657,6 +659,7 @@ struct CloudRecipeSavePayload: Encodable {
         videoURL = recipe.videoURL
         totalTimeMinutes = recipe.totalTimeMinutes
         activeTimeMinutes = recipe.activeTimeMinutes
+        primaryCookingMethod = recipe.primaryCookingMethod.rawValue
         difficulty = recipe.difficulty.rawValue
         leftoverScore = recipe.leftoverScore
         ingredients = recipe.ingredients.enumerated().map { index, ingredient in
@@ -718,14 +721,50 @@ struct CloudRecipe: Decodable {
     let videoURL: String
     let totalTimeMinutes: Int
     let activeTimeMinutes: Int
+    let primaryCookingMethod: String
     let difficulty: String
     let leftoverScore: Double
     let updatedAt: String
     let ingredients: [CloudRecipeIngredient]
     let steps: [CloudRecipeStep]
 
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case imageURL
+        case videoURL
+        case totalTimeMinutes
+        case activeTimeMinutes
+        case primaryCookingMethod
+        case difficulty
+        case leftoverScore
+        case updatedAt
+        case ingredients
+        case steps
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        imageURL = try container.decode(String.self, forKey: .imageURL)
+        videoURL = try container.decode(String.self, forKey: .videoURL)
+        totalTimeMinutes = try container.decode(Int.self, forKey: .totalTimeMinutes)
+        activeTimeMinutes = try container.decode(Int.self, forKey: .activeTimeMinutes)
+        primaryCookingMethod = try container.decodeIfPresent(String.self, forKey: .primaryCookingMethod) ?? ""
+        difficulty = try container.decode(String.self, forKey: .difficulty)
+        leftoverScore = try container.decode(Double.self, forKey: .leftoverScore)
+        updatedAt = try container.decode(String.self, forKey: .updatedAt)
+        ingredients = try container.decode([CloudRecipeIngredient].self, forKey: .ingredients)
+        steps = try container.decode([CloudRecipeStep].self, forKey: .steps)
+    }
+
     var recipeDifficulty: RecipeDifficulty {
         RecipeDifficulty.allCases.first { $0.rawValue.caseInsensitiveCompare(difficulty) == .orderedSame } ?? .medium
+    }
+
+    var recipeCookingMethod: RecipeCookingMethod {
+        RecipeCookingMethod.allCases.first { $0.rawValue.caseInsensitiveCompare(primaryCookingMethod) == .orderedSame } ?? .none
     }
 }
 
@@ -798,6 +837,7 @@ struct CloudRecipeStep: Decodable {
 struct RecipeMetricsEditor: View {
     @Binding var totalTimeMinutes: Int
     @Binding var activeTimeMinutes: Int
+    @Binding var primaryCookingMethod: RecipeCookingMethod
     @Binding var difficulty: RecipeDifficulty
     @Binding var leftoverScore: Double
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
@@ -817,6 +857,13 @@ struct RecipeMetricsEditor: View {
                 in: 0...360,
                 step: 5
             )
+
+            Picker(L.text("Primary cooking method", language: appLanguage), selection: $primaryCookingMethod) {
+                ForEach(RecipeCookingMethod.allCases) { method in
+                    Text(method.displayName(language: appLanguage)).tag(method)
+                }
+            }
+            .pickerStyle(.menu)
 
             Picker(L.text("Difficulty", language: appLanguage), selection: $difficulty) {
                 ForEach(RecipeDifficulty.allCases) { difficulty in
@@ -985,6 +1032,7 @@ struct AddRecipeView: View {
     @State private var videoURL = ""
     @State private var totalTimeMinutes = 30
     @State private var activeTimeMinutes = 20
+    @State private var primaryCookingMethod = RecipeCookingMethod.none
     @State private var difficulty = RecipeDifficulty.medium
     @State private var leftoverScore = 50.0
     @State private var selectedPhoto: PhotosPickerItem?
@@ -1004,6 +1052,7 @@ struct AddRecipeView: View {
                 RecipeMetricsEditor(
                     totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
+                    primaryCookingMethod: $primaryCookingMethod,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
                 )
@@ -1097,6 +1146,7 @@ struct AddRecipeView: View {
             videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
             totalTimeMinutes: totalTimeMinutes,
             activeTimeMinutes: activeTimeMinutes,
+            primaryCookingMethod: primaryCookingMethod,
             difficulty: difficulty,
             leftoverScore: leftoverScore,
             imageData: selectedImageData,
@@ -1158,6 +1208,7 @@ struct EditRecipeView: View {
     @State private var videoURL: String
     @State private var totalTimeMinutes: Int
     @State private var activeTimeMinutes: Int
+    @State private var primaryCookingMethod: RecipeCookingMethod
     @State private var difficulty: RecipeDifficulty
     @State private var leftoverScore: Double
     @State private var selectedPhoto: PhotosPickerItem?
@@ -1182,6 +1233,7 @@ struct EditRecipeView: View {
         _videoURL = State(initialValue: recipe.videoURL)
         _totalTimeMinutes = State(initialValue: recipe.totalTimeMinutes)
         _activeTimeMinutes = State(initialValue: recipe.activeTimeMinutes)
+        _primaryCookingMethod = State(initialValue: recipe.primaryCookingMethod)
         _difficulty = State(initialValue: recipe.difficulty)
         _leftoverScore = State(initialValue: recipe.leftoverScore)
         _selectedImageData = State(initialValue: recipe.imageData)
@@ -1198,6 +1250,7 @@ struct EditRecipeView: View {
                 RecipeMetricsEditor(
                     totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
+                    primaryCookingMethod: $primaryCookingMethod,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
                 )
@@ -1300,6 +1353,7 @@ struct EditRecipeView: View {
         recipe.videoURL = videoURL.trimmingCharacters(in: .whitespacesAndNewlines)
         recipe.totalTimeMinutes = totalTimeMinutes
         recipe.activeTimeMinutes = activeTimeMinutes
+        recipe.primaryCookingMethod = primaryCookingMethod
         recipe.difficulty = difficulty
         recipe.leftoverScore = leftoverScore
         recipe.imageData = selectedImageData
@@ -1518,6 +1572,9 @@ struct RecipeMetricsSection: View {
         Section(L.text("Recipe metrics", language: appLanguage)) {
             metricRow(title: "Total Time", value: "\(recipe.totalTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Active Time", value: "\(recipe.activeTimeMinutes) \(L.text("minutes", language: appLanguage))")
+            if recipe.primaryCookingMethod != .none {
+                metricRow(title: "Primary cooking method", value: recipe.primaryCookingMethod.displayName(language: appLanguage))
+            }
             metricRow(title: "Difficulty", value: recipe.difficulty.displayName(language: appLanguage))
             metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
             metricRow(title: "Leftover Score", value: "\(Int(recipe.leftoverScore.rounded()))")

@@ -568,7 +568,7 @@ const recipes = [
     optional("scallion", 1, "stalk"),
     pantry("salt", 1, "tsp"),
     pantry("oil", 1, "tbsp")
-  ]),
+  ], "stir_fry"),
   recipe("chicken_curry", "Chicken Curry", 45, 20, "medium", 0.9, 0.5, [
     main("chicken_thigh", 1, "lb"),
     main("potato", 2, "piece"),
@@ -576,7 +576,7 @@ const recipes = [
     optional("carrot", 1, "piece"),
     pantry("salt", 1, "tsp"),
     pantry("oil", 1, "tbsp")
-  ]),
+  ], "stew"),
   recipe("mapo_tofu", "麻婆豆腐", 25, 18, "medium", 0.8, 0.5, [
     main("soft_tofu", 1, "box"),
     main("ground_pork", 0.5, "lb"),
@@ -584,7 +584,7 @@ const recipes = [
     pantry("doubanjiang", 2, "tbsp"),
     pantry("soy_sauce", 1, "tbsp"),
     pantry("oil", 1, "tbsp")
-  ]),
+  ], "braise"),
   recipe("garlic_shrimp_pasta", "Garlic Shrimp Pasta", 30, 20, "medium", 0.4, 0.5, [
     main("shrimp", 0.75, "lb"),
     main("spaghetti", 8, "oz"),
@@ -592,7 +592,7 @@ const recipes = [
     optional("lemon", 0.5, "piece"),
     pantry("butter", 2, "tbsp"),
     pantry("black_pepper", 1, "tsp")
-  ]),
+  ], "pan_fry"),
   recipe("chicken_broccoli_stir_fry", "Chicken Broccoli Stir Fry", 25, 20, "easy", 0.7, 0.6, [
     main("chicken_breast", 1, "lb"),
     main("broccoli", 2, "cup"),
@@ -600,7 +600,7 @@ const recipes = [
     pantry("soy_sauce", 2, "tbsp"),
     pantry("oil", 1, "tbsp"),
     pantry("sugar", 1, "tsp")
-  ]),
+  ], "stir_fry"),
   recipe("fried_rice", "Egg Fried Rice", 20, 15, "easy", 0.9, 0.7, [
     main("rice", 2, "cup"),
     main("egg", 2, "piece"),
@@ -608,7 +608,7 @@ const recipes = [
     optional("carrot", 0.5, "cup"),
     pantry("soy_sauce", 1, "tbsp"),
     pantry("oil", 1, "tbsp")
-  ]),
+  ], "stir_fry"),
   recipe("creamy_mushroom_pasta", "Creamy Mushroom Pasta", 35, 25, "medium", 0.5, 0.4, [
     main("pasta", 8, "oz"),
     main("mushroom", 2, "cup"),
@@ -616,7 +616,7 @@ const recipes = [
     optional("garlic", 2, "clove"),
     pantry("butter", 1, "tbsp"),
     pantry("black_pepper", 1, "tsp")
-  ]),
+  ], "sauce"),
   recipe("tofu_vegetable_bowl", "Tofu Vegetable Bowl", 30, 20, "easy", 0.8, 0.6, [
     main("tofu", 1, "box"),
     main("rice", 1, "cup"),
@@ -624,7 +624,7 @@ const recipes = [
     optional("mushroom", 1, "cup"),
     pantry("soy_sauce", 1, "tbsp"),
     pantry("sesame_oil", 1, "tsp")
-  ]),
+  ], "stir_fry"),
   recipe("cucumber_salad", "拍黄瓜", 10, 10, "easy", 0.3, 0.9, [
     main("cucumber", 1, "piece"),
     optional("garlic", 1, "clove"),
@@ -632,7 +632,7 @@ const recipes = [
     pantry("soy_sauce", 1, "tbsp"),
     pantry("sugar", 1, "tsp"),
     pantry("chili_oil", 1, "tsp")
-  ]),
+  ], "raw"),
   recipe("beef_taco_bowl", "Beef Taco Bowl", 30, 22, "easy", 0.8, 0.5, [
     main("ground_beef", 1, "lb"),
     main("rice", 1, "cup"),
@@ -640,7 +640,7 @@ const recipes = [
     optional("lettuce", 1, "cup"),
     optional("cheese", 0.5, "cup"),
     pantry("oil", 1, "tbsp")
-  ]),
+  ], "pan_fry"),
   recipe("tomato_tofu_soup", "番茄豆腐汤", 25, 15, "easy", 0.6, 0.8, [
     main("tomato", 2, "piece"),
     main("tofu", 1, "box"),
@@ -648,7 +648,7 @@ const recipes = [
     optional("scallion", 1, "stalk"),
     pantry("salt", 1, "tsp"),
     pantry("oil", 1, "tsp")
-  ]),
+  ], "soup"),
   recipe("lemon_parsley_chicken", "Lemon Parsley Chicken", 35, 15, "easy", 0.7, 0.7, [
     main("chicken_breast", 1, "lb"),
     main("lemon", 1, "piece"),
@@ -656,7 +656,7 @@ const recipes = [
     optional("garlic", 2, "clove"),
     pantry("oil", 1, "tbsp"),
     pantry("black_pepper", 1, "tsp")
-  ])
+  ], "pan_fry")
 ];
 
 await bootstrapSchema();
@@ -752,6 +752,7 @@ async function bootstrapSchema() {
 
     alter table pantry_recipes add column if not exists total_time_minutes integer not null default 0;
     alter table pantry_recipes add column if not exists active_time_minutes integer not null default 0;
+    alter table pantry_recipes add column if not exists primary_cooking_method text not null default '';
     alter table pantry_recipes add column if not exists difficulty text not null default '';
     alter table pantry_recipes add column if not exists leftover_score double precision not null default 0;
     alter table pantry_recipes add column if not exists cleanup_score double precision not null default 0;
@@ -819,17 +820,18 @@ async function seedRecipes() {
   await query(`
     insert into pantry_recipes (
       recipe_id, name, image_url, video_url, updated_at, active,
-      total_time_minutes, active_time_minutes, difficulty, leftover_score, cleanup_score
+      total_time_minutes, active_time_minutes, primary_cooking_method, difficulty, leftover_score, cleanup_score
     )
     values ${recipes.map((item) => `(
       ${sqlString(item.id)}, ${sqlString(item.name)}, '', '', now(), true,
-      ${sqlNumber(item.totalTimeMinutes, 0)}, ${sqlNumber(item.activeTimeMinutes, 0)}, ${sqlString(item.difficulty)},
+      ${sqlNumber(item.totalTimeMinutes, 0)}, ${sqlNumber(item.activeTimeMinutes, 0)}, ${sqlString(item.primaryCookingMethod)}, ${sqlString(item.difficulty)},
       ${sqlNumber(item.leftoverScore, 0)}, ${sqlNumber(item.cleanupScore, 0)}
     )`).join(",\n")}
     on conflict (recipe_id) do update set
       name = excluded.name,
       total_time_minutes = excluded.total_time_minutes,
       active_time_minutes = excluded.active_time_minutes,
+      primary_cooking_method = excluded.primary_cooking_method,
       difficulty = excluded.difficulty,
       leftover_score = excluded.leftover_score,
       cleanup_score = excluded.cleanup_score,
@@ -870,8 +872,8 @@ async function seedRecipes() {
   `);
 }
 
-function recipe(id, name, totalTimeMinutes, activeTimeMinutes, difficulty, leftoverScore, cleanupScore, recipeIngredients) {
-  return { id, name, totalTimeMinutes, activeTimeMinutes, difficulty, leftoverScore, cleanupScore, ingredients: recipeIngredients };
+function recipe(id, name, totalTimeMinutes, activeTimeMinutes, difficulty, leftoverScore, cleanupScore, recipeIngredients, primaryCookingMethod = "") {
+  return { id, name, totalTimeMinutes, activeTimeMinutes, primaryCookingMethod, difficulty, leftoverScore, cleanupScore, ingredients: recipeIngredients };
 }
 
 function main(ingredientId, quantity, unit) {

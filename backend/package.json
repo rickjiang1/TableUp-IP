@@ -10,7 +10,8 @@
     "seed:matching": "node src/seed-matching-samples.js",
     "seed:unit-conversions": "node src/seed-unit-conversions.js",
     "seed:ingredient-substitutions": "node src/seed-ingredient-substitutions.js",
-    "seed:cooking-profiles": "node src/seed-cooking-profiles.js"
+    "seed:cooking-profiles": "node src/seed-cooking-profiles.js",
+    "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
