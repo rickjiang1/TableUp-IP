@@ -82,7 +82,7 @@ export const averagePieceGrams = {
 export const specificConversions = [
   ...rules("garlic", "clove", [
     ["clove", 1, "exact", "identity"],
-    ["piece", 1, "average", "piece usually means one clove for peeled garlic"],
+    ["piece", 10, "average", "piece usually means one whole garlic bulb/head in Chinese inventory input"],
     ["head", 10, "average", "1 head garlic is about 10 cloves"],
     ["bulb", 10, "average", "1 bulb garlic is about 10 cloves"],
     ["whole", 10, "average", "1 whole garlic bulb is about 10 cloves"]

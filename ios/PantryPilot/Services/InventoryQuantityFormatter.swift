@@ -69,7 +69,6 @@ enum InventoryQuantityFormatter {
             return false
         }
 
-        let delta = abs(ingredient.quantity - ingredient.canonicalQuantity)
-        return delta > 0.0001
+        return true
     }
 }

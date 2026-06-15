@@ -192,7 +192,7 @@ struct IngredientDetailView: View {
 
         let rawUnit = IngredientNormalizer.normalizeUnit(draftUnit)
         let canonicalUnit = IngredientNormalizer.normalizeUnit(draftCanonicalUnit)
-        guard rawUnit != canonicalUnit, abs(draftQuantity - draftCanonicalQuantity) > 0.0001 else {
+        guard rawUnit != canonicalUnit else {
             return nil
         }
 
