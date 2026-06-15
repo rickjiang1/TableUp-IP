@@ -249,7 +249,6 @@ struct ScanView: View {
 
     private func saveDetectedItems() async -> ReviewSaveResult {
         do {
-            let matchSummary = await matchDetectedItemsBeforeSave()
             let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
@@ -264,7 +263,6 @@ struct ScanView: View {
                     message: SaveConfirmation(
                         items: result.savedNames,
                         inventoryCount: result.inventoryCount,
-                        matchSummary: matchSummary,
                         language: appLanguage
                     ).message
                 )
@@ -275,82 +273,6 @@ struct ScanView: View {
                 alert: ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
             )
         }
-    }
-
-    private func matchDetectedItemsBeforeSave() async -> IngredientMatchSaveSummary {
-        let client = UnknownIngredientClient()
-        let language = appLanguage
-        var summary = IngredientMatchSaveSummary()
-
-        await withTaskGroup(of: (UUID, IngredientCandidate?).self) { group in
-            for item in detectedItems where item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let query = item.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? item.name : item.rawName
-                let itemID = item.id
-                group.addTask {
-                    guard let candidate = try? await client.fetchIngredientCandidates(
-                        query: query,
-                        language: language,
-                        limit: 1
-                    ).first else {
-                        return (itemID, nil)
-                    }
-                    return (itemID, candidate)
-                }
-            }
-
-            for await (itemID, candidate) in group {
-                guard let index = detectedItems.firstIndex(where: { $0.id == itemID }) else {
-                    continue
-                }
-                let itemName = detectedItems[index].name
-
-                guard let candidate else {
-                    summary.unmatched.append(itemName)
-                    continue
-                }
-
-                if candidate.score >= 0.9 {
-                    detectedItems[index].canonicalIngredientId = candidate.ingredientId
-                    detectedItems[index].canonicalIngredientDisplayName = candidate.displayName
-                    detectedItems[index].ingredientMatchType = candidate.reason.contains("alias") ? "fuzzy_alias" : "fuzzy"
-                    detectedItems[index].ingredientMatchScore = candidate.score
-                    detectedItems[index].matchedAlias = candidate.matchedAlias ?? ""
-                    summary.autoMatched.append(
-                        IngredientMatchSummaryLine(
-                            name: itemName,
-                            matchName: candidate.displayName,
-                            score: candidate.score
-                        )
-                    )
-                } else if candidate.score >= 0.7 {
-                    summary.needsReview.append(
-                        IngredientMatchSummaryLine(
-                            name: itemName,
-                            matchName: candidate.displayName,
-                            score: candidate.score
-                        )
-                    )
-                } else {
-                    summary.unmatched.append(itemName)
-                }
-            }
-        }
-
-        let alreadyMatched = detectedItems.filter { item in
-            !item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            !summary.autoMatched.contains(where: { line in line.name == item.name })
-        }
-        for item in alreadyMatched {
-            summary.autoMatched.append(
-                IngredientMatchSummaryLine(
-                    name: item.name,
-                    matchName: item.matchedIngredientDisplayName,
-                    score: item.ingredientMatchScore > 0 ? item.ingredientMatchScore : 1
-                )
-            )
-        }
-
-        return summary
     }
 }
 
@@ -369,45 +291,13 @@ struct SaveConfirmation: Identifiable {
     let id = UUID()
     let items: [String]
     let inventoryCount: Int
-    var matchSummary: IngredientMatchSaveSummary?
     var language: String = AppLanguage.english.rawValue
 
     var message: String {
         let savedText = items.isEmpty ? L.text("Nothing was saved.", language: language) : items.joined(separator: "\n")
         let storageText = "\(L.text("Storage now has", language: language)) \(inventoryCount) \(L.text("item(s).", language: language))"
-        guard let matchSummary else {
-            return "\(savedText)\n\n\(storageText)"
-        }
-        return "\(savedText)\n\n\(matchSummary.message(language: language))\n\n\(storageText)"
-    }
-}
-
-struct IngredientMatchSaveSummary {
-    var autoMatched: [IngredientMatchSummaryLine] = []
-    var needsReview: [IngredientMatchSummaryLine] = []
-    var unmatched: [String] = []
-
-    func message(language: String) -> String {
-        let matchedText = autoMatched.isEmpty
-            ? "\(L.text("Auto matched", language: language)): \(L.text("none", language: language))"
-            : "\(L.text("Auto matched", language: language)):\n" + autoMatched.map(\.displayText).joined(separator: "\n")
-        let reviewText = needsReview.isEmpty
-            ? "\(L.text("Needs manual review", language: language)): \(L.text("none", language: language))"
-            : "\(L.text("Needs manual review", language: language)):\n" + needsReview.map(\.displayText).joined(separator: "\n")
-        let unmatchedText = unmatched.isEmpty
-            ? "\(L.text("Sent to unmatched", language: language)): \(L.text("none", language: language))"
-            : "\(L.text("Sent to unmatched", language: language)):\n" + unmatched.joined(separator: "\n")
-        return [matchedText, reviewText, unmatchedText].joined(separator: "\n\n")
-    }
-}
-
-struct IngredientMatchSummaryLine {
-    let name: String
-    let matchName: String
-    let score: Double
-
-    var displayText: String {
-        "\(name) -> \(matchName) (\(Int((score * 100).rounded()))%)"
+        let reminderText = L.text("Remember to match ingredients to the ingredient library.", language: language)
+        return "\(savedText)\n\n\(reminderText)\n\n\(storageText)"
     }
 }
 

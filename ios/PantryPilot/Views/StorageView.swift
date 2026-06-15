@@ -425,7 +425,7 @@ private enum StorageTab: String, CaseIterable, Identifiable {
         case .inventory:
             L.text("Inventory", language: language)
         case .unmatched:
-            L.text("Unmatched", language: language)
+            L.text("Match ingredient library", language: language)
         }
     }
 }
