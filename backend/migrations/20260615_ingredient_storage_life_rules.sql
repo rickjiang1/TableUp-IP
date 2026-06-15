@@ -6,7 +6,6 @@ create table if not exists ingredient_storage_life_rules (
   storage_location text not null default '',
   default_days integer not null,
   condition_state text not null default 'default',
-  aliases text[] not null default '{}',
   priority integer not null default 100,
   notes text not null default '',
   source_name text not null default '',
@@ -22,6 +21,7 @@ alter table ingredient_storage_life_rules add column if not exists source_name t
 alter table ingredient_storage_life_rules add column if not exists source_url text not null default '';
 alter table ingredient_storage_life_rules add column if not exists source_priority integer not null default 100;
 alter table ingredient_storage_life_rules add column if not exists safety_note text not null default '';
+alter table ingredient_storage_life_rules drop column if exists aliases;
 
 create index if not exists ingredient_storage_life_rules_lookup_idx
   on ingredient_storage_life_rules (active, ingredient_id, category, storage_approach, storage_location, priority);

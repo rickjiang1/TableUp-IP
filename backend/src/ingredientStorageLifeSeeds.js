@@ -77,6 +77,8 @@ const supplementalRules = [
 ];
 
 export const ingredientStorageLifeRules = buildRules(source);
+export const ingredientStorageLifeIngredientRows = buildIngredientRows(ingredientStorageLifeRules);
+export const ingredientStorageLifeAliasRows = buildIngredientAliasRows(ingredientStorageLifeRules, ingredientStorageLifeIngredientRows);
 
 function buildRules(foodKeeperData) {
   const categories = new Map(sheetRows(foodKeeperData, "Category").map((row) => [row.ID, row]));
@@ -156,8 +158,9 @@ function baseRuleFields(product, category) {
 
   return {
     ingredient_id: slugify(productName || `foodkeeper_product_${product.ID}`),
+    canonical_name: productName || `FoodKeeper product ${product.ID}`,
     category: categoryName,
-    aliases,
+    sourceAliases: aliases,
     priority: Number(product.ID) || 1000
   };
 }
@@ -193,7 +196,8 @@ function deriveAppCanonicalRows(rows) {
         derivedRows.push({
           ...row,
           ingredient_id: ingredientId,
-          aliases: uniqueText([...row.aliases, ...mapping.appIngredientIds, ...mapping.aliases]),
+          canonical_name: humanizeIngredientId(ingredientId),
+          sourceAliases: uniqueText([...row.sourceAliases, ...mapping.appIngredientIds, ...mapping.aliases]),
           priority: Math.max(1, row.priority - 1),
           notes: appendNote(row.notes, `TableUp canonical mapping from USDA FoodKeeper product '${mapping.sourceIngredientId}'.`)
         });
@@ -206,8 +210,9 @@ function deriveAppCanonicalRows(rows) {
 function supplemental(ingredientId, category, aliases, storageApproach, defaultDays, conditionState, sourceName, sourceUrl, safetyNote) {
   return {
     ingredient_id: ingredientId,
+    canonical_name: humanizeIngredientId(ingredientId),
     category,
-    aliases: uniqueText([ingredientId, ...aliases]),
+    sourceAliases: uniqueText([ingredientId, ...aliases]),
     priority: 20_000,
     storage_approach: storageApproach,
     storage_location: "",
@@ -241,7 +246,7 @@ function mergeSupplementalRules(rows) {
     const winner = chooseConservativeRule(existing, row);
     merged.set(key, {
       ...winner,
-      aliases: uniqueText([...existing.aliases, ...row.aliases]),
+      sourceAliases: uniqueText([...existing.sourceAliases, ...row.sourceAliases]),
       notes: appendNote(winner.notes, conflictNote(existing, row, winner)),
       safety_note: uniqueText([existing.safety_note, row.safety_note, conflictSafetyNote(existing, row)]).join(" ")
     });
@@ -300,6 +305,171 @@ function safetyNoteFor(category, storageApproach, product, metric) {
     notes.push("Garlic-in-oil has botulism risk if mishandled; keep refrigerated or frozen according to source guidance.");
   }
   return uniqueText(notes).join(" ");
+}
+
+function buildIngredientRows(rows) {
+  const byId = new Map();
+  for (const row of rows) {
+    if (isCategoryFallback(row.ingredient_id)) {
+      continue;
+    }
+    const existing = byId.get(row.ingredient_id);
+    if (!existing || row.source_priority < existing.source_priority || row.priority < existing.priority) {
+      byId.set(row.ingredient_id, {
+        ingredient_id: row.ingredient_id,
+        canonical_name: row.canonical_name || humanizeIngredientId(row.ingredient_id),
+        category: appCategory(row.category),
+        canonical_unit: defaultCanonicalUnit(appCategory(row.category)),
+        source_priority: row.source_priority,
+        priority: row.priority
+      });
+    }
+  }
+  return [...byId.values()].sort((left, right) => left.ingredient_id.localeCompare(right.ingredient_id));
+}
+
+function buildIngredientAliasRows(rows, ingredients) {
+  const ingredientById = new Map(ingredients.map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const aliases = new Map();
+  for (const row of rows) {
+    const ingredient = ingredientById.get(row.ingredient_id);
+    if (!ingredient) {
+      continue;
+    }
+    for (const alias of sourceAliasesForAliasTable(row)) {
+      const clean = stringValue(alias).replace(/\s+/g, " ").trim();
+      if (!isUsefulIngredientAlias(clean)) {
+        continue;
+      }
+      const key = clean.toLowerCase();
+      if (aliases.has(key)) {
+        continue;
+      }
+      aliases.set(key, {
+        alias_name: clean,
+        ingredient_id: ingredient.ingredient_id,
+        canonical_name: ingredient.canonical_name,
+        language: aliasLanguage(clean),
+        category: ingredient.category,
+        confidence_score: aliasConfidence(clean, ingredient),
+        verified: true
+      });
+    }
+  }
+  return [...aliases.values()].sort((left, right) =>
+    left.ingredient_id.localeCompare(right.ingredient_id) || left.alias_name.localeCompare(right.alias_name)
+  );
+}
+
+function sourceAliasesForAliasTable(row) {
+  return uniqueText([
+    row.ingredient_id,
+    row.ingredient_id.replace(/_/g, " "),
+    row.canonical_name,
+    ...(row.sourceAliases || [])
+  ]);
+}
+
+function isUsefulIngredientAlias(value) {
+  const clean = stringValue(value);
+  if (!clean) {
+    return false;
+  }
+  const normalized = clean.toLowerCase();
+  const generic = new Set([
+    "fresh", "frozen", "raw", "cooked", "commercial", "commercially", "homemade", "opened", "unopened",
+    "whole", "half", "sliced", "chopped", "diced", "boneless", "bone", "skinless", "skin", "packed",
+    "packaged", "bottled", "canned", "jar", "jars", "in", "or", "and", "etc", "with", "without",
+    "yellow", "white", "red", "green", "brown", "black", "dry", "dried", "sweet", "hot", "plain"
+  ]);
+  if (generic.has(normalized)) {
+    return false;
+  }
+  if (!/[\p{L}\p{N}]/u.test(clean)) {
+    return false;
+  }
+  if (!containsCjk(clean) && clean.length < 3) {
+    return false;
+  }
+  return true;
+}
+
+function aliasConfidence(alias, ingredient) {
+  const normalized = alias.toLowerCase();
+  if (normalized === ingredient.ingredient_id || normalized === ingredient.ingredient_id.replace(/_/g, " ") || normalized === ingredient.canonical_name.toLowerCase()) {
+    return 1;
+  }
+  return containsCjk(alias) ? 0.95 : 0.85;
+}
+
+function aliasLanguage(alias) {
+  const hasChinese = containsCjk(alias);
+  const hasAscii = /[A-Za-z]/.test(alias);
+  if (hasChinese && hasAscii) {
+    return "mixed";
+  }
+  if (hasChinese) {
+    return "zh";
+  }
+  if (hasAscii) {
+    return "en";
+  }
+  return "unknown";
+}
+
+function containsCjk(value) {
+  return /[\u4e00-\u9fff]/.test(String(value || ""));
+}
+
+function isCategoryFallback(ingredientId) {
+  return String(ingredientId || "").endsWith("_category");
+}
+
+function appCategory(category) {
+  const value = stringValue(category).toLowerCase();
+  if (value.includes("meat") || value.includes("poultry")) {
+    return "protein";
+  }
+  if (value.includes("seafood") || value.includes("fish") || value.includes("shellfish")) {
+    return "seafood";
+  }
+  if (value.includes("vegetable") || value.includes("produce / fresh vegetables")) {
+    return "vegetable";
+  }
+  if (value.includes("fruit") || value.includes("produce / fresh fruits")) {
+    return "fruit";
+  }
+  if (value.includes("dairy") || value.includes("eggs")) {
+    return "dairy";
+  }
+  if (value.includes("grain") || value.includes("pasta") || value.includes("baked goods")) {
+    return "grain";
+  }
+  if (value.includes("condiments") || value.includes("sauces")) {
+    return "sauce";
+  }
+  if (value.includes("shelf stable")) {
+    return "pantry";
+  }
+  return "other";
+}
+
+function defaultCanonicalUnit(category) {
+  switch (category) {
+  case "dairy":
+  case "sauce":
+    return "ml";
+  case "spice":
+    return "gram";
+  default:
+    return "gram";
+  }
+}
+
+function humanizeIngredientId(ingredientId) {
+  return stringValue(ingredientId)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function addAlias(aliases, value) {

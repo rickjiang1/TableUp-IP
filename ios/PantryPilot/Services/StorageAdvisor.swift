@@ -50,7 +50,6 @@ private struct CloudStorageLifeRule: Decodable {
     let category: String
     let storageApproach: String
     let defaultDays: Int
-    let aliases: [String]
     let priority: Int
 
     enum CodingKeys: String, CodingKey {
@@ -58,7 +57,6 @@ private struct CloudStorageLifeRule: Decodable {
         case category
         case storageApproach = "storage_approach"
         case defaultDays = "default_days"
-        case aliases
         case priority
     }
 }
@@ -184,8 +182,7 @@ enum StorageAdvisor {
             let grouped = Dictionary(grouping: decoded.rules) { rule in
                 [
                     rule.ingredientId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                    rule.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                    rule.aliases.joined(separator: "|")
+                    rule.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 ].joined(separator: "::")
             }
             cloudShelfLifeRules = grouped.values
@@ -193,7 +190,6 @@ enum StorageAdvisor {
                 .map { rows in
                     IngredientShelfLifeRule(
                         ids: rows.map(\.ingredientId).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
-                        names: rows.flatMap(\.aliases),
                         category: rows.first?.category ?? "",
                         days: Dictionary(uniqueKeysWithValues: rows.compactMap { row in
                             guard let approach = storageApproach(forDatabaseValue: row.storageApproach) else { return nil }

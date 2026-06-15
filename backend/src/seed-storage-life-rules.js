@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { ingredientStorageLifeRules, ingredientStorageLifeSource } from "./ingredientStorageLifeSeeds.js";
+import {
+  ingredientStorageLifeAliasRows,
+  ingredientStorageLifeIngredientRows,
+  ingredientStorageLifeRules,
+  ingredientStorageLifeSource
+} from "./ingredientStorageLifeSeeds.js";
 import { query, sqlBoolean, sqlNumber, sqlString } from "./postgres.js";
 
 const environmentTargets = {
@@ -30,7 +35,10 @@ assertTargetEnvironment(args.environment);
 await bootstrapSchema();
 
 const rows = ingredientStorageLifeRules.flat();
+const ingredientRows = ingredientStorageLifeIngredientRows;
+const aliasRows = ingredientStorageLifeAliasRows;
 if (!args.dryRun) {
+  await seedIngredientData(ingredientRows, aliasRows);
   await clearRules();
   await seedRules(rows);
 }
@@ -41,6 +49,8 @@ console.log(JSON.stringify({
   dryRun: args.dryRun,
   replacedTable: !args.dryRun,
   source: ingredientStorageLifeSource,
+  ingredients: ingredientRows.length,
+  aliases: aliasRows.length,
   rules: rows.length,
   sample: rows.slice(0, 10)
 }, null, 2));
@@ -57,7 +67,6 @@ async function bootstrapSchema() {
       storage_location text not null default '',
       default_days integer not null,
       condition_state text not null default 'default',
-      aliases text[] not null default '{}',
       priority integer not null default 100,
       notes text not null default '',
       source_name text not null default '',
@@ -73,6 +82,29 @@ async function bootstrapSchema() {
     alter table ingredient_storage_life_rules add column if not exists source_url text not null default '';
     alter table ingredient_storage_life_rules add column if not exists source_priority integer not null default 100;
     alter table ingredient_storage_life_rules add column if not exists safety_note text not null default '';
+    alter table ingredient_storage_life_rules drop column if exists aliases;
+
+    create table if not exists ingredients (
+      ingredient_id text primary key,
+      canonical_name text not null,
+      category text not null,
+      canonical_unit text not null default 'gram'
+    );
+
+    alter table ingredients add column if not exists canonical_unit text not null default 'gram';
+
+    create table if not exists ingredient_aliases (
+      alias_name text primary key,
+      ingredient_id text not null references ingredients(ingredient_id) on delete cascade
+    );
+
+    alter table ingredient_aliases add column if not exists canonical_name text not null default '';
+    alter table ingredient_aliases add column if not exists language text not null default 'unknown';
+    alter table ingredient_aliases add column if not exists category text not null default 'other';
+    alter table ingredient_aliases add column if not exists confidence_score double precision not null default 1;
+    alter table ingredient_aliases add column if not exists verified boolean not null default true;
+    alter table ingredient_aliases add column if not exists created_at timestamptz not null default now();
+    alter table ingredient_aliases add column if not exists updated_at timestamptz not null default now();
 
     create index if not exists ingredient_storage_life_rules_lookup_idx
       on ingredient_storage_life_rules (active, ingredient_id, category, storage_approach, storage_location, priority);
@@ -87,6 +119,8 @@ async function bootstrapSchema() {
       );
 
     grant select, insert, update, delete on ingredient_storage_life_rules to anon;
+    grant select, insert, update, delete on ingredients to anon;
+    grant select, insert, update, delete on ingredient_aliases to anon;
   `);
 }
 
@@ -102,7 +136,7 @@ async function seedRules(rows) {
   await query(`
     insert into ingredient_storage_life_rules (
       ingredient_id, category, storage_approach, storage_location,
-      default_days, condition_state, aliases, priority, notes,
+      default_days, condition_state, priority, notes,
       source_name, source_url, source_priority, safety_note, active, updated_at
     )
     values ${rows.map((row) => `(
@@ -112,7 +146,6 @@ async function seedRules(rows) {
       ${sqlString(row.storage_location)},
       ${sqlNumber(row.default_days, 0)},
       ${sqlString(row.condition_state)},
-      ${sqlTextArray(row.aliases)},
       ${sqlNumber(row.priority, 100)},
       ${sqlString(row.notes)},
       ${sqlString(row.source_name)},
@@ -125,7 +158,6 @@ async function seedRules(rows) {
     on conflict (ingredient_id, category, storage_approach, storage_location, condition_state)
     do update set
       default_days = excluded.default_days,
-      aliases = excluded.aliases,
       priority = excluded.priority,
       notes = excluded.notes,
       source_name = excluded.source_name,
@@ -137,9 +169,46 @@ async function seedRules(rows) {
   `);
 }
 
-function sqlTextArray(values) {
-  const items = Array.isArray(values) ? values : [];
-  return `array[${items.map(sqlString).join(", ")}]::text[]`;
+async function seedIngredientData(ingredients, aliases) {
+  if (ingredients.length > 0) {
+    await query(`
+      insert into ingredients (ingredient_id, canonical_name, category, canonical_unit)
+      values ${ingredients.map((row) => `(
+        ${sqlString(row.ingredient_id)},
+        ${sqlString(row.canonical_name)},
+        ${sqlString(row.category)},
+        ${sqlString(row.canonical_unit)}
+      )`).join(",\n")}
+      on conflict (ingredient_id) do nothing;
+    `);
+  }
+
+  for (const chunk of chunks(aliases, 300)) {
+    await query(`
+      insert into ingredient_aliases (
+        alias_name, ingredient_id, canonical_name, language, category, confidence_score, verified, updated_at
+      )
+      values ${chunk.map((row) => `(
+        ${sqlString(row.alias_name)},
+        ${sqlString(row.ingredient_id)},
+        ${sqlString(row.canonical_name)},
+        ${sqlString(row.language)},
+        ${sqlString(row.category)},
+        ${sqlNumber(row.confidence_score, 0.85)},
+        ${sqlBoolean(row.verified)},
+        now()
+      )`).join(",\n")}
+      on conflict (alias_name) do nothing;
+    `);
+  }
+}
+
+function chunks(values, size) {
+  const output = [];
+  for (let index = 0; index < values.length; index += size) {
+    output.push(values.slice(index, index + size));
+  }
+  return output;
 }
 
 function parseArgs(argv) {
