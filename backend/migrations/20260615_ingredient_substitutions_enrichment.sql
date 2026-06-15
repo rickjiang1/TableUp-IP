@@ -5,23 +5,14 @@ create table if not exists ingredient_substitutions (
   primary key (ingredient_id, substitute_ingredient_id)
 );
 
-alter table ingredient_substitutions add column if not exists substitution_score integer;
 alter table ingredient_substitutions add column if not exists substitution_type text not null default 'same_family';
 alter table ingredient_substitutions add column if not exists replacement_ratio text not null default '1:1';
 alter table ingredient_substitutions add column if not exists recipe_category text not null default 'cooking';
 alter table ingredient_substitutions add column if not exists notes text not null default '';
 alter table ingredient_substitutions add column if not exists source_name text not null default '';
 alter table ingredient_substitutions add column if not exists source_url text not null default '';
-alter table ingredient_substitutions add column if not exists confidence_level text not null default 'medium';
 alter table ingredient_substitutions add column if not exists created_at timestamptz not null default now();
 alter table ingredient_substitutions add column if not exists updated_at timestamptz not null default now();
-
-update ingredient_substitutions
-set substitution_score = round(confidence_score * 100)::integer
-where substitution_score is null;
-
-alter table ingredient_substitutions alter column substitution_score set not null;
-alter table ingredient_substitutions alter column substitution_score set default 0;
 
 do $$
 begin
@@ -55,7 +46,10 @@ alter table ingredient_substitutions
   drop constraint if exists ingredient_substitutions_score_check;
 alter table ingredient_substitutions
   add constraint ingredient_substitutions_score_check
-  check (substitution_score >= 0 and substitution_score <= 100);
+  check (confidence_score >= 0 and confidence_score <= 1);
+
+alter table ingredient_substitutions drop column if exists substitution_score;
+alter table ingredient_substitutions drop column if exists confidence_level;
 
 create table if not exists ingredient_substitution_combinations (
   combination_id text primary key,
@@ -104,7 +98,7 @@ create table if not exists ingredient_substitution_components (
 );
 
 create index if not exists ingredient_substitutions_lookup_idx
-  on ingredient_substitutions (ingredient_id, recipe_category, substitution_score desc);
+  on ingredient_substitutions (ingredient_id, recipe_category, confidence_score desc);
 
 create index if not exists ingredient_substitution_combinations_lookup_idx
   on ingredient_substitution_combinations (ingredient_id, recipe_category, substitution_score desc)

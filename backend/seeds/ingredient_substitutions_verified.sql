@@ -29,14 +29,14 @@ where source_name = '';
 with rows (
   ingredient_id,
   substitute_ingredient_id,
-  substitution_score,
+  score_percent,
   substitution_type,
   replacement_ratio,
   recipe_category,
   notes,
   source_name,
   source_url,
-  confidence_level
+  source_confidence
 ) as (
   values
     ('soy_sauce', 'tamari', 90, 'flavor_similar', 'Start 1:1, then adjust salt to taste', 'sauce', 'Both provide salty umami. Tamari is often thicker, mellower, and can be less salty, so seasoning may need adjustment.', 'Serious Eats', 'https://www.seriouseats.com/tamari-vs-soy-sauce-11987350', 'high'),
@@ -128,41 +128,35 @@ insert into ingredient_substitutions (
   ingredient_id,
   substitute_ingredient_id,
   confidence_score,
-  substitution_score,
   substitution_type,
   replacement_ratio,
   recipe_category,
   notes,
   source_name,
   source_url,
-  confidence_level,
   updated_at
 )
 select
   rows.ingredient_id,
   rows.substitute_ingredient_id,
-  rows.substitution_score / 100.0,
-  rows.substitution_score,
+  rows.score_percent / 100.0,
   rows.substitution_type,
   rows.replacement_ratio,
   rows.recipe_category,
   rows.notes,
   rows.source_name,
   rows.source_url,
-  rows.confidence_level,
   now()
 from rows
 where exists (select 1 from ingredients where ingredients.ingredient_id = rows.ingredient_id)
   and exists (select 1 from ingredients where ingredients.ingredient_id = rows.substitute_ingredient_id)
 on conflict (ingredient_id, substitute_ingredient_id, recipe_category) do update set
   confidence_score = excluded.confidence_score,
-  substitution_score = excluded.substitution_score,
   substitution_type = excluded.substitution_type,
   replacement_ratio = excluded.replacement_ratio,
   notes = excluded.notes,
   source_name = excluded.source_name,
   source_url = excluded.source_url,
-  confidence_level = excluded.confidence_level,
   updated_at = now();
 
 with combos (

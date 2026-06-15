@@ -153,13 +153,13 @@ async function sampleSubstitutions() {
     select
       ingredient_id,
       substitute_ingredient_id,
-      substitution_score,
+      confidence_score,
       substitution_type,
       recipe_category,
       source_name
     from ingredient_substitutions
     where source_name <> ''
-    order by ingredient_id, substitution_score desc
+    order by ingredient_id, confidence_score desc
     limit 20
   `);
 }
