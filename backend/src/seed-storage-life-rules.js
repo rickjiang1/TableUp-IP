@@ -34,13 +34,15 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 assertTargetEnvironment(args.environment);
 await bootstrapSchema();
 
-const rows = ingredientStorageLifeRules.flat();
+const rows = prepareStorageRows(ingredientStorageLifeRules.flat());
 const ingredientRows = ingredientStorageLifeIngredientRows;
 const aliasRows = ingredientStorageLifeAliasRows;
 if (!args.dryRun) {
   await seedIngredientData(ingredientRows, aliasRows);
   await clearRules();
+  await ensureRuleUniqueIndex();
   await seedRules(rows);
+  await enforceRelationships();
 }
 
 console.log(JSON.stringify({
@@ -61,7 +63,7 @@ async function bootstrapSchema() {
 
     create table if not exists ingredient_storage_life_rules (
       id uuid primary key default gen_random_uuid(),
-      ingredient_id text not null default '',
+      ingredient_id text,
       category text not null default '',
       storage_approach text not null,
       storage_location text not null default '',
@@ -83,19 +85,12 @@ async function bootstrapSchema() {
     alter table ingredient_storage_life_rules add column if not exists source_priority integer not null default 100;
     alter table ingredient_storage_life_rules add column if not exists safety_note text not null default '';
     alter table ingredient_storage_life_rules drop column if exists aliases;
-
-    create table if not exists ingredients (
-      ingredient_id text primary key,
-      canonical_name text not null,
-      category text not null,
-      canonical_unit text not null default 'gram'
-    );
-
-    alter table ingredients add column if not exists canonical_unit text not null default 'gram';
+    alter table ingredient_storage_life_rules alter column ingredient_id drop not null;
+    alter table ingredient_storage_life_rules alter column ingredient_id drop default;
 
     create table if not exists ingredient_aliases (
       alias_name text primary key,
-      ingredient_id text not null references ingredients(ingredient_id) on delete cascade
+      ingredient_id text not null
     );
 
     alter table ingredient_aliases add column if not exists canonical_name text not null default '';
@@ -106,26 +101,53 @@ async function bootstrapSchema() {
     alter table ingredient_aliases add column if not exists created_at timestamptz not null default now();
     alter table ingredient_aliases add column if not exists updated_at timestamptz not null default now();
 
+    grant select, insert, update, delete on ingredient_storage_life_rules to anon;
+    grant select, insert, update, delete on ingredient_aliases to anon;
+  `);
+  await ensureIngredientsTable();
+  await query(`
+    update ingredient_storage_life_rules
+    set ingredient_id = null
+    where ingredient_id = ''
+       or ingredient_id like '%\\_category' escape '\\';
+
     create index if not exists ingredient_storage_life_rules_lookup_idx
       on ingredient_storage_life_rules (active, ingredient_id, category, storage_approach, storage_location, priority);
 
-    create unique index if not exists ingredient_storage_life_rules_unique_idx
-      on ingredient_storage_life_rules (
-        ingredient_id,
-        category,
-        storage_approach,
-        storage_location,
-        condition_state
-      );
+    drop index if exists ingredient_storage_life_rules_unique_idx;
 
-    grant select, insert, update, delete on ingredient_storage_life_rules to anon;
     grant select, insert, update, delete on ingredients to anon;
-    grant select, insert, update, delete on ingredient_aliases to anon;
+  `);
+}
+
+async function ensureIngredientsTable() {
+  await query(`
+    create table if not exists ingredients (
+      ingredient_id text primary key,
+      canonical_name text not null,
+      category text not null,
+      canonical_unit text not null default 'gram'
+    );
+
+    alter table ingredients add column if not exists canonical_unit text not null default 'gram';
   `);
 }
 
 async function clearRules() {
   await query("delete from ingredient_storage_life_rules;");
+}
+
+async function ensureRuleUniqueIndex() {
+  await query(`
+    create unique index if not exists ingredient_storage_life_rules_unique_idx
+      on ingredient_storage_life_rules (
+        coalesce(ingredient_id, ''),
+        category,
+        storage_approach,
+        storage_location,
+        condition_state
+      );
+  `);
 }
 
 async function seedRules(rows) {
@@ -140,7 +162,7 @@ async function seedRules(rows) {
       source_name, source_url, source_priority, safety_note, active, updated_at
     )
     values ${rows.map((row) => `(
-      ${sqlString(row.ingredient_id)},
+      ${sqlNullableString(storageRuleIngredientId(row))},
       ${sqlString(row.category)},
       ${sqlString(row.storage_approach)},
       ${sqlString(row.storage_location)},
@@ -155,7 +177,13 @@ async function seedRules(rows) {
       ${sqlBoolean(row.active)},
       now()
     )`).join(",\n")}
-    on conflict (ingredient_id, category, storage_approach, storage_location, condition_state)
+    on conflict (
+      coalesce(ingredient_id, ''),
+      category,
+      storage_approach,
+      storage_location,
+      condition_state
+    )
     do update set
       default_days = excluded.default_days,
       priority = excluded.priority,
@@ -167,6 +195,56 @@ async function seedRules(rows) {
       active = excluded.active,
       updated_at = now();
   `);
+}
+
+async function enforceRelationships() {
+  await query(`
+    do $$
+    begin
+      if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'ingredient_storage_life_rules_ingredient_fk'
+      ) then
+        alter table ingredient_storage_life_rules
+          add constraint ingredient_storage_life_rules_ingredient_fk
+          foreign key (ingredient_id)
+          references ingredients(ingredient_id)
+          on delete cascade;
+      end if;
+    end $$;
+  `);
+}
+
+function storageRuleIngredientId(row) {
+  const ingredientId = String(row?.ingredient_id || "").trim();
+  return ingredientId && !ingredientId.endsWith("_category") ? ingredientId : null;
+}
+
+function prepareStorageRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const normalized = {
+      ...row,
+      ingredient_id: storageRuleIngredientId(row)
+    };
+    const key = [
+      normalized.ingredient_id || "",
+      normalized.category || "",
+      normalized.storage_approach || "",
+      normalized.storage_location || "",
+      normalized.condition_state || ""
+    ].join("::");
+    const existing = byKey.get(key);
+    if (!existing || Number(normalized.priority ?? 100) < Number(existing.priority ?? 100)) {
+      byKey.set(key, normalized);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+function sqlNullableString(value) {
+  return value === null || value === undefined ? "null" : sqlString(value);
 }
 
 async function seedIngredientData(ingredients, aliases) {

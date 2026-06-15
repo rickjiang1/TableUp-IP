@@ -46,7 +46,7 @@ private struct CloudStorageLifeRuleResponse: Decodable {
 }
 
 private struct CloudStorageLifeRule: Decodable {
-    let ingredientId: String
+    let ingredientId: String?
     let category: String
     let storageApproach: String
     let defaultDays: Int
@@ -181,7 +181,7 @@ enum StorageAdvisor {
             let decoded = try JSONDecoder().decode(CloudStorageLifeRuleResponse.self, from: data)
             let grouped = Dictionary(grouping: decoded.rules) { rule in
                 [
-                    rule.ingredientId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    (rule.ingredientId ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                     rule.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 ].joined(separator: "::")
             }
@@ -189,7 +189,7 @@ enum StorageAdvisor {
                 .sorted { ($0.first?.priority ?? 100) < ($1.first?.priority ?? 100) }
                 .map { rows in
                     IngredientShelfLifeRule(
-                        ids: rows.map(\.ingredientId).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                        ids: rows.compactMap(\.ingredientId).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
                         category: rows.first?.category ?? "",
                         days: Dictionary(uniqueKeysWithValues: rows.compactMap { row in
                             guard let approach = storageApproach(forDatabaseValue: row.storageApproach) else { return nil }
