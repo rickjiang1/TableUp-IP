@@ -1,0 +1,83 @@
+ingredient_id,canonical_name,category
+green_papaya,green papaya,fruit
+japanese_sweet_potato,Japanese sweet potato,vegetable
+baby_bok_choy,baby bok choy,vegetable
+shanghai_bok_choy,Shanghai bok choy,vegetable
+taiwan_cabbage,Taiwan cabbage,vegetable
+green_cabbage,green cabbage,vegetable
+romaine_lettuce,romaine lettuce,vegetable
+water_spinach,water spinach,vegetable
+chrysanthemum_greens,chrysanthemum greens,vegetable
+yu_choy,yu choy,vegetable
+pea_shoots,pea shoots,vegetable
+malunggay_leaves,malunggay leaves,vegetable
+banana_blossom,banana blossom,vegetable
+banana_leaf,banana leaf,vegetable
+curry_leaves,curry leaves,herb
+kaffir_lime_leaves,kaffir lime leaves,herb
+pandan_leaves,pandan leaves,herb
+shiso,shiso,herb
+rau_ram,Vietnamese coriander,herb
+ngo_gai,culantro,herb
+ngo_om,rice paddy herb,herb
+garland_chrysanthemum,garland chrysanthemum,vegetable
+tindora,tindora,vegetable
+lauki,bottle gourd,vegetable
+kalabasa,calabaza squash,vegetable
+gabi,taro,vegetable
+sayote,chayote,vegetable
+pechay,pechay,vegetable
+cherry_tomato,cherry tomato,vegetable
+roma_tomato,Roma tomato,vegetable
+persian_cucumber,Persian cucumber,vegetable
+japanese_cucumber,Japanese cucumber,vegetable
+green_mango,green mango,fruit
+asian_pear,Asian pear,fruit
+fuji_apple,Fuji apple,fruit
+saba_banana,saba banana,fruit
+quail,quail,protein
+quail_egg,quail egg,protein
+duck_blood,duck blood,protein
+pork_bone,pork bone,protein
+pork_blood,pork blood,protein
+pork_floss,pork floss,protein
+pork_tocino,pork tocino,protein
+char_siu,char siu,protein
+chashu,chashu,protein
+luncheon_meat,luncheon meat,protein
+spam,Spam,protein
+chicken_cartilage,chicken cartilage,protein
+chicken_intestine,chicken intestine,protein
+beef_bone,beef bone,protein
+beef_tendon,beef tendon,protein
+beef_tripe,beef tripe,protein
+beef_intestine,beef intestine,protein
+beef_ball,beef ball,protein
+beef_meatball,beef meatball,protein
+fish_tofu,fish tofu,protein
+fish_ball,fish ball,protein
+fish_cake,fish cake,protein
+squid_ball,squid ball,protein
+imitation_crab,imitation crab,protein
+crab_meat,crab meat,protein
+crab_paste,crab paste,protein
+seafood_mix,seafood mix,protein
+abalone,abalone,protein
+eel,eel,protein
+mackerel,mackerel,protein
+pompano,pompano,protein
+milkfish,milkfish,protein
+galunggong,round scad,protein
+sardines,sardines,protein
+dried_shrimp,dried shrimp,protein
+tinapa,smoked fish,protein
+tuyo,salted dried fish,protein
+salmon_belly,salmon belly,protein
+salmon_sashimi,salmon sashimi,protein
+sea_bass,sea bass,protein
+swai,swai fish,protein
+fish_roe,fish roe,protein
+mentaiko,mentaiko,protein
+masago,masago,protein
+ikura,ikura,protein
+bonito_flakes,bonito flakes,protein
