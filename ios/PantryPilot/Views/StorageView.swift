@@ -12,6 +12,7 @@ struct StorageView: View {
     @State private var ingredientDictionary: [CloudIngredient] = []
     @State private var unmatchedError: String?
     @State private var isLoadingUnmatched = false
+    @State private var unmatchedRefreshToken = UUID()
 
     var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
         IngredientCategory.allCases.compactMap { category in
@@ -50,8 +51,8 @@ struct StorageView: View {
                 }
             }
             .onChange(of: selectedTab) { _, newValue in
-                if newValue == .unmatched && unmatchedIngredients.isEmpty {
-                    Task { await loadUnmatchedIngredients() }
+                if newValue == .unmatched {
+                    Task { await loadUnmatchedIngredients(force: true) }
                 }
             }
             .confirmationDialog(
@@ -134,6 +135,7 @@ struct StorageView: View {
                     UnknownIngredientRow(
                         ingredient: ingredient,
                         dictionary: ingredientDictionary,
+                        refreshToken: unmatchedRefreshToken,
                         resolve: { selectedIngredient in
                             await resolveUnknownIngredient(ingredient, as: selectedIngredient)
                         }
@@ -191,6 +193,7 @@ struct StorageView: View {
             async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
             unmatchedIngredients = filterUnknowns(try await unknowns, against: unresolvedIngredients.map(\.name))
             ingredientDictionary = try await dictionary
+            unmatchedRefreshToken = UUID()
         } catch {
             unmatchedError = error.localizedDescription
         }
@@ -296,6 +299,7 @@ struct UnknownIngredientsManagerView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var alert: StorageAlertMessage?
+    @State private var refreshToken = UUID()
 
     var body: some View {
         NavigationStack {
@@ -327,6 +331,7 @@ struct UnknownIngredientsManagerView: View {
                             UnknownIngredientRow(
                                 ingredient: unknown,
                                 dictionary: ingredientDictionary,
+                                refreshToken: refreshToken,
                                 resolve: { selected in
                                     await resolve(unknown, as: selected)
                                 }
@@ -379,6 +384,7 @@ struct UnknownIngredientsManagerView: View {
             async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
             unmatchedIngredients = filterUnknowns(try await unknowns)
             ingredientDictionary = try await dictionary
+            refreshToken = UUID()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -420,6 +426,7 @@ struct UnknownIngredientsManagerView: View {
 struct UnknownIngredientRow: View {
     let ingredient: UnknownIngredient
     let dictionary: [CloudIngredient]
+    let refreshToken: UUID
     let resolve: (CloudIngredient) async -> Void
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var selectedIngredientId = ""
@@ -490,6 +497,13 @@ struct UnknownIngredientRow: View {
             if selectedIngredientId.isEmpty {
                 selectedIngredientId = bestGuessIngredientId
             }
+            Task {
+                await loadCandidates()
+            }
+        }
+        .onChange(of: refreshToken) { _, _ in
+            selectedIngredientId = bestGuessIngredientId
+            candidates = []
             Task {
                 await loadCandidates()
             }
