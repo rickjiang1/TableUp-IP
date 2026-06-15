@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "migrate:databricks:supabase": "node src/migrate-databricks-to-supabase.js",
     "seed:matching": "node src/seed-matching-samples.js",
-    "seed:unit-conversions": "node src/seed-unit-conversions.js"
+    "seed:unit-conversions": "node src/seed-unit-conversions.js",
+    "seed:ingredient-substitutions": "node src/seed-ingredient-substitutions.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
