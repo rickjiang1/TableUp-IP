@@ -858,25 +858,27 @@ struct RecipeMetricsEditor: View {
                 step: 5
             )
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L.text("Primary cooking method", language: appLanguage))
+            Menu {
                 ForEach(RecipeCookingMethod.selectableCases) { method in
                     Button {
                         toggleCookingMethod(method)
                     } label: {
-                        HStack {
-                            Text(method.displayName(language: appLanguage))
-                            Spacer()
-                            if primaryCookingMethods.contains(method) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Image(systemName: "circle")
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        Label(
+                            method.displayName(language: appLanguage),
+                            systemImage: primaryCookingMethods.contains(method) ? "checkmark.circle.fill" : "circle"
+                        )
                     }
-                    .buttonStyle(.plain)
+                }
+            } label: {
+                HStack {
+                    Text(L.text("Primary cooking method", language: appLanguage))
+                    Spacer()
+                    Text(cookingMethodSummary)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -901,6 +903,16 @@ struct RecipeMetricsEditor: View {
         } else {
             primaryCookingMethods.append(method)
         }
+    }
+
+    private var cookingMethodSummary: String {
+        guard !primaryCookingMethods.isEmpty else {
+            return L.text("Not specified", language: appLanguage)
+        }
+        if primaryCookingMethods.count <= 2 {
+            return primaryCookingMethods.map { $0.displayName(language: appLanguage) }.joined(separator: ", ")
+        }
+        return "\(primaryCookingMethods.prefix(2).map { $0.displayName(language: appLanguage) }.joined(separator: ", ")) +\(primaryCookingMethods.count - 2)"
     }
 }
 
