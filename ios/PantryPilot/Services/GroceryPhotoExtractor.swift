@@ -66,14 +66,14 @@ struct GroceryPhotoExtractor {
         let largestSide = max(image.size.width, image.size.height)
         guard largestSide > 0 else { return nil }
 
-        let maxDimension: CGFloat = 1400
+        let maxDimension: CGFloat = 1024
         let scale = min(maxDimension / largestSide, 1)
         let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: targetSize)
         let resizedImage = renderer.image { _ in
             image.draw(in: CGRect(origin: .zero, size: targetSize))
         }
-        return resizedImage.jpegData(compressionQuality: 0.72)
+        return resizedImage.jpegData(compressionQuality: 0.55)
     }
 }
 

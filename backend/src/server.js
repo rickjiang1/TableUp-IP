@@ -186,7 +186,7 @@ const server = createServer(async (request, response) => {
           {
             type: "input_image",
             image_url: imageUrl,
-            detail: "auto"
+            detail: process.env.OPENAI_VISION_DETAIL || "low"
           }
         ]
       });

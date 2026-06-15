@@ -173,12 +173,8 @@ struct ScanView: View {
         scanMessage = selectedImageDataList.count == 1 ? "Extracting ingredients..." : "Extracting ingredients from \(selectedImageDataList.count) photos..."
 
         do {
-            var extractedItems: [DetectedIngredient] = []
             let extractor = GroceryPhotoExtractor()
-            for imageData in selectedImageDataList {
-                let response = try await extractor.extract(from: imageData, language: appLanguage)
-                extractedItems.append(contentsOf: response.items.map(\.detectedIngredient))
-            }
+            let extractedItems = try await extractSelectedImages(with: extractor)
 
             detectedItems = extractedItems
             scanMessage = detectedItems.isEmpty ? "No ingredients found. Try another photo." : "Review and save the detected items."
@@ -191,6 +187,36 @@ struct ScanView: View {
         }
 
         isExtracting = false
+    }
+
+    private func extractSelectedImages(with extractor: GroceryPhotoExtractor) async throws -> [DetectedIngredient] {
+        let batchSize = 3
+        var extractedItems: [DetectedIngredient] = []
+
+        for batchStart in stride(from: 0, to: selectedImageDataList.count, by: batchSize) {
+            let batchEnd = min(batchStart + batchSize, selectedImageDataList.count)
+            let batch = Array(selectedImageDataList[batchStart..<batchEnd].enumerated())
+
+            let batchResults = try await withThrowingTaskGroup(of: (Int, [DetectedIngredient]).self) { group in
+                for (offset, imageData) in batch {
+                    let originalIndex = batchStart + offset
+                    group.addTask {
+                        let response = try await extractor.extract(from: imageData, language: appLanguage)
+                        return (originalIndex, response.items.map(\.detectedIngredient))
+                    }
+                }
+
+                var results: [(Int, [DetectedIngredient])] = []
+                for try await result in group {
+                    results.append(result)
+                }
+                return results.sorted { $0.0 < $1.0 }
+            }
+
+            extractedItems.append(contentsOf: batchResults.flatMap(\.1))
+        }
+
+        return extractedItems
     }
 
     private func saveManualIngredient(_ input: IngredientInput) -> Bool {
