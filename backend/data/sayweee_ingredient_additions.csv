@@ -1,4 +1,18 @@
 ingredient_id,canonical_name,category
+almond,almond,pantry
+apple,apple,fruit
+banana,banana,fruit
+clam,clam,protein
+green_bean,green bean,vegetable
+mussel,mussel,protein
+oat,oat,pantry
+orange,orange,fruit
+pea,pea,vegetable
+peanut,peanut,pantry
+scallop,scallop,protein
+sesame_seed,sesame seed,pantry
+snow_pea,snow pea,vegetable
+walnut,walnut,pantry
 green_papaya,green papaya,fruit
 japanese_sweet_potato,Japanese sweet potato,vegetable
 baby_bok_choy,baby bok choy,vegetable
