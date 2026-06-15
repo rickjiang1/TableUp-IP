@@ -7,8 +7,9 @@ struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query private var inventory: [StoredIngredient]
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var selectedImageData: Data?
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var selectedImageDataList: [Data] = []
+    @State private var capturedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
     @State private var showingManualAdd = false
     @State private var showingCamera = false
@@ -33,14 +34,14 @@ struct ScanView: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel("Take grocery photo")
                         } else {
-                            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 12, matching: .images) {
                                 PhotoAddButton()
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Choose grocery photo")
+                            .accessibilityLabel("Choose grocery photos")
                         }
 
-                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        PhotosPicker(selection: $selectedPhotos, maxSelectionCount: 12, matching: .images) {
                             Image(systemName: "photo.on.rectangle")
                                 .font(.title2)
                                 .frame(width: 52, height: 44)
@@ -49,15 +50,30 @@ struct ScanView: View {
                         .tint(.orange)
                         .accessibilityLabel("Choose from library")
 
-                        if let selectedImageData, let image = UIImage(data: selectedImageData) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 260)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        if !selectedImageDataList.isEmpty {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 10) {
+                                ForEach(Array(selectedImageDataList.prefix(4).enumerated()), id: \.offset) { _, imageData in
+                                    if let image = UIImage(data: imageData) {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(height: 92)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                            .clipped()
+                                    }
+                                }
+
+                                if selectedImageDataList.count > 4 {
+                                    Text("+\(selectedImageDataList.count - 4)")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity, minHeight: 92)
+                                        .background(Color(.secondarySystemBackground))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
+                            }
                         }
 
-                        if selectedImageData != nil {
+                        if !selectedImageDataList.isEmpty {
                             Button {
                                 Task {
                                     await extractIngredients()
@@ -90,11 +106,11 @@ struct ScanView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
-            .task(id: selectedPhoto) {
-                await loadSelectedPhoto()
+            .task(id: selectedPhotos) {
+                await loadSelectedPhotos()
             }
             .sheet(isPresented: $showingCamera) {
-                ImagePicker(sourceType: .camera, imageData: $selectedImageData)
+                ImagePicker(sourceType: .camera, imageData: $capturedImageData)
                     .ignoresSafeArea()
             }
             .sheet(isPresented: $showingDetectedItems) {
@@ -117,8 +133,10 @@ struct ScanView: View {
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
-            .onChange(of: selectedImageData) { _, newValue in
-                if newValue != nil {
+            .onChange(of: capturedImageData) { _, newValue in
+                if let newValue {
+                    selectedPhotos = []
+                    selectedImageDataList = [newValue]
                     scanMessage = "Photo ready."
                     detectedItems = []
                     Task {
@@ -129,25 +147,40 @@ struct ScanView: View {
         }
     }
 
-    private func loadSelectedPhoto() async {
-        guard let selectedPhoto else { return }
-        selectedImageData = try? await selectedPhoto.loadTransferable(type: Data.self)
-        scanMessage = selectedImageData == nil ? "Could not load that photo." : "Photo ready."
+    private func loadSelectedPhotos() async {
+        guard !selectedPhotos.isEmpty else { return }
+        var imageDataList: [Data] = []
+        for selectedPhoto in selectedPhotos {
+            if let data = try? await selectedPhoto.loadTransferable(type: Data.self) {
+                imageDataList.append(data)
+            }
+        }
+
+        selectedImageDataList = imageDataList
+        scanMessage = imageDataList.isEmpty ? "Could not load those photos." : "\(imageDataList.count) photo(s) ready."
         detectedItems = []
+        guard !imageDataList.isEmpty else { return }
+        await extractIngredients()
     }
 
     private func extractIngredients() async {
-        guard let selectedImageData else {
-            scanMessage = "Choose a photo first."
+        guard !selectedImageDataList.isEmpty else {
+            scanMessage = "Choose photo(s) first."
             return
         }
 
         isExtracting = true
-        scanMessage = "Extracting ingredients..."
+        scanMessage = selectedImageDataList.count == 1 ? "Extracting ingredients..." : "Extracting ingredients from \(selectedImageDataList.count) photos..."
 
         do {
-            let response = try await GroceryPhotoExtractor().extract(from: selectedImageData)
-            detectedItems = response.items.map(\.detectedIngredient)
+            var extractedItems: [DetectedIngredient] = []
+            let extractor = GroceryPhotoExtractor()
+            for imageData in selectedImageDataList {
+                let response = try await extractor.extract(from: imageData)
+                extractedItems.append(contentsOf: response.items.map(\.detectedIngredient))
+            }
+
+            detectedItems = extractedItems
             scanMessage = detectedItems.isEmpty ? "No ingredients found. Try another photo." : "Review and save the detected items."
             showingDetectedItems = !detectedItems.isEmpty
         } catch {
@@ -181,8 +214,9 @@ struct ScanView: View {
             let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
-            selectedPhoto = nil
-            selectedImageData = nil
+            selectedPhotos = []
+            selectedImageDataList = []
+            capturedImageData = nil
             scanMessage = "Saved to storage."
             return ReviewSaveResult(
                 didSave: true,
