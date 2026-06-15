@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { ingredientStorageLifeRules } from "./ingredientStorageLifeSeeds.js";
+import { ingredientStorageLifeRules, ingredientStorageLifeSource } from "./ingredientStorageLifeSeeds.js";
 import { query, sqlBoolean, sqlNumber, sqlString } from "./postgres.js";
 
 const environmentTargets = {
@@ -31,6 +31,7 @@ await bootstrapSchema();
 
 const rows = ingredientStorageLifeRules.flat();
 if (!args.dryRun) {
+  await clearRules();
   await seedRules(rows);
 }
 
@@ -38,6 +39,8 @@ console.log(JSON.stringify({
   environment: args.environment,
   target: environmentTargets[args.environment].label,
   dryRun: args.dryRun,
+  replacedTable: !args.dryRun,
+  source: ingredientStorageLifeSource,
   rules: rows.length,
   sample: rows.slice(0, 10)
 }, null, 2));
@@ -76,6 +79,10 @@ async function bootstrapSchema() {
 
     grant select, insert, update, delete on ingredient_storage_life_rules to anon;
   `);
+}
+
+async function clearRules() {
+  await query("delete from ingredient_storage_life_rules;");
 }
 
 async function seedRules(rows) {
@@ -193,4 +200,3 @@ function assertTargetEnvironment(environment) {
     throw new Error(`Refusing to write ${target.label}. SUPABASE_DATABASE_URL points to ${host}, expected db.${target.projectRef}.*.`);
   }
 }
-
