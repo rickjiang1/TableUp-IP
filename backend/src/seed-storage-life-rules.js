@@ -60,10 +60,19 @@ async function bootstrapSchema() {
       aliases text[] not null default '{}',
       priority integer not null default 100,
       notes text not null default '',
+      source_name text not null default '',
+      source_url text not null default '',
+      source_priority integer not null default 100,
+      safety_note text not null default '',
       active boolean not null default true,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+
+    alter table ingredient_storage_life_rules add column if not exists source_name text not null default '';
+    alter table ingredient_storage_life_rules add column if not exists source_url text not null default '';
+    alter table ingredient_storage_life_rules add column if not exists source_priority integer not null default 100;
+    alter table ingredient_storage_life_rules add column if not exists safety_note text not null default '';
 
     create index if not exists ingredient_storage_life_rules_lookup_idx
       on ingredient_storage_life_rules (active, ingredient_id, category, storage_approach, storage_location, priority);
@@ -93,7 +102,8 @@ async function seedRules(rows) {
   await query(`
     insert into ingredient_storage_life_rules (
       ingredient_id, category, storage_approach, storage_location,
-      default_days, condition_state, aliases, priority, notes, active, updated_at
+      default_days, condition_state, aliases, priority, notes,
+      source_name, source_url, source_priority, safety_note, active, updated_at
     )
     values ${rows.map((row) => `(
       ${sqlString(row.ingredient_id)},
@@ -105,6 +115,10 @@ async function seedRules(rows) {
       ${sqlTextArray(row.aliases)},
       ${sqlNumber(row.priority, 100)},
       ${sqlString(row.notes)},
+      ${sqlString(row.source_name)},
+      ${sqlString(row.source_url)},
+      ${sqlNumber(row.source_priority, 100)},
+      ${sqlString(row.safety_note)},
       ${sqlBoolean(row.active)},
       now()
     )`).join(",\n")}
@@ -114,6 +128,10 @@ async function seedRules(rows) {
       aliases = excluded.aliases,
       priority = excluded.priority,
       notes = excluded.notes,
+      source_name = excluded.source_name,
+      source_url = excluded.source_url,
+      source_priority = excluded.source_priority,
+      safety_note = excluded.safety_note,
       active = excluded.active,
       updated_at = now();
   `);

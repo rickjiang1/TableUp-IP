@@ -258,7 +258,7 @@ export async function fetchIngredientDictionary(language = "en") {
 export async function fetchIngredientStorageLifeRules() {
   return await restSelectAll(
     "ingredient_storage_life_rules",
-    "select=ingredient_id,category,storage_approach,storage_location,default_days,condition_state,aliases,priority,notes,active&active=eq.true&condition_state=eq.default&order=priority.asc,ingredient_id.asc,storage_approach.asc"
+    "select=ingredient_id,category,storage_approach,storage_location,default_days,condition_state,aliases,priority,notes,source_name,source_url,source_priority,safety_note,active&active=eq.true&condition_state=eq.default&order=priority.asc,ingredient_id.asc,storage_approach.asc"
   );
 }
 
