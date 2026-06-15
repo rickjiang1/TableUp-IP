@@ -502,7 +502,10 @@ function parseStepInstruction(instruction) {
 
 function normalizeStepPhase(phase) {
   const value = String(phase || "").trim().toUpperCase();
-  return ["PLANNING", "PREP", "COOK", "FINISH", "CLEANUP"].includes(value) ? value : "COOK";
+  if (value === "CLEANUP") {
+    return "FINISH";
+  }
+  return ["PLANNING", "PREP", "COOK", "FINISH"].includes(value) ? value : "COOK";
 }
 
 function sanitizeFileName(fileName) {

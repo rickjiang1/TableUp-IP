@@ -97,7 +97,6 @@ enum RecipeStepPhase: String, CaseIterable, Codable, Identifiable {
     case prep = "PREP"
     case cook = "COOK"
     case finish = "FINISH"
-    case cleanup = "CLEANUP"
 
     var id: String { rawValue }
 
@@ -111,8 +110,6 @@ enum RecipeStepPhase: String, CaseIterable, Codable, Identifiable {
             return L.text("Cook phase", language: language)
         case .finish:
             return L.text("Finish", language: language)
-        case .cleanup:
-            return L.text("Cleanup", language: language)
         }
     }
 }
@@ -124,13 +121,65 @@ struct RecipeWorkflowStep: Codable, Identifiable, Hashable {
     var text: String
     var imageURLs: [String] = []
 
+    enum CodingKeys: String, CodingKey {
+        case id
+        case phase
+        case order
+        case text
+        case imageURLs
+    }
+
+    init(
+        id: String = UUID().uuidString,
+        phase: RecipeStepPhase = .cook,
+        order: Int = 0,
+        text: String,
+        imageURLs: [String] = []
+    ) {
+        self.id = id
+        self.phase = phase
+        self.order = order
+        self.text = text
+        self.imageURLs = imageURLs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        let rawPhase = try container.decodeIfPresent(String.self, forKey: .phase) ?? RecipeStepPhase.cook.rawValue
+        phase = RecipeWorkflowStep.normalizedPhase(from: rawPhase)
+        order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+        imageURLs = try container.decodeIfPresent([String].self, forKey: .imageURLs) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(phase.rawValue, forKey: .phase)
+        try container.encode(order, forKey: .order)
+        try container.encode(text, forKey: .text)
+        try container.encode(imageURLs, forKey: .imageURLs)
+    }
+
     var cleaned: RecipeWorkflowStep {
         var copy = self
+        if copy.phase.rawValue == "CLEANUP" {
+            copy.phase = .finish
+        }
         copy.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.imageURLs = imageURLs
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return copy
+    }
+
+    private static func normalizedPhase(from rawPhase: String) -> RecipeStepPhase {
+        let value = rawPhase.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if value == "CLEANUP" {
+            return .finish
+        }
+        return RecipeStepPhase(rawValue: value) ?? .cook
     }
 
     static func encode(_ steps: [RecipeWorkflowStep]) -> String {

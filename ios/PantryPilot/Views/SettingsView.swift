@@ -75,7 +75,6 @@ enum L {
         "Prep": "备菜",
         "Cook phase": "烹饪",
         "Finish": "收尾",
-        "Cleanup": "清理",
         "Step instruction": "步骤说明",
         "Step image URLs": "步骤图片 URL，每行一张",
         "Add Step": "添加步骤",
