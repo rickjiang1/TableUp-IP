@@ -4,6 +4,7 @@ import {
   deleteCloudRecipe,
   fetchCloudRecipes,
   fetchIngredientUnitConversions,
+  fetchIngredientStorageLifeRules,
   fetchIngredientDictionary,
   fetchMatchingRules,
   fetchPendingUnknownIngredients,
@@ -56,6 +57,12 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/ingredients") {
       const ingredients = await getCachedIngredientDictionary(url.searchParams.get("language") || "en");
       sendJson(response, 200, { ingredients });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/storage-life-rules") {
+      const rules = await fetchIngredientStorageLifeRules();
+      sendJson(response, 200, { rules });
       return;
     }
 

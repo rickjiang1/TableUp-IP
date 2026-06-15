@@ -114,6 +114,9 @@ struct IngredientDetailView: View {
         .scrollDismissesKeyboard(.interactively)
         .dismissKeyboardOnTap()
         .navigationTitle(draftName.isEmpty ? ingredient.name : draftName)
+        .task {
+            await StorageAdvisor.refreshCloudRules()
+        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(L.text("Save", language: appLanguage)) {
@@ -238,6 +241,8 @@ struct IngredientDetailView: View {
 
     private func refreshDraftExpireDate() {
         draftExpireDate = StorageAdvisor.estimatedExpireDate(
+            name: draftName,
+            canonicalIngredientId: draftCanonicalIngredientId,
             category: draftCategory,
             location: draftLocation,
             enteredDate: draftEnteredDate

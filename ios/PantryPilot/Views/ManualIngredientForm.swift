@@ -76,6 +76,10 @@ struct ManualIngredientForm: View {
         .onAppear {
             refreshExpireDate()
         }
+        .task {
+            await StorageAdvisor.refreshCloudRules()
+            refreshExpireDate()
+        }
         .onChange(of: category) { _, _ in
             refreshExpireDate()
         }

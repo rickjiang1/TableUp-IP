@@ -11,6 +11,7 @@
     "seed:unit-conversions": "node src/seed-unit-conversions.js",
     "seed:ingredient-substitutions": "node src/seed-ingredient-substitutions.js",
     "seed:cooking-profiles": "node src/seed-cooking-profiles.js",
+    "seed:storage-life-rules": "node src/seed-storage-life-rules.js",
     "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js"
   },
   "dependencies": {

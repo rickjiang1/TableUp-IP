@@ -18,25 +18,54 @@ struct StorageRecommendation: Identifiable {
 private struct IngredientShelfLifeRule {
     let ingredientIds: Set<String>
     let normalizedNames: Set<String>
+    let categoryRaw: String
     let days: [StorageApproach: Int]
 
-    init(ids: [String], names: [String] = [], days: [StorageApproach: Int]) {
+    init(ids: [String], names: [String] = [], category: String = "", days: [StorageApproach: Int]) {
         ingredientIds = Set(ids.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
         normalizedNames = Set((ids + names).map { IngredientNormalizer.normalizeName($0) })
+        categoryRaw = category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         self.days = days
     }
 
-    func matches(name: String, canonicalIngredientId: String) -> Bool {
+    func matches(name: String, canonicalIngredientId: String, category: IngredientCategory) -> Bool {
         let ingredientId = canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if !ingredientId.isEmpty, ingredientIds.contains(ingredientId) {
             return true
         }
         let normalizedName = IngredientNormalizer.normalizeName(name)
-        return !normalizedName.isEmpty && normalizedNames.contains(normalizedName)
+        if !normalizedName.isEmpty && normalizedNames.contains(normalizedName) {
+            return true
+        }
+        return !categoryRaw.isEmpty && categoryRaw == category.rawValue.lowercased()
+    }
+}
+
+private struct CloudStorageLifeRuleResponse: Decodable {
+    let rules: [CloudStorageLifeRule]
+}
+
+private struct CloudStorageLifeRule: Decodable {
+    let ingredientId: String
+    let category: String
+    let storageApproach: String
+    let defaultDays: Int
+    let aliases: [String]
+    let priority: Int
+
+    enum CodingKeys: String, CodingKey {
+        case ingredientId = "ingredient_id"
+        case category
+        case storageApproach = "storage_approach"
+        case defaultDays = "default_days"
+        case aliases
+        case priority
     }
 }
 
 enum StorageAdvisor {
+    private static var cloudShelfLifeRules: [IngredientShelfLifeRule] = []
+
     private static let shelfLife: [IngredientCategory: [StorageApproach: Int]] = [
         .meat: [.cold: 3, .frozen: 180, .roomTemperature: 0],
         .seafood: [.cold: 2, .frozen: 90, .roomTemperature: 0],
@@ -145,6 +174,38 @@ enum StorageAdvisor {
         }
     }
 
+    static func refreshCloudRules() async {
+        let endpoint = BackendConfiguration.baseURL.appending(path: "api/storage-life-rules")
+        do {
+            let (data, response) = try await URLSession.shared.data(from: endpoint)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  200..<300 ~= httpResponse.statusCode else { return }
+            let decoded = try JSONDecoder().decode(CloudStorageLifeRuleResponse.self, from: data)
+            let grouped = Dictionary(grouping: decoded.rules) { rule in
+                [
+                    rule.ingredientId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    rule.category.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                    rule.aliases.joined(separator: "|")
+                ].joined(separator: "::")
+            }
+            cloudShelfLifeRules = grouped.values
+                .sorted { ($0.first?.priority ?? 100) < ($1.first?.priority ?? 100) }
+                .map { rows in
+                    IngredientShelfLifeRule(
+                        ids: rows.map(\.ingredientId).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty },
+                        names: rows.flatMap(\.aliases),
+                        category: rows.first?.category ?? "",
+                        days: Dictionary(uniqueKeysWithValues: rows.compactMap { row in
+                            guard let approach = storageApproach(forDatabaseValue: row.storageApproach) else { return nil }
+                            return (approach, row.defaultDays)
+                        })
+                    )
+                }
+        } catch {
+            return
+        }
+    }
+
     static func estimatedExpireDate(
         category: IngredientCategory,
         location: StorageLocation,
@@ -187,10 +248,23 @@ enum StorageAdvisor {
         approach: StorageApproach,
         enteredDate: Date
     ) -> Date {
-        let days = ingredientShelfLifeRules
-            .first { $0.matches(name: name, canonicalIngredientId: canonicalIngredientId) }?
+        let days = (cloudShelfLifeRules + ingredientShelfLifeRules)
+            .first { $0.matches(name: name, canonicalIngredientId: canonicalIngredientId, category: category) }?
             .days[approach] ?? shelfLife[category]?[approach] ?? 14
         return Calendar.current.date(byAdding: .day, value: days, to: enteredDate) ?? enteredDate
+    }
+
+    private static func storageApproach(forDatabaseValue value: String) -> StorageApproach? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "cold":
+            return .cold
+        case "frozen":
+            return .frozen
+        case "room_temperature", "room_temp", "counter", "pantry":
+            return .roomTemperature
+        default:
+            return nil
+        }
     }
 
     static func recommendations(for ingredient: StoredIngredient) -> [StorageRecommendation] {

@@ -605,6 +605,9 @@ struct DetectedItemsReviewView: View {
                     items[index].unit = IngredientUnit.normalizedSelection(for: items[index].unit)
                 }
             }
+            .task {
+                await StorageAdvisor.refreshCloudRules()
+            }
             .navigationTitle(L.text("Review items", language: appLanguage))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
