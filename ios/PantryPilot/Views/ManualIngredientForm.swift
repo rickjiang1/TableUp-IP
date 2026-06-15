@@ -28,6 +28,7 @@ struct ManualIngredientForm: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .id(appLanguage)
             }
 
             Picker(L.text("Category", language: appLanguage), selection: $category) {
@@ -45,7 +46,11 @@ struct ManualIngredientForm: View {
             .pickerStyle(.menu)
 
             DatePicker(L.text("Enter date", language: appLanguage), selection: $enteredDate, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .environment(\.locale, datePickerLocale)
             DatePicker(L.text("Expire date", language: appLanguage), selection: $expireDate, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .environment(\.locale, datePickerLocale)
 
             Button(L.text("Save item", language: appLanguage)) {
                 guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -88,5 +93,9 @@ struct ManualIngredientForm: View {
             location: location,
             enteredDate: enteredDate
         )
+    }
+
+    private var datePickerLocale: Locale {
+        Locale(identifier: appLanguage == AppLanguage.chinese.rawValue ? "zh_Hans_US" : "en_US")
     }
 }

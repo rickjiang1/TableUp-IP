@@ -7,6 +7,8 @@ struct CookingModeView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query private var inventory: [StoredIngredient]
     let recipe: Recipe
+    @State private var consumedIngredients: [ConsumedIngredient] = []
+    @State private var showingConsumedAlert = false
 
     private var preview: [IngredientUsagePreview] {
         RecipeMatcher.usagePreview(recipe: recipe, inventory: inventory)
@@ -51,9 +53,9 @@ struct CookingModeView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Cooked", language: appLanguage)) {
-                        RecipeMatcher.subtract(recipe: recipe, from: inventory)
+                        consumedIngredients = RecipeMatcher.subtract(recipe: recipe, from: inventory)
                         try? modelContext.save()
-                        dismiss()
+                        showingConsumedAlert = true
                     }
                     .fontWeight(.semibold)
                 }
@@ -61,6 +63,24 @@ struct CookingModeView: View {
                     Button(L.text("Close", language: appLanguage)) { dismiss() }
                 }
             }
+            .alert(L.text("Cooked", language: appLanguage), isPresented: $showingConsumedAlert) {
+                Button(L.text("OK", language: appLanguage)) {
+                    dismiss()
+                }
+            } message: {
+                Text(consumedMessage)
+            }
         }
+    }
+
+    private var consumedMessage: String {
+        if consumedIngredients.isEmpty {
+            return L.text("No inventory items were consumed.", language: appLanguage)
+        }
+
+        let lines = consumedIngredients.map {
+            "\($0.name): \($0.quantity.formatted()) \($0.unit)"
+        }
+        return "\(L.text("Consumed", language: appLanguage)):\n" + lines.joined(separator: "\n")
     }
 }

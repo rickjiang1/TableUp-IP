@@ -209,6 +209,7 @@ struct RecipesView: View {
                 UnknownIngredientsManagerView(
                     itemsToScan: recipeIngredientsToScan,
                     source: "recipe",
+                    shouldPersistAliasResolution: false,
                     onResolved: { unknown, ingredient in
                         try await bindRecipeIngredient(named: unknown, to: ingredient)
                     }
@@ -932,7 +933,8 @@ struct AddRecipeView: View {
         isSaving = true
         defer { isSaving = false }
 
-        let ingredients = recipeIngredients(from: ingredientDrafts)
+        let resolvedDrafts = await resolvedRecipeIngredientDrafts(from: ingredientDrafts)
+        let ingredients = recipeIngredients(from: resolvedDrafts)
         let steps = stepsText
             .split(separator: "\n")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1144,7 +1146,8 @@ struct EditRecipeView: View {
         isSaving = true
         defer { isSaving = false }
 
-        let ingredients = recipeIngredients(from: ingredientDrafts)
+        let resolvedDrafts = await resolvedRecipeIngredientDrafts(from: ingredientDrafts)
+        let ingredients = recipeIngredients(from: resolvedDrafts)
         let steps = stepsText
             .split(separator: "\n")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1299,6 +1302,9 @@ struct RecipeIngredientDraftRow: View {
             .pickerStyle(.menu)
 
             TextField(L.text("Ingredient name", language: appLanguage), text: $draft.name)
+                .onChange(of: draft.name) { _, _ in
+                    draft.canonicalIngredientId = ""
+                }
 
             Button(role: .destructive) {
                 remove()
@@ -1308,6 +1314,38 @@ struct RecipeIngredientDraftRow: View {
             .buttonStyle(.borderless)
         }
     }
+}
+
+private func resolvedRecipeIngredientDrafts(from drafts: [RecipeIngredientDraft]) async -> [RecipeIngredientDraft] {
+    var resolvedDrafts = drafts.map { draft in
+        var copy = draft
+        copy.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.unit = IngredientUnit.normalizedSelection(for: draft.unit)
+        return copy
+    }
+
+    let inputs = resolvedDrafts
+        .filter { !$0.name.isEmpty }
+        .map { IngredientResolveInput(name: $0.name, source: "recipe") }
+
+    guard !inputs.isEmpty else { return resolvedDrafts }
+
+    do {
+        let results = try await UnknownIngredientClient().resolve(items: inputs)
+        for index in resolvedDrafts.indices {
+            guard !resolvedDrafts[index].name.isEmpty else { continue }
+            let result = results.first {
+                IngredientNormalizer.normalizeName($0.name) == IngredientNormalizer.normalizeName(resolvedDrafts[index].name)
+            }
+            resolvedDrafts[index].canonicalIngredientId = result?.known == true ? result?.ingredientId ?? "" : ""
+        }
+    } catch {
+        for index in resolvedDrafts.indices where resolvedDrafts[index].canonicalIngredientId.isEmpty {
+            resolvedDrafts[index].canonicalIngredientId = ""
+        }
+    }
+
+    return resolvedDrafts
 }
 
 private func recipeIngredients(from drafts: [RecipeIngredientDraft]) -> [RecipeIngredient] {
@@ -1355,10 +1393,12 @@ struct RecipeMetricsSection: View {
 
 struct CloudMatchDetailSection: View {
     let match: CloudRecipeMatch
+    let recipe: Recipe
+    let inventory: [StoredIngredient]
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
-        Section(L.text("Match details", language: appLanguage)) {
+        Group {
             HStack {
                 Text(L.text("Matched ingredients", language: appLanguage))
                 Spacer()
@@ -1367,39 +1407,124 @@ struct CloudMatchDetailSection: View {
             }
 
             ForEach(match.matchedIngredients) { item in
-                Label("\(item.recipeIngredient) - \(item.userInventoryIngredient)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                matchRow(
+                    title: "\(item.recipeIngredient) - \(item.userInventoryIngredient)",
+                    item: item,
+                    systemImage: "checkmark.circle.fill",
+                    color: .green
+                )
             }
 
-            ForEach(match.substitutedIngredients) { item in
-                Label("\(item.recipeIngredient) -> \(item.userInventoryIngredient)", systemImage: "arrow.triangle.2.circlepath")
+            if !match.substitutedIngredients.isEmpty {
+                Label(L.text("Orange means substitute ingredient", language: appLanguage), systemImage: "info.circle")
+                    .font(.caption)
                     .foregroundStyle(.orange)
             }
 
+            ForEach(match.substitutedIngredients) { item in
+                matchRow(
+                    title: "\(item.recipeIngredient) -> \(item.userInventoryIngredient)",
+                    item: item,
+                    systemImage: "arrow.triangle.2.circlepath",
+                    color: .orange
+                )
+            }
+
             ForEach(match.missingRequiredIngredients) { item in
-                Label(item.recipeIngredient, systemImage: "exclamationmark.circle.fill")
-                    .foregroundStyle(.red)
+                matchRow(
+                    title: item.recipeIngredient,
+                    item: item,
+                    systemImage: "exclamationmark.circle.fill",
+                    color: .red
+                )
             }
 
             ForEach(match.missingOptionalIngredients) { item in
-                Label(item.recipeIngredient, systemImage: "minus.circle")
-                    .foregroundStyle(.secondary)
+                matchRow(
+                    title: item.recipeIngredient,
+                    item: item,
+                    systemImage: "minus.circle",
+                    color: .secondary
+                )
             }
 
-            ForEach(match.pantryMissing) { item in
-                Label(item.recipeIngredient, systemImage: "leaf")
+        }
+    }
+
+    private func matchRow(title: String, item: CloudRecipeMatchIngredient, systemImage: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .foregroundStyle(color)
+            if let quantityText = quantityText(for: item) {
+                Text(quantityText)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.leading, 28)
             }
         }
+    }
+
+    private func quantityText(for item: CloudRecipeMatchIngredient) -> String? {
+        guard let recipeIngredient = recipeIngredient(for: item) else {
+            return nil
+        }
+
+        let inventoryAmount = inventoryAmountText(for: item, recipeIngredient: recipeIngredient)
+        let neededAmount = "\(recipeIngredient.quantity.formatted()) \(recipeIngredient.unit)"
+        return "\(L.text("Inventory", language: appLanguage)): \(inventoryAmount). \(L.text("Use", language: appLanguage)): \(neededAmount)"
+    }
+
+    private func recipeIngredient(for item: CloudRecipeMatchIngredient) -> RecipeIngredient? {
+        let recipeIngredientId = item.recipeIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !recipeIngredientId.isEmpty,
+           let ingredient = recipe.ingredients.first(where: { $0.canonicalIngredientId == recipeIngredientId }) {
+            return ingredient
+        }
+
+        let normalizedName = IngredientNormalizer.normalizeName(item.recipeIngredient)
+        return recipe.ingredients.first { $0.normalizedName == normalizedName }
+    }
+
+    private func inventoryAmountText(for item: CloudRecipeMatchIngredient, recipeIngredient: RecipeIngredient) -> String {
+        let matchingInventory = inventory.filter { stored in
+            let userIngredientId = item.userInventoryIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !userIngredientId.isEmpty {
+                return stored.canonicalIngredientId == userIngredientId
+            }
+
+            let recipeIngredientId = recipeIngredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !recipeIngredientId.isEmpty, stored.canonicalIngredientId == recipeIngredientId {
+                return true
+            }
+
+            let userName = IngredientNormalizer.normalizeName(item.userInventoryIngredient)
+            return !userName.isEmpty && stored.normalizedName == userName
+        }
+
+        guard !matchingInventory.isEmpty else {
+            return "0 \(recipeIngredient.unit)"
+        }
+
+        let sameUnitTotal = matchingInventory
+            .filter { $0.unit == recipeIngredient.unit }
+            .reduce(0) { $0 + $1.quantity }
+        if sameUnitTotal > 0 {
+            return "\(sameUnitTotal.formatted()) \(recipeIngredient.unit)"
+        }
+
+        return matchingInventory
+            .map { "\($0.quantity.formatted()) \($0.unit)" }
+            .joined(separator: ", ")
     }
 }
 
 struct LocalMatchDetailSection: View {
     let assessment: CookAssessment
+    let inventory: [StoredIngredient]
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
-        Section(L.text("Match details", language: appLanguage)) {
+        Group {
             HStack {
                 Text(L.text("Matched ingredients", language: appLanguage))
                 Spacer()
@@ -1410,10 +1535,21 @@ struct LocalMatchDetailSection: View {
             if assessment.missing.isEmpty {
                 Label(L.text("Ready", language: appLanguage), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                ForEach(RecipeMatcher.usagePreview(recipe: assessment.recipe, inventory: inventory)) { item in
+                    Text("\(item.name): \(L.text("Inventory", language: appLanguage)) \(item.available.formatted()) \(item.unit). \(L.text("Use", language: appLanguage)) \(item.needed.formatted()) \(item.unit)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 ForEach(assessment.missing) { missing in
-                    Label("\(missing.name): \(missing.shortage.formatted()) \(missing.unit)", systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("\(missing.name): \(missing.shortage.formatted()) \(missing.unit)", systemImage: "exclamationmark.circle.fill")
+                            .foregroundStyle(.red)
+                        Text("\(L.text("Inventory", language: appLanguage)): \(missing.available.formatted()) \(missing.unit). \(L.text("Use", language: appLanguage)): \(missing.needed.formatted()) \(missing.unit)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 28)
+                    }
                 }
             }
         }
@@ -1429,6 +1565,11 @@ struct RecipeDetailView: View {
     @State private var showingEditRecipe = false
     @State private var showingCookingMode = false
     @State private var recipeAlert: RecipeAlertMessage?
+    @State private var isMatchDetailsExpanded = true
+    @State private var isIngredientsExpanded = true
+    @State private var expandedIngredientRoles: Set<RecipeIngredientRole> = Set(RecipeIngredientRole.allCases)
+    @State private var isStepsExpanded = true
+    @State private var isVideoExpanded = false
 
     init(recipe: Recipe, cloudMatch: CloudRecipeMatch? = nil, assessment: CookAssessment? = nil) {
         self.recipe = recipe
@@ -1451,45 +1592,83 @@ struct RecipeDetailView: View {
             RecipeMetricsSection(recipe: recipe, fridgeRescueScore: FridgeRescueScorer.score(recipe: recipe, inventory: inventory))
 
             if let cloudMatch {
-                CloudMatchDetailSection(match: cloudMatch)
+                Section {
+                    DisclosureGroup(
+                        L.text("Match details", language: appLanguage),
+                        isExpanded: $isMatchDetailsExpanded
+                    ) {
+                        CloudMatchDetailSection(match: cloudMatch, recipe: recipe, inventory: inventory)
+                    }
+                }
             } else if let assessment {
-                LocalMatchDetailSection(assessment: assessment)
+                Section {
+                    DisclosureGroup(
+                        L.text("Match details", language: appLanguage),
+                        isExpanded: $isMatchDetailsExpanded
+                    ) {
+                        LocalMatchDetailSection(assessment: assessment, inventory: inventory)
+                    }
+                }
             }
 
-            ForEach(RecipeIngredientRole.allCases) { role in
-                let ingredients = recipe.ingredients.filter { $0.role == role }
-                if !ingredients.isEmpty {
-                    Section(role.displayName(language: appLanguage)) {
-                        ForEach(ingredients) { ingredient in
-                            RecipeIngredientMatchRow(ingredient: ingredient)
+            Section {
+                DisclosureGroup(
+                    L.text("Ingredients", language: appLanguage),
+                    isExpanded: ingredientsExpandedBinding
+                ) {
+                    ForEach(RecipeIngredientRole.allCases) { role in
+                        let ingredients = recipe.ingredients.filter { $0.role == role }
+                        if !ingredients.isEmpty {
+                            DisclosureGroup(
+                                role.displayName(language: appLanguage),
+                                isExpanded: binding(for: role)
+                            ) {
+                                ForEach(ingredients) { ingredient in
+                                    RecipeIngredientMatchRow(
+                                        ingredient: ingredient,
+                                        inventory: inventory,
+                                        cloudMatch: cloudMatch
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            Section(L.text("Steps", language: appLanguage)) {
-                ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, step in
-                    Text("\(index + 1). \(step)")
+            Section {
+                DisclosureGroup(
+                    L.text("Steps", language: appLanguage),
+                    isExpanded: $isStepsExpanded
+                ) {
+                    ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, step in
+                        Text("\(index + 1). \(step)")
+                    }
                 }
             }
 
             if recipe.videoURL.isEmpty == false || recipe.videoData != nil || recipe.videoFileURL != nil {
-                Section(L.text("Video", language: appLanguage)) {
-                    if let videoURL = recipe.videoFileURL {
-                        RecipeVideoPlayer(videoURL: videoURL)
-                            .frame(height: 220)
-                    } else if let videoData = recipe.videoData {
-                        LegacyRecipeVideoPlayer(videoData: videoData)
-                            .frame(height: 220)
-                    }
-
-                    if let url = URL(string: recipe.videoURL), !recipe.videoURL.isEmpty {
-                        Link(destination: url) {
-                            Label(L.text("Open video URL", language: appLanguage), systemImage: "play.rectangle")
+                Section {
+                    DisclosureGroup(
+                        L.text("Video", language: appLanguage),
+                        isExpanded: $isVideoExpanded
+                    ) {
+                        if let videoURL = recipe.videoFileURL {
+                            RecipeVideoPlayer(videoURL: videoURL)
+                                .frame(height: 220)
+                        } else if let videoData = recipe.videoData {
+                            LegacyRecipeVideoPlayer(videoData: videoData)
+                                .frame(height: 220)
                         }
-                    } else if !recipe.videoURL.isEmpty {
-                        Text(recipe.videoURL)
-                            .foregroundStyle(.secondary)
+
+                        if let url = URL(string: recipe.videoURL), !recipe.videoURL.isEmpty {
+                            Link(destination: url) {
+                                Label(L.text("Open video URL", language: appLanguage), systemImage: "play.rectangle")
+                            }
+                        } else if !recipe.videoURL.isEmpty {
+                            Text(recipe.videoURL)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -1528,30 +1707,171 @@ struct RecipeDetailView: View {
             )
         }
     }
+
+    private var ingredientsExpandedBinding: Binding<Bool> {
+        Binding(
+            get: { isIngredientsExpanded },
+            set: { isExpanded in
+                isIngredientsExpanded = isExpanded
+                if isExpanded {
+                    expandedIngredientRoles = Set(RecipeIngredientRole.allCases)
+                }
+            }
+        )
+    }
+
+    private func binding(for role: RecipeIngredientRole) -> Binding<Bool> {
+        Binding(
+            get: { expandedIngredientRoles.contains(role) },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedIngredientRoles.insert(role)
+                } else {
+                    expandedIngredientRoles.remove(role)
+                }
+            }
+        )
+    }
 }
 
 struct RecipeIngredientMatchRow: View {
     let ingredient: RecipeIngredient
+    let inventory: [StoredIngredient]
+    let cloudMatch: CloudRecipeMatch?
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(ingredient.displayText)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: ingredient.isMatchedToIngredientLibrary ? "checkmark.seal.fill" : "questionmark.circle")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(statusColor)
+                .frame(width: 18)
+                .padding(.top, 3)
 
-            if ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Label(L.text("Not matched", language: appLanguage), systemImage: "exclamationmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else {
-                Label(
-                    "\(L.text("Matched to", language: appLanguage)): \(ingredient.canonicalIngredientId)",
-                    systemImage: "checkmark.seal.fill"
-                )
-                .font(.caption)
-                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(ingredient.name)
+                    .fontWeight(.semibold)
+
+                Text("\(L.text("Needed", language: appLanguage)): \(ingredient.quantity.formatted()) \(ingredient.unit)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                if ingredient.role != .seasoning {
+                    if let inventoryText {
+                        Text("\(L.text("Inventory", language: appLanguage)): \(inventoryText)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if isMissing {
+                        Text(L.text("Missing", language: appLanguage))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if let aliasText {
+                    Text("\(L.text("Alias match", language: appLanguage)):\n\(aliasText)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let substituteText {
+                    Text("\(L.text("Using substitute ingredient", language: appLanguage)):\n\(substituteText)")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private var statusColor: Color {
+        ingredient.isMatchedToIngredientLibrary ? .green : Color.secondary.opacity(0.72)
+    }
+
+    private var isMissing: Bool {
+        guard ingredient.role != .seasoning else { return false }
+        if let cloudMatch {
+            return cloudMatch.missingRequiredIngredients.contains { isMatch($0, for: ingredient) } ||
+                cloudMatch.missingOptionalIngredients.contains { isMatch($0, for: ingredient) }
+        }
+        return inventoryAmount == nil
+    }
+
+    private var aliasMatch: CloudRecipeMatchIngredient? {
+        cloudMatch?.matchedIngredients.first {
+            isMatch($0, for: ingredient) && $0.matchType == "alias"
+        }
+    }
+
+    private var substituteMatch: CloudRecipeMatchIngredient? {
+        cloudMatch?.substitutedIngredients.first { isMatch($0, for: ingredient) }
+    }
+
+    private var inventoryText: String? {
+        if let substituteMatch {
+            return inventoryAmountText(matchingIngredientId: substituteMatch.userInventoryIngredientId, matchingName: substituteMatch.userInventoryIngredient)
+        }
+        if let aliasMatch {
+            return inventoryAmountText(matchingIngredientId: aliasMatch.userInventoryIngredientId, matchingName: aliasMatch.userInventoryIngredient)
+        }
+        return inventoryAmount
+    }
+
+    private var inventoryAmount: String? {
+        let canonicalId = ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matching = inventory.filter { stored in
+            if !canonicalId.isEmpty, stored.canonicalIngredientId == canonicalId {
+                return true
+            }
+            return stored.normalizedName == ingredient.normalizedName
+        }
+        return inventoryAmountText(from: matching)
+    }
+
+    private var aliasText: String? {
+        guard let aliasMatch else { return nil }
+        let source = aliasMatch.userInventoryIngredient.isEmpty ? ingredient.name : aliasMatch.userInventoryIngredient
+        return "\(source) -> \(aliasMatch.recipeIngredient)"
+    }
+
+    private var substituteText: String? {
+        guard let substituteMatch else { return nil }
+        let source = substituteMatch.userInventoryIngredient.isEmpty ? L.text("Inventory", language: appLanguage) : substituteMatch.userInventoryIngredient
+        return "\(source) -> \(substituteMatch.recipeIngredient)"
+    }
+
+    private func isMatch(_ item: CloudRecipeMatchIngredient, for ingredient: RecipeIngredient) -> Bool {
+        let itemId = item.recipeIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ingredientId = ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !itemId.isEmpty, !ingredientId.isEmpty {
+            return itemId == ingredientId
+        }
+        return IngredientNormalizer.normalizeName(item.recipeIngredient) == ingredient.normalizedName
+    }
+
+    private func inventoryAmountText(matchingIngredientId: String, matchingName: String) -> String? {
+        let ingredientId = matchingIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedName = IngredientNormalizer.normalizeName(matchingName)
+        let matching = inventory.filter { stored in
+            if !ingredientId.isEmpty, stored.canonicalIngredientId == ingredientId {
+                return true
+            }
+            return !normalizedName.isEmpty && stored.normalizedName == normalizedName
+        }
+        return inventoryAmountText(from: matching)
+    }
+
+    private func inventoryAmountText(from matching: [StoredIngredient]) -> String? {
+        guard !matching.isEmpty else { return nil }
+        let sameUnitTotal = matching
+            .filter { $0.unit == ingredient.unit }
+            .reduce(0) { $0 + $1.quantity }
+        if sameUnitTotal > 0 {
+            return "\(sameUnitTotal.formatted()) \(ingredient.unit)"
+        }
+        return matching
+            .map { "\($0.quantity.formatted()) \($0.unit)" }
+            .joined(separator: ", ")
     }
 }
 

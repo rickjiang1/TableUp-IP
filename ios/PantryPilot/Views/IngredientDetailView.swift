@@ -40,7 +40,11 @@ struct IngredientDetailView: View {
                 .pickerStyle(.menu)
 
                 DatePicker(L.text("Enter date", language: appLanguage), selection: $ingredient.enteredDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .environment(\.locale, datePickerLocale)
                 DatePicker(L.text("Expire date", language: appLanguage), selection: $ingredient.expireDate, displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .environment(\.locale, datePickerLocale)
             }
 
             Section(L.text("Recommended storage", language: appLanguage)) {
@@ -48,7 +52,7 @@ struct IngredientDetailView: View {
                     HStack {
                         Text(recommendation.approach.displayName(language: appLanguage))
                         Spacer()
-                        Text(recommendation.expireDate.formatted(date: .abbreviated, time: .omitted))
+                        Text(TableUpDateFormatter.date(recommendation.expireDate, language: appLanguage))
                         if recommendation.isRecommended {
                             Text(L.text("Best", language: appLanguage))
                                 .font(.caption)
@@ -89,6 +93,10 @@ struct IngredientDetailView: View {
             location: ingredient.location,
             enteredDate: ingredient.enteredDate
         )
+    }
+
+    private var datePickerLocale: Locale {
+        Locale(identifier: appLanguage == AppLanguage.chinese.rawValue ? "zh_Hans_US" : "en_US")
     }
 
     private func resolveIngredientName(_ name: String) {

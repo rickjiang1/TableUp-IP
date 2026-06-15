@@ -181,12 +181,15 @@ struct StorageView: View {
 
         do {
             let client = UnknownIngredientClient()
-            _ = try await client.resolve(items: ingredients.map {
+            let unresolvedIngredients = ingredients.filter {
+                $0.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            _ = try await client.resolve(items: unresolvedIngredients.map {
                 IngredientResolveInput(name: $0.name, source: "inventory")
             })
             async let unknowns = client.fetchPending(source: "inventory")
             async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
-            unmatchedIngredients = filterUnknowns(try await unknowns, against: ingredients.map(\.name))
+            unmatchedIngredients = filterUnknowns(try await unknowns, against: unresolvedIngredients.map(\.name))
             ingredientDictionary = try await dictionary
         } catch {
             unmatchedError = error.localizedDescription
@@ -284,6 +287,7 @@ struct StorageAlertMessage: Identifiable {
 struct UnknownIngredientsManagerView: View {
     var itemsToScan: [IngredientResolveInput] = []
     var source: String = ""
+    var shouldPersistAliasResolution = true
     var onResolved: ((UnknownIngredient, CloudIngredient) async throws -> Void)?
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
@@ -385,7 +389,9 @@ struct UnknownIngredientsManagerView: View {
     private func resolve(_ unknown: UnknownIngredient, as ingredient: CloudIngredient) async {
         do {
             try await onResolved?(unknown, ingredient)
-            try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
+            if shouldPersistAliasResolution {
+                try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
+            }
             unmatchedIngredients.removeAll { $0.id == unknown.id }
             alert = StorageAlertMessage(title: "Saved", message: "\(unknown.rawName) -> \(ingredient.canonicalName)")
         } catch {
@@ -441,7 +447,7 @@ struct UnknownIngredientRow: View {
 
             HStack(spacing: 12) {
                 Label("\(ingredient.occurrenceCount)", systemImage: "number")
-                if let lastSeen = ingredient.lastSeenText {
+                if let lastSeen {
                     Label(lastSeen, systemImage: "clock")
                 }
             }
@@ -500,6 +506,13 @@ struct UnknownIngredientRow: View {
         default:
             ingredient.source
         }
+    }
+
+    private var lastSeen: String? {
+        guard let lastSeenAt = ingredient.lastSeenAt else { return nil }
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: lastSeenAt) else { return nil }
+        return TableUpDateFormatter.date(date, language: appLanguage)
     }
 
     private var bestGuessIngredientId: String {
@@ -756,13 +769,6 @@ struct UnknownIngredient: Decodable, Identifiable {
     let occurrenceCount: Int
     let lastSeenAt: String?
 
-    var lastSeenText: String? {
-        guard let lastSeenAt else { return nil }
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: lastSeenAt) else { return nil }
-        return date.formatted(date: .abbreviated, time: .shortened)
-    }
-
     enum CodingKeys: String, CodingKey {
         case id
         case rawName = "raw_name"
@@ -813,7 +819,7 @@ struct IngredientRow: View {
             }
 
             HStack(spacing: 8) {
-                Text("\(ingredient.location.displayName(language: appLanguage)) - \(L.text("expires", language: appLanguage)) \(ingredient.expireDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("\(ingredient.location.displayName(language: appLanguage)) - \(L.text("expires", language: appLanguage)) \(TableUpDateFormatter.date(ingredient.expireDate, language: appLanguage))")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -825,19 +831,6 @@ struct IngredientRow: View {
                         .padding(.vertical, 3)
                         .background(expirationState.backgroundColor)
                         .clipShape(Capsule())
-                }
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    ForEach(StorageAdvisor.recommendations(for: ingredient)) { recommendation in
-                        Text("\(recommendation.approach.displayName(language: appLanguage)): \(recommendation.expireDate.formatted(date: .numeric, time: .omitted))\(recommendation.isRecommended ? " \(L.text("best", language: appLanguage))" : "")")
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(recommendation.isRecommended ? Color.orange.opacity(0.12) : Color(.secondarySystemBackground))
-                            .clipShape(Capsule())
-                    }
                 }
             }
         }

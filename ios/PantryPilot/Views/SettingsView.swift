@@ -137,7 +137,13 @@ enum L {
         "After cooking": "烹饪后",
         "Use": "使用",
         "Left": "剩余",
+        "Needed": "需要",
+        "Alias match": "别名匹配",
+        "Using substitute ingredient": "使用替代食材",
         "Cooked": "已烹饪",
+        "Consumed": "已消耗",
+        "No inventory items were consumed.": "没有扣减任何库存食材。",
+        "Orange means substitute ingredient": "橙色表示使用了替代食材",
         "Close": "关闭",
         "Meat": "肉类",
         "Seafood": "海鲜",
@@ -175,6 +181,15 @@ enum L {
         "folders": "个文件夹",
         "recipes": "个食谱",
         "piece": "个",
+        "g": "克",
+        "kg": "公斤",
+        "lb": "磅",
+        "oz": "盎司",
+        "ml": "毫升",
+        "l": "升",
+        "tsp": "茶匙",
+        "tbsp": "汤匙",
+        "cup": "杯",
         "clove": "瓣",
         "bunch": "把",
         "bottle": "瓶",
@@ -182,6 +197,16 @@ enum L {
         "bag": "袋",
         "pack": "包"
     ]
+}
+
+enum TableUpDateFormatter {
+    static func date(_ date: Date, language: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language == AppLanguage.chinese.rawValue ? "zh_Hans_US" : "en_US")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
 }
 
 extension IngredientCategory {

@@ -19,8 +19,9 @@ enum RecipeMatcher {
     static func assess(recipe: Recipe, inventory: [StoredIngredient]) -> CookAssessment {
         var missing: [MissingIngredient] = []
         var matchedCount = 0
+        let matchableIngredients = recipe.ingredients.filter(\.requiresInventoryMatch)
 
-        for ingredient in recipe.ingredients {
+        for ingredient in matchableIngredients {
             let needed = baseAmount(quantity: ingredient.quantity, unit: ingredient.unit)
             let availableBase = inventoryAmount(for: ingredient, inventory: inventory, targetBaseUnit: needed.unit)
 
@@ -41,13 +42,13 @@ enum RecipeMatcher {
         return CookAssessment(
             recipe: recipe,
             matchedCount: matchedCount,
-            totalCount: recipe.ingredients.count,
+            totalCount: matchableIngredients.count,
             missing: missing
         )
     }
 
     static func usagePreview(recipe: Recipe, inventory: [StoredIngredient]) -> [IngredientUsagePreview] {
-        recipe.ingredients.map { ingredient in
+        recipe.ingredients.filter(\.requiresInventoryMatch).map { ingredient in
             let needed = baseAmount(quantity: ingredient.quantity, unit: ingredient.unit)
             let availableBase = inventoryAmount(for: ingredient, inventory: inventory, targetBaseUnit: needed.unit)
             let leftoverBase = max(availableBase - needed.amount, 0)
@@ -62,12 +63,17 @@ enum RecipeMatcher {
         }
     }
 
-    static func subtract(recipe: Recipe, from inventory: [StoredIngredient]) {
-        for ingredient in recipe.ingredients {
-            var remaining = baseAmount(quantity: ingredient.quantity, unit: ingredient.unit).amount
-            let targetBaseUnit = baseAmount(quantity: ingredient.quantity, unit: ingredient.unit).unit
+    @discardableResult
+    static func subtract(recipe: Recipe, from inventory: [StoredIngredient]) -> [ConsumedIngredient] {
+        var consumed: [ConsumedIngredient] = []
 
-            for stored in inventory where remaining > 0 && stored.normalizedName == ingredient.normalizedName {
+        for ingredient in recipe.ingredients where ingredient.requiresInventoryMatch {
+            let needed = baseAmount(quantity: ingredient.quantity, unit: ingredient.unit)
+            var remaining = needed.amount
+            let targetBaseUnit = needed.unit
+            var consumedBase = 0.0
+
+            for stored in inventory where remaining > 0 && matches(ingredient: ingredient, stored: stored) {
                 let storedBase = baseAmount(quantity: stored.quantity, unit: stored.unit)
                 guard storedBase.unit == targetBaseUnit else { continue }
 
@@ -75,8 +81,21 @@ enum RecipeMatcher {
                 let converter = unitToBase[stored.unit] ?? (stored.unit, 1)
                 stored.quantity = max(0, stored.quantity - used / converter.factor)
                 remaining -= used
+                consumedBase += used
+            }
+
+            if consumedBase > 0 {
+                consumed.append(
+                    ConsumedIngredient(
+                        name: ingredient.name,
+                        quantity: amountInOriginalUnit(consumedBase, originalUnit: ingredient.unit),
+                        unit: ingredient.unit
+                    )
+                )
             }
         }
+
+        return consumed
     }
 
     private static func inventoryAmount(
@@ -85,7 +104,7 @@ enum RecipeMatcher {
         targetBaseUnit: String
     ) -> Double {
         inventory
-            .filter { $0.normalizedName == ingredient.normalizedName }
+            .filter { matches(ingredient: ingredient, stored: $0) }
             .map { baseAmount(quantity: $0.quantity, unit: $0.unit) }
             .filter { $0.unit == targetBaseUnit }
             .reduce(0) { $0 + $1.amount }
@@ -105,5 +124,20 @@ enum RecipeMatcher {
             return baseAmount
         }
         return baseAmount / converter.factor
+    }
+
+    private static func matches(ingredient: RecipeIngredient, stored: StoredIngredient) -> Bool {
+        let recipeCanonicalId = ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let storedCanonicalId = stored.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !recipeCanonicalId.isEmpty && !storedCanonicalId.isEmpty {
+            return recipeCanonicalId == storedCanonicalId
+        }
+        return stored.normalizedName == ingredient.normalizedName
+    }
+}
+
+private extension RecipeIngredient {
+    var requiresInventoryMatch: Bool {
+        role != .seasoning
     }
 }

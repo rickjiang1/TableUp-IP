@@ -525,18 +525,32 @@ struct CloudRecipeMatch: Decodable {
 
 struct CloudRecipeMatchIngredient: Decodable, Identifiable {
     let recipeIngredient: String
+    let recipeIngredientId: String
     let userInventoryIngredient: String
+    let userInventoryIngredientId: String
     let matchType: String
     let matchScore: Double
 
     var id: String {
-        "\(recipeIngredient)-\(userInventoryIngredient)-\(matchType)-\(matchScore)"
+        "\(recipeIngredient)-\(recipeIngredientId)-\(userInventoryIngredient)-\(userInventoryIngredientId)-\(matchType)-\(matchScore)"
     }
 
     enum CodingKeys: String, CodingKey {
         case recipeIngredient = "recipe_ingredient"
+        case recipeIngredientId = "recipe_ingredient_id"
         case userInventoryIngredient = "user_inventory_ingredient"
+        case userInventoryIngredientId = "user_inventory_ingredient_id"
         case matchType = "match_type"
         case matchScore = "match_score"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recipeIngredient = try container.decode(String.self, forKey: .recipeIngredient)
+        recipeIngredientId = try container.decodeIfPresent(String.self, forKey: .recipeIngredientId) ?? ""
+        userInventoryIngredient = try container.decodeIfPresent(String.self, forKey: .userInventoryIngredient) ?? ""
+        userInventoryIngredientId = try container.decodeIfPresent(String.self, forKey: .userInventoryIngredientId) ?? ""
+        matchType = try container.decode(String.self, forKey: .matchType)
+        matchScore = try container.decode(Double.self, forKey: .matchScore)
     }
 }

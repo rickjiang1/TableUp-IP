@@ -153,6 +153,10 @@ final class RecipeIngredient {
         set { roleRaw = newValue.rawValue }
     }
 
+    var isMatchedToIngredientLibrary: Bool {
+        !canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var displayText: String {
         "\(quantity.formatted()) \(unit) \(name)"
     }

@@ -32,3 +32,10 @@ struct IngredientUsagePreview: Identifiable {
     let available: Double
     let leftover: Double
 }
+
+struct ConsumedIngredient: Identifiable {
+    let id = UUID()
+    let name: String
+    let quantity: Double
+    let unit: String
+}
