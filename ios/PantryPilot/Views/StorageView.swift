@@ -7,6 +7,7 @@ struct StorageView: View {
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
     @State private var selectedTab: StorageTab = .inventory
     @State private var showingClearConfirmation = false
+    @State private var showingMatchAllConfirmation = false
     @State private var storageAlert: StorageAlertMessage?
     @State private var unmatchedIngredients: [UnknownIngredient] = []
     @State private var ingredientDictionary: [CloudIngredient] = []
@@ -15,8 +16,13 @@ struct StorageView: View {
     @State private var isBulkMatchingUnmatched = false
     @State private var unmatchedRefreshToken = UUID()
 
-    private var sortedIngredients: [StoredIngredient] {
-        ingredients.sorted(by: inventorySort)
+    private var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
+        IngredientCategory.allCases.compactMap { category in
+            let items = ingredients
+                .filter { $0.category == category }
+                .sorted(by: inventorySort)
+            return items.isEmpty ? nil : (category, items)
+        }
     }
 
     private func inventorySort(_ lhs: StoredIngredient, _ rhs: StoredIngredient) -> Bool {
@@ -140,6 +146,18 @@ struct StorageView: View {
             } message: {
                 Text(L.text("This will remove every saved ingredient.", language: appLanguage))
             }
+            .confirmationDialog(
+                L.text("Match all unmatched?", language: appLanguage),
+                isPresented: $showingMatchAllConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L.text("Match all", language: appLanguage)) {
+                    Task { await matchAllUnmatchedIngredients() }
+                }
+                Button(L.text("Cancel", language: appLanguage), role: .cancel) {}
+            } message: {
+                Text(L.text("The app will choose the best suggested ingredient for each unmatched inventory item. Low confidence items will be skipped.", language: appLanguage))
+            }
             .alert(item: $storageAlert) { alert in
                 Alert(
                     title: Text(L.text(alert.title, language: appLanguage)),
@@ -161,18 +179,19 @@ struct StorageView: View {
             .listRowBackground(Color.clear)
         }
 
-        Section(L.text("Inventory", language: appLanguage)) {
-            ForEach(sortedIngredients) { ingredient in
-                NavigationLink {
-                    IngredientDetailView(ingredient: ingredient)
-                } label: {
-                    IngredientRow(ingredient: ingredient)
+        ForEach(groupedIngredients, id: \.0) { category, items in
+            Section(category.displayName(language: appLanguage)) {
+                ForEach(items) { ingredient in
+                    NavigationLink {
+                        IngredientDetailView(ingredient: ingredient)
+                    } label: {
+                        IngredientRow(ingredient: ingredient)
+                    }
                 }
-            }
-            .onDelete { indexSet in
-                let items = sortedIngredients
-                for index in indexSet {
-                    modelContext.delete(items[index])
+                .onDelete { indexSet in
+                    for index in indexSet {
+                        modelContext.delete(items[index])
+                    }
                 }
             }
         }
@@ -202,6 +221,22 @@ struct StorageView: View {
             )
             .listRowBackground(Color.clear)
         } else {
+            Section {
+                Button {
+                    showingMatchAllConfirmation = true
+                } label: {
+                    Label(
+                        isBulkMatchingUnmatched ? L.text("Matching...", language: appLanguage) : L.text("Match all unmatched", language: appLanguage),
+                        systemImage: isBulkMatchingUnmatched ? "hourglass" : "wand.and.stars"
+                    )
+                    .frame(maxWidth: .infinity)
+                    .font(.headline)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .disabled(isLoadingUnmatched || isBulkMatchingUnmatched || unmatchedIngredients.isEmpty)
+            }
+
             Section {
                 ForEach(unmatchedIngredients) { ingredient in
                     UnknownIngredientRow(
@@ -233,23 +268,13 @@ struct StorageView: View {
             .disabled(ingredients.isEmpty)
             .accessibilityLabel(L.text("Clear All", language: appLanguage))
         case .unmatched:
-            HStack {
-                Button {
-                    Task { await matchAllUnmatchedIngredients() }
-                } label: {
-                    Image(systemName: isBulkMatchingUnmatched ? "hourglass" : "wand.and.stars")
-                }
-                .disabled(isLoadingUnmatched || isBulkMatchingUnmatched || unmatchedIngredients.isEmpty)
-                .accessibilityLabel(L.text("Match all", language: appLanguage))
-
-                Button {
-                    Task { await loadUnmatchedIngredients(force: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .disabled(isLoadingUnmatched || isBulkMatchingUnmatched)
-                .accessibilityLabel(L.text("Refresh", language: appLanguage))
+            Button {
+                Task { await loadUnmatchedIngredients(force: true) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
             }
+            .disabled(isLoadingUnmatched || isBulkMatchingUnmatched)
+            .accessibilityLabel(L.text("Refresh", language: appLanguage))
         }
     }
 
