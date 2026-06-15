@@ -16,9 +16,47 @@ struct StorageView: View {
 
     var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
         IngredientCategory.allCases.compactMap { category in
-            let items = ingredients.filter { $0.category == category }
+            let items = ingredients
+                .filter { $0.category == category }
+                .sorted(by: inventorySort)
             return items.isEmpty ? nil : (category, items)
         }
+    }
+
+    private func inventorySort(_ lhs: StoredIngredient, _ rhs: StoredIngredient) -> Bool {
+        let lhsNameKey = ingredientGroupKey(lhs)
+        let rhsNameKey = ingredientGroupKey(rhs)
+        if lhsNameKey != rhsNameKey {
+            return lhsNameKey.localizedStandardCompare(rhsNameKey) == .orderedAscending
+        }
+
+        if lhs.expireDate != rhs.expireDate {
+            return lhs.expireDate < rhs.expireDate
+        }
+
+        if lhs.locationRaw != rhs.locationRaw {
+            return lhs.locationRaw.localizedStandardCompare(rhs.locationRaw) == .orderedAscending
+        }
+
+        if lhs.enteredDate != rhs.enteredDate {
+            return lhs.enteredDate < rhs.enteredDate
+        }
+
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private func ingredientGroupKey(_ ingredient: StoredIngredient) -> String {
+        let canonicalId = ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !canonicalId.isEmpty {
+            return canonicalId.lowercased()
+        }
+
+        let normalizedName = ingredient.normalizedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedName.isEmpty {
+            return normalizedName.lowercased()
+        }
+
+        return ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     var body: some View {
