@@ -810,7 +810,7 @@ function parseMultipartFile(contentType, body, fieldNames) {
       };
     }
 
-    offset = nextPart + marker.length;
+    offset = nextPart;
   }
 
   return null;
@@ -852,7 +852,7 @@ function parseMultipartField(contentType, body, fieldName) {
       return body.slice(contentStart, dataEnd).toString("utf8").trim();
     }
 
-    offset = nextPart + marker.length;
+    offset = nextPart;
   }
 
   return "";
