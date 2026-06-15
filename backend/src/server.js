@@ -52,6 +52,16 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/ingredient-candidates") {
+      const candidates = await findIngredientCandidates({
+        query: url.searchParams.get("q") || "",
+        language: url.searchParams.get("language") || "en",
+        limit: Number(url.searchParams.get("limit") || 10)
+      });
+      sendJson(response, 200, { candidates });
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/resolve-ingredients") {
       const body = await readJsonRequest(request, 1024 * 1024);
       const resolved = await resolveIngredientItems(body.items);
@@ -402,6 +412,143 @@ async function resolveIngredientItems(inputItems) {
   );
 
   return resolvedItems;
+}
+
+async function findIngredientCandidates({ query, language = "en", limit = 10 }) {
+  const trimmedQuery = String(query || "").trim();
+  if (!trimmedQuery) {
+    return [];
+  }
+
+  const resultLimit = Math.min(Math.max(Number(limit) || 10, 1), 25);
+  const [rules, dictionary] = await Promise.all([
+    fetchMatchingRules(),
+    fetchIngredientDictionary(language)
+  ]);
+  const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const queryCandidates = ingredientNameCandidates(trimmedQuery);
+  const normalizedQuery = queryCandidates[0] || normalizeIngredientName(trimmedQuery);
+  const bestByIngredientId = new Map();
+
+  function consider(entry) {
+    const scored = scoreIngredientCandidate(entry, queryCandidates, normalizedQuery);
+    if (!scored || scored.score < 0.42) {
+      return;
+    }
+    const previous = bestByIngredientId.get(entry.ingredientId);
+    if (!previous || scored.score > previous.score) {
+      bestByIngredientId.set(entry.ingredientId, {
+        ingredientId: entry.ingredientId,
+        matchedAlias: entry.kind === "alias" ? entry.term : "",
+        score: scored.score,
+        reason: scored.reason
+      });
+    }
+  }
+
+  for (const ingredient of rules.ingredients || []) {
+    consider({ ingredientId: ingredient.ingredient_id, term: ingredient.ingredient_id, kind: "id" });
+    consider({ ingredientId: ingredient.ingredient_id, term: ingredient.canonical_name, kind: "canonical" });
+  }
+
+  for (const alias of rules.aliases || []) {
+    consider({ ingredientId: alias.ingredient_id, term: alias.alias_name, kind: "alias" });
+  }
+
+  return [...bestByIngredientId.values()]
+    .map((candidate) => {
+      const localized = dictionaryById.get(candidate.ingredientId);
+      const ingredient = ingredientsById.get(candidate.ingredientId);
+      const canonicalName = ingredient?.canonical_name || localized?.canonical_name || candidate.ingredientId;
+      return {
+        ingredient_id: candidate.ingredientId,
+        canonical_name: canonicalName,
+        display_name: localized?.display_name || canonicalName,
+        category: localized?.category || ingredient?.category || "other",
+        matched_alias: candidate.matchedAlias,
+        score: Number(candidate.score.toFixed(3)),
+        reason: candidate.reason
+      };
+    })
+    .sort((a, b) => b.score - a.score || a.display_name.localeCompare(b.display_name))
+    .slice(0, resultLimit);
+}
+
+function scoreIngredientCandidate(entry, queryCandidates, normalizedQuery) {
+  const normalizedTerm = normalizeIngredientName(entry.term);
+  if (!normalizedTerm) {
+    return null;
+  }
+
+  if (normalizedTerm === normalizedQuery) {
+    return { score: entry.kind === "alias" ? 0.99 : 1, reason: entry.kind === "alias" ? "alias_exact" : "exact" };
+  }
+
+  if (queryCandidates.includes(normalizedTerm)) {
+    return { score: entry.kind === "alias" ? 0.97 : 0.96, reason: "normalized_exact" };
+  }
+
+  if (normalizedTerm.includes(normalizedQuery) || normalizedQuery.includes(normalizedTerm)) {
+    const shorter = Math.min(normalizedTerm.length, normalizedQuery.length);
+    const longer = Math.max(normalizedTerm.length, normalizedQuery.length);
+    return { score: 0.78 + 0.14 * (shorter / longer), reason: entry.kind === "alias" ? "alias_contains" : "contains" };
+  }
+
+  const tokenScore = tokenOverlapScore(normalizedTerm, normalizedQuery);
+  if (tokenScore >= 0.5) {
+    return { score: 0.54 + 0.22 * tokenScore, reason: "token_overlap" };
+  }
+
+  const similarity = stringSimilarity(normalizedTerm, normalizedQuery);
+  if (similarity >= 0.68) {
+    return { score: 0.42 + 0.25 * similarity, reason: "spelling_close" };
+  }
+
+  return null;
+}
+
+function tokenOverlapScore(a, b) {
+  const aTokens = new Set(a.split(/\s+/).filter(Boolean));
+  const bTokens = new Set(b.split(/\s+/).filter(Boolean));
+  if (aTokens.size === 0 || bTokens.size === 0) {
+    return 0;
+  }
+  let overlap = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+  return overlap / Math.max(aTokens.size, bTokens.size);
+}
+
+function stringSimilarity(a, b) {
+  if (!a || !b) {
+    return 0;
+  }
+  const distance = levenshteinDistance(a, b);
+  return 1 - distance / Math.max(a.length, b.length);
+}
+
+function levenshteinDistance(a, b) {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  const current = Array(b.length + 1).fill(0);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[b.length];
 }
 
 function buildIngredientResolver(rules) {

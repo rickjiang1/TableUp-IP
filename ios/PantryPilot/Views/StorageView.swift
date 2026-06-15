@@ -425,6 +425,8 @@ struct UnknownIngredientRow: View {
     @State private var selectedIngredientId = ""
     @State private var isResolving = false
     @State private var showingIngredientPicker = false
+    @State private var candidates: [IngredientCandidate] = []
+    @State private var isLoadingCandidates = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -462,13 +464,13 @@ struct UnknownIngredientRow: View {
                         Text(selectedIngredientText)
                             .lineLimit(1)
                         Spacer()
-                        Image(systemName: "magnifyingglass")
+                        Image(systemName: isLoadingCandidates ? "hourglass" : "magnifyingglass")
                     }
                 }
                 .buttonStyle(.bordered)
 
                 Button {
-                    guard let selected = dictionary.first(where: { $0.id == selectedIngredientId }) else { return }
+                    guard let selected = selectedIngredient else { return }
                     isResolving = true
                     Task {
                         await resolve(selected)
@@ -488,10 +490,14 @@ struct UnknownIngredientRow: View {
             if selectedIngredientId.isEmpty {
                 selectedIngredientId = bestGuessIngredientId
             }
+            Task {
+                await loadCandidates()
+            }
         }
         .sheet(isPresented: $showingIngredientPicker) {
             IngredientDictionaryPickerView(
                 dictionary: dictionary,
+                suggestedCandidates: candidates,
                 selectedIngredientId: $selectedIngredientId
             )
         }
@@ -525,16 +531,49 @@ struct UnknownIngredientRow: View {
         }?.id ?? ""
     }
 
+    private var selectedIngredient: CloudIngredient? {
+        dictionary.first(where: { $0.id == selectedIngredientId }) ??
+        candidates.first(where: { $0.ingredientId == selectedIngredientId })?.ingredient
+    }
+
     private var selectedIngredientText: String {
-        guard let selected = dictionary.first(where: { $0.id == selectedIngredientId }) else {
+        guard let selected = selectedIngredient else {
             return L.text("Choose ingredient", language: appLanguage)
         }
         return "\(selected.displayName) (\(selected.category))"
+    }
+
+    @MainActor
+    private func loadCandidates() async {
+        guard candidates.isEmpty, !isLoadingCandidates else { return }
+        let query = ingredient.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ingredient.normalizedName
+            : ingredient.rawName
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        isLoadingCandidates = true
+        defer { isLoadingCandidates = false }
+
+        do {
+            let fetched = try await UnknownIngredientClient().fetchIngredientCandidates(
+                query: query,
+                language: appLanguage,
+                limit: 8
+            )
+            candidates = fetched
+            if selectedIngredientId.isEmpty {
+                selectedIngredientId = fetched.first?.ingredientId ?? bestGuessIngredientId
+            }
+        } catch {
+            if selectedIngredientId.isEmpty {
+                selectedIngredientId = bestGuessIngredientId
+            }
+        }
     }
 }
 
 struct IngredientDictionaryPickerView: View {
     let dictionary: [CloudIngredient]
+    var suggestedCandidates: [IngredientCandidate] = []
     @Binding var selectedIngredientId: String
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
@@ -570,6 +609,14 @@ struct IngredientDictionaryPickerView: View {
     var body: some View {
         NavigationStack {
             List {
+                if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !suggestedCandidates.isEmpty {
+                    Section(L.text("Suggested", language: appLanguage)) {
+                        ForEach(suggestedCandidates) { candidate in
+                            candidateButton(candidate)
+                        }
+                    }
+                }
+
                 ForEach(groupedDictionary, id: \.0) { category, ingredients in
                     Section(category) {
                         ForEach(ingredients) { ingredient in
@@ -615,6 +662,37 @@ struct IngredientDictionaryPickerView: View {
         }
         .foregroundStyle(.primary)
     }
+
+    private func candidateButton(_ candidate: IngredientCandidate) -> some View {
+        Button {
+            selectedIngredientId = candidate.ingredientId
+            dismiss()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(candidate.displayName)
+                        .fontWeight(.semibold)
+                    Text(candidate.ingredientId)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    if let matchedAlias = candidate.matchedAlias, !matchedAlias.isEmpty {
+                        Text("\(L.text("Matched alias", language: appLanguage)): \(matchedAlias)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Text("\(Int(candidate.score * 100))%")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                if selectedIngredientId == candidate.ingredientId {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
+        .foregroundStyle(.primary)
+    }
 }
 
 struct UnknownIngredientClient {
@@ -651,6 +729,24 @@ struct UnknownIngredientClient {
         }
 
         return try JSONDecoder().decode(CloudIngredientResponse.self, from: data).ingredients
+    }
+
+    func fetchIngredientCandidates(query: String, language: String, limit: Int = 8) async throws -> [IngredientCandidate] {
+        let endpoint = baseURL
+            .appending(path: "api/ingredient-candidates")
+            .appending(queryItems: [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "language", value: language),
+                URLQueryItem(name: "limit", value: "\(limit)")
+            ])
+        let (data, response) = try await session.data(from: endpoint)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UnknownIngredientClientError.badResponse
+        }
+
+        return try JSONDecoder().decode(IngredientCandidateResponse.self, from: data).candidates
     }
 
     func resolve(items: [IngredientResolveInput]) async throws -> [IngredientResolveResult] {
@@ -710,11 +806,53 @@ struct CloudIngredientResponse: Decodable {
     let ingredients: [CloudIngredient]
 }
 
+struct IngredientCandidateResponse: Decodable {
+    let candidates: [IngredientCandidate]
+}
+
+struct IngredientCandidate: Decodable, Identifiable {
+    let ingredientId: String
+    let canonicalName: String
+    let displayName: String
+    let category: String
+    let matchedAlias: String?
+    let score: Double
+    let reason: String
+
+    var id: String { ingredientId }
+
+    var ingredient: CloudIngredient {
+        CloudIngredient(
+            id: ingredientId,
+            canonicalName: canonicalName,
+            displayName: displayName,
+            category: category
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ingredientId = "ingredient_id"
+        case canonicalName = "canonical_name"
+        case displayName = "display_name"
+        case category
+        case matchedAlias = "matched_alias"
+        case score
+        case reason
+    }
+}
+
 struct CloudIngredient: Decodable, Identifiable {
     let id: String
     let canonicalName: String
     let displayName: String
     let category: String
+
+    init(id: String, canonicalName: String, displayName: String, category: String) {
+        self.id = id
+        self.canonicalName = canonicalName
+        self.displayName = displayName
+        self.category = category
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)

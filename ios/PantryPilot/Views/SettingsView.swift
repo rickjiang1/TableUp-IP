@@ -52,6 +52,8 @@ enum L {
         "Match to": "匹配到",
         "Choose ingredient": "选择食材",
         "Search ingredients": "搜索食材",
+        "Suggested": "推荐匹配",
+        "Matched alias": "匹配别名",
         "Matched to ingredient library": "已匹配到食材库",
         "Full product name": "完整商品名",
         "Description": "描述",
