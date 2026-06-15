@@ -44,11 +44,7 @@ export async function fetchCloudRecipes() {
       optionalFlag: ingredient.optional_flag ?? normalizeRole(ingredient.role) === "secondary",
       pantryFlag: ingredient.pantry_flag ?? normalizeRole(ingredient.role) === "seasoning"
     })),
-    steps: (stepsByRecipe.get(recipe.recipe_id) || []).map((step) => ({
-      id: step.step_id,
-      order: Number(step.step_order || 0),
-      text: step.instruction
-    }))
+    steps: (stepsByRecipe.get(recipe.recipe_id) || []).map((step) => normalizeStoredRecipeStep(step))
   }));
 }
 
@@ -106,7 +102,11 @@ export async function upsertCloudRecipe(input, recipeId = randomUUID()) {
         step_id: step.id || randomUUID(),
         recipe_id: recipe.id,
         step_order: Number.isFinite(Number(step.order)) ? Number(step.order) : index + 1,
-        instruction: step.text
+        instruction: JSON.stringify({
+          text: step.text,
+          phase: normalizeStepPhase(step.phase),
+          imageURLs: Array.isArray(step.imageURLs) ? step.imageURLs : []
+        })
       }))
     );
   }
@@ -458,11 +458,51 @@ function normalizeRecipeInput(input, recipeId) {
           .map((step, index) => ({
             id: typeof step.id === "string" ? step.id : "",
             order: Number(step.order || index + 1),
-            text: typeof step.text === "string" ? step.text.trim() : ""
+            phase: normalizeStepPhase(step.phase),
+            text: typeof step.text === "string" ? step.text.trim() : "",
+            imageURLs: Array.isArray(step.imageURLs)
+              ? step.imageURLs.map((url) => String(url || "").trim()).filter(Boolean)
+              : []
           }))
-          .filter((step) => step.text)
+          .filter((step) => step.text || step.imageURLs.length > 0)
       : []
   };
+}
+
+function normalizeStoredRecipeStep(step) {
+  const parsed = parseStepInstruction(step.instruction);
+  return {
+    id: step.step_id,
+    order: Number(step.step_order || 0),
+    phase: normalizeStepPhase(parsed.phase),
+    text: parsed.text,
+    imageURLs: parsed.imageURLs
+  };
+}
+
+function parseStepInstruction(instruction) {
+  const value = String(instruction || "").trim();
+  if (!value.startsWith("{")) {
+    return { text: value, phase: "COOK", imageURLs: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return {
+      text: typeof parsed.text === "string" ? parsed.text : value,
+      phase: normalizeStepPhase(parsed.phase),
+      imageURLs: Array.isArray(parsed.imageURLs)
+        ? parsed.imageURLs.map((url) => String(url || "").trim()).filter(Boolean)
+        : []
+    };
+  } catch {
+    return { text: value, phase: "COOK", imageURLs: [] };
+  }
+}
+
+function normalizeStepPhase(phase) {
+  const value = String(phase || "").trim().toUpperCase();
+  return ["PLANNING", "PREP", "COOK", "FINISH", "CLEANUP"].includes(value) ? value : "COOK";
 }
 
 function sanitizeFileName(fileName) {

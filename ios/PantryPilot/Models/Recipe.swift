@@ -9,6 +9,7 @@ final class Recipe {
     var folderId: String = ""
     var name: String
     var steps: [String]
+    var workflowStepsJSON: String = ""
     var videoURL: String
     var imageURL: String
     var totalTimeMinutes: Int = 0
@@ -50,6 +51,7 @@ final class Recipe {
         self.name = name
         self.ingredients = ingredients
         self.steps = steps
+        self.workflowStepsJSON = RecipeWorkflowStep.encode(steps.map { RecipeWorkflowStep(phase: .cook, text: $0) })
         self.videoURL = videoURL
         self.imageURL = imageURL
         self.totalTimeMinutes = totalTimeMinutes
@@ -71,6 +73,80 @@ final class Recipe {
     var difficulty: RecipeDifficulty {
         get { RecipeDifficulty(rawValue: difficultyRaw) ?? .medium }
         set { difficultyRaw = newValue.rawValue }
+    }
+
+    var workflowSteps: [RecipeWorkflowStep] {
+        let decoded = RecipeWorkflowStep.decode(workflowStepsJSON)
+        if !decoded.isEmpty {
+            return decoded
+        }
+        return steps.map { RecipeWorkflowStep(phase: .cook, text: $0) }
+    }
+
+    func setWorkflowSteps(_ newSteps: [RecipeWorkflowStep]) {
+        let cleanedSteps = newSteps
+            .map { $0.cleaned }
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !$0.imageURLs.isEmpty }
+        workflowStepsJSON = RecipeWorkflowStep.encode(cleanedSteps)
+        steps = cleanedSteps.map(\.text).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+}
+
+enum RecipeStepPhase: String, CaseIterable, Codable, Identifiable {
+    case planning = "PLANNING"
+    case prep = "PREP"
+    case cook = "COOK"
+    case finish = "FINISH"
+    case cleanup = "CLEANUP"
+
+    var id: String { rawValue }
+
+    func displayName(language: String) -> String {
+        switch self {
+        case .planning:
+            return L.text("Planning", language: language)
+        case .prep:
+            return L.text("Prep", language: language)
+        case .cook:
+            return L.text("Cook phase", language: language)
+        case .finish:
+            return L.text("Finish", language: language)
+        case .cleanup:
+            return L.text("Cleanup", language: language)
+        }
+    }
+}
+
+struct RecipeWorkflowStep: Codable, Identifiable, Hashable {
+    var id: String = UUID().uuidString
+    var phase: RecipeStepPhase = .cook
+    var order: Int = 0
+    var text: String
+    var imageURLs: [String] = []
+
+    var cleaned: RecipeWorkflowStep {
+        var copy = self
+        copy.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.imageURLs = imageURLs
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return copy
+    }
+
+    static func encode(_ steps: [RecipeWorkflowStep]) -> String {
+        guard let data = try? JSONEncoder().encode(steps),
+              let json = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return json
+    }
+
+    static func decode(_ json: String) -> [RecipeWorkflowStep] {
+        guard let data = json.data(using: .utf8),
+              let steps = try? JSONDecoder().decode([RecipeWorkflowStep].self, from: data) else {
+            return []
+        }
+        return steps
     }
 }
 

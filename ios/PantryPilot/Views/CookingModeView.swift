@@ -44,8 +44,15 @@ struct CookingModeView: View {
                 }
 
                 Section(L.text("Steps", language: appLanguage)) {
-                    ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, step in
-                        Text("\(index + 1). \(step)")
+                    ForEach(RecipeStepPhase.allCases) { phase in
+                        let steps = recipe.workflowSteps.filter { $0.phase == phase }
+                        if !steps.isEmpty {
+                            DisclosureGroup(phase.displayName(language: appLanguage)) {
+                                ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                                    RecipeWorkflowStepRow(step: step, index: index + 1)
+                                }
+                            }
+                        }
                     }
                 }
             }

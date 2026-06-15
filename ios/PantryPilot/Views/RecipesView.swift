@@ -468,9 +468,10 @@ struct RecipeCloudSync {
                 localRecipe.imageData = nil
                 localRecipe.imageThumbnailData = nil
             }
-            localRecipe.steps = cloudRecipe.steps
+            let cloudWorkflowSteps = cloudRecipe.steps
                 .sorted { $0.order < $1.order }
-                .map(\.text)
+                .map(\.workflowStep)
+            localRecipe.setWorkflowSteps(cloudWorkflowSteps)
 
             for ingredient in Array(localRecipe.ingredients) {
                 modelContext.delete(ingredient)
@@ -668,8 +669,14 @@ struct CloudRecipeSavePayload: Encodable {
                 sortOrder: index + 1
             )
         }
-        steps = recipe.steps.enumerated().map { index, step in
-            Step(order: index + 1, text: step)
+        steps = recipe.workflowSteps.enumerated().map { index, step in
+            Step(
+                id: step.id,
+                order: index + 1,
+                phase: step.phase.rawValue,
+                text: step.text,
+                imageURLs: step.imageURLs
+            )
         }
     }
 
@@ -683,8 +690,11 @@ struct CloudRecipeSavePayload: Encodable {
     }
 
     struct Step: Encodable {
+        let id: String
         let order: Int
+        let phase: String
         let text: String
+        let imageURLs: [String]
     }
 }
 
@@ -770,7 +780,19 @@ struct CloudRecipeIngredient: Decodable {
 struct CloudRecipeStep: Decodable {
     let id: String
     let order: Int
+    let phase: String?
     let text: String
+    let imageURLs: [String]?
+
+    var workflowStep: RecipeWorkflowStep {
+        RecipeWorkflowStep(
+            id: id,
+            phase: RecipeStepPhase(rawValue: phase ?? "") ?? .cook,
+            order: order,
+            text: text,
+            imageURLs: imageURLs ?? []
+        )
+    }
 }
 
 struct RecipeMetricsEditor: View {
@@ -812,6 +834,136 @@ struct RecipeMetricsEditor: View {
     }
 }
 
+struct RecipeWorkflowStepRow: View {
+    let step: RecipeWorkflowStep
+    let index: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !step.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("\(index). \(step.text)")
+            }
+
+            ForEach(step.imageURLs, id: \.self) { imageURL in
+                if let url = URL(string: imageURL), url.scheme != nil {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            Label(imageURL, systemImage: "photo")
+                                .foregroundStyle(.secondary)
+                        case .empty:
+                            ProgressView()
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 120, maxHeight: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                } else {
+                    Label(imageURL, systemImage: "photo")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct RecipeWorkflowStepDraft: Identifiable, Hashable {
+    var id: String = UUID().uuidString
+    var phase: RecipeStepPhase
+    var text: String = ""
+    var imageURLsText: String = ""
+
+    init(id: String = UUID().uuidString, phase: RecipeStepPhase, text: String = "", imageURLsText: String = "") {
+        self.id = id
+        self.phase = phase
+        self.text = text
+        self.imageURLsText = imageURLsText
+    }
+
+    init(step: RecipeWorkflowStep) {
+        id = step.id
+        phase = step.phase
+        text = step.text
+        imageURLsText = step.imageURLs.joined(separator: "\n")
+    }
+
+    static func drafts(from steps: [RecipeWorkflowStep]) -> [RecipeWorkflowStepDraft] {
+        let drafts = steps.map(RecipeWorkflowStepDraft.init(step:))
+        return drafts.isEmpty ? [RecipeWorkflowStepDraft(phase: .prep), RecipeWorkflowStepDraft(phase: .cook)] : drafts
+    }
+}
+
+struct RecipeWorkflowStepsEditor: View {
+    @Binding var drafts: [RecipeWorkflowStepDraft]
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+
+    var body: some View {
+        Section(L.text("Steps", language: appLanguage)) {
+            ForEach(RecipeStepPhase.allCases) { phase in
+                DisclosureGroup(phase.displayName(language: appLanguage)) {
+                    ForEach($drafts) { $draft in
+                        if draft.phase == phase {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TextEditor(text: $draft.text)
+                                    .frame(minHeight: 72)
+                                    .overlay(alignment: .topLeading) {
+                                        if draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                            Text(L.text("Step instruction", language: appLanguage))
+                                                .foregroundStyle(.secondary)
+                                                .padding(.top, 8)
+                                                .padding(.leading, 5)
+                                                .allowsHitTesting(false)
+                                        }
+                                    }
+
+                                TextField(L.text("Step image URLs", language: appLanguage), text: $draft.imageURLsText, axis: .vertical)
+                                    .lineLimit(1...4)
+
+                                Button(L.text("Remove Step", language: appLanguage), role: .destructive) {
+                                    drafts.removeAll { $0.id == draft.id }
+                                }
+                                .font(.caption)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+
+                    Button {
+                        drafts.append(RecipeWorkflowStepDraft(phase: phase))
+                    } label: {
+                        Label(L.text("Add Step", language: appLanguage), systemImage: "plus")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private func workflowSteps(from drafts: [RecipeWorkflowStepDraft]) -> [RecipeWorkflowStep] {
+    drafts.enumerated().compactMap { index, draft in
+        let text = draft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageURLs = draft.imageURLsText
+            .split(whereSeparator: \.isNewline)
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !text.isEmpty || !imageURLs.isEmpty else { return nil }
+        return RecipeWorkflowStep(
+            id: draft.id,
+            phase: draft.phase,
+            order: index + 1,
+            text: text,
+            imageURLs: imageURLs
+        )
+    }
+}
+
 struct AddRecipeView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -826,7 +978,10 @@ struct AddRecipeView: View {
         RecipeIngredientDraft(name: "tomato", quantity: 2, unit: "piece", role: .secondary),
         RecipeIngredientDraft(name: "soy sauce", quantity: 1, unit: "tbsp", role: .seasoning)
     ]
-    @State private var stepsText = ""
+    @State private var workflowStepDrafts: [RecipeWorkflowStepDraft] = [
+        RecipeWorkflowStepDraft(phase: .prep, text: ""),
+        RecipeWorkflowStepDraft(phase: .cook, text: "")
+    ]
     @State private var videoURL = ""
     @State private var totalTimeMinutes = 30
     @State private var activeTimeMinutes = 20
@@ -891,10 +1046,7 @@ struct AddRecipeView: View {
                     }
                 }
 
-                Section(L.text("Steps", language: appLanguage)) {
-                    TextEditor(text: $stepsText)
-                        .frame(minHeight: 100)
-                }
+                RecipeWorkflowStepsEditor(drafts: $workflowStepDrafts)
             }
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
@@ -935,17 +1087,13 @@ struct AddRecipeView: View {
 
         let resolvedDrafts = await resolvedRecipeIngredientDrafts(from: ingredientDrafts)
         let ingredients = recipeIngredients(from: resolvedDrafts)
-        let steps = stepsText
-            .split(separator: "\n")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let workflowSteps = workflowSteps(from: workflowStepDrafts)
 
         let recipe = Recipe(
             source: source,
             folderId: folderId,
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             ingredients: ingredients,
-            steps: steps,
             videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
             totalTimeMinutes: totalTimeMinutes,
             activeTimeMinutes: activeTimeMinutes,
@@ -955,6 +1103,7 @@ struct AddRecipeView: View {
             imageThumbnailData: selectedImageThumbnailData,
             videoFileName: selectedVideoFileName
         )
+        recipe.setWorkflowSteps(workflowSteps)
         modelContext.insert(recipe)
 
         do {
@@ -1005,7 +1154,7 @@ struct EditRecipeView: View {
 
     @State private var name: String
     @State private var ingredientDrafts: [RecipeIngredientDraft]
-    @State private var stepsText: String
+    @State private var workflowStepDrafts: [RecipeWorkflowStepDraft]
     @State private var videoURL: String
     @State private var totalTimeMinutes: Int
     @State private var activeTimeMinutes: Int
@@ -1029,7 +1178,7 @@ struct EditRecipeView: View {
         self.onSyncFailed = onSyncFailed
         _name = State(initialValue: recipe.name)
         _ingredientDrafts = State(initialValue: recipe.ingredients.map { RecipeIngredientDraft(ingredient: $0) })
-        _stepsText = State(initialValue: recipe.steps.joined(separator: "\n"))
+        _workflowStepDrafts = State(initialValue: RecipeWorkflowStepDraft.drafts(from: recipe.workflowSteps))
         _videoURL = State(initialValue: recipe.videoURL)
         _totalTimeMinutes = State(initialValue: recipe.totalTimeMinutes)
         _activeTimeMinutes = State(initialValue: recipe.activeTimeMinutes)
@@ -1104,10 +1253,7 @@ struct EditRecipeView: View {
                     }
                 }
 
-                Section(L.text("Steps", language: appLanguage)) {
-                    TextEditor(text: $stepsText)
-                        .frame(minHeight: 100)
-                }
+                RecipeWorkflowStepsEditor(drafts: $workflowStepDrafts)
             }
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
@@ -1148,10 +1294,7 @@ struct EditRecipeView: View {
 
         let resolvedDrafts = await resolvedRecipeIngredientDrafts(from: ingredientDrafts)
         let ingredients = recipeIngredients(from: resolvedDrafts)
-        let steps = stepsText
-            .split(separator: "\n")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let workflowSteps = workflowSteps(from: workflowStepDrafts)
 
         recipe.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         recipe.videoURL = videoURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1165,7 +1308,7 @@ struct EditRecipeView: View {
             RecipeMediaStore.deleteVideo(fileName: recipe.videoFileName)
         }
         recipe.videoFileName = selectedVideoFileName
-        recipe.steps = steps
+        recipe.setWorkflowSteps(workflowSteps)
 
         for ingredient in Array(recipe.ingredients) {
             modelContext.delete(ingredient)
@@ -1641,8 +1784,15 @@ struct RecipeDetailView: View {
                     L.text("Steps", language: appLanguage),
                     isExpanded: $isStepsExpanded
                 ) {
-                    ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, step in
-                        Text("\(index + 1). \(step)")
+                    ForEach(RecipeStepPhase.allCases) { phase in
+                        let steps = recipe.workflowSteps.filter { $0.phase == phase }
+                        if !steps.isEmpty {
+                            DisclosureGroup(phase.displayName(language: appLanguage)) {
+                                ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
+                                    RecipeWorkflowStepRow(step: step, index: index + 1)
+                                }
+                            }
+                        }
                     }
                 }
             }
