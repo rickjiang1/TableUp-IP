@@ -52,7 +52,7 @@ enum L {
         "The app will choose the best suggested ingredient for each unmatched inventory item. Low confidence items will be skipped.": "App 会为每个未匹配库存食材选择最接近的推荐食材。置信度低的项目会自动跳过。",
         "Unable to load unmatched ingredients": "无法读取未匹配食材",
         "No unmatched ingredients": "没有未匹配食材",
-        "Names that do not match the ingredient dictionary will appear here after recipe matching.": "匹配菜谱后，没有匹配到食材字典的名称会显示在这里。",
+        "Names that do not match the ingredient dictionary will appear here after recipe matching.": "库存里还没有匹配到食材库的食材会显示在这里。",
         "Not matched to ingredient dictionary": "没有匹配到食材字典",
         "Use these names to add aliases such as chicken breast = chicken or 鸡胸 = chicken breast.": "你可以用这些名称添加别名，比如 chicken breast = chicken，或 鸡胸 = chicken breast。",
         "Normalized": "归一化名称",

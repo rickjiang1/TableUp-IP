@@ -281,9 +281,6 @@ struct StorageView: View {
     @MainActor
     private func loadUnmatchedIngredients(force: Bool = false) async {
         guard !isLoadingUnmatched else { return }
-        if !force && !unmatchedIngredients.isEmpty {
-            return
-        }
 
         isLoadingUnmatched = true
         unmatchedError = nil
@@ -293,12 +290,8 @@ struct StorageView: View {
             let unresolvedIngredients = ingredients.filter {
                 $0.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
-            _ = try await client.resolve(items: unresolvedIngredients.map {
-                IngredientResolveInput(name: $0.name, source: "inventory")
-            })
-            async let unknowns = client.fetchPending(source: "inventory")
             async let dictionary = client.fetchIngredientDictionary(language: appLanguage)
-            unmatchedIngredients = filterUnknowns(try await unknowns, against: unresolvedIngredients.map(\.name))
+            unmatchedIngredients = localUnmatchedIngredients(from: unresolvedIngredients)
             ingredientDictionary = try await dictionary
             unmatchedRefreshToken = UUID()
         } catch {
@@ -306,6 +299,26 @@ struct StorageView: View {
         }
 
         isLoadingUnmatched = false
+    }
+
+    private func localUnmatchedIngredients(from ingredients: [StoredIngredient]) -> [UnknownIngredient] {
+        ingredients
+            .sorted(by: inventorySort)
+            .enumerated()
+            .map { index, ingredient in
+                let normalizedName = ingredient.normalizedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? IngredientNormalizer.normalizeName(ingredient.name)
+                    : ingredient.normalizedName
+                return UnknownIngredient(
+                    id: "local-inventory-\(index)-\(normalizedUnknownKey(ingredient.name))-\(ingredient.createdAt.timeIntervalSince1970)",
+                    rawName: ingredient.name,
+                    normalizedName: normalizedName,
+                    source: "inventory",
+                    status: "pending",
+                    occurrenceCount: 1,
+                    lastSeenAt: nil
+                )
+            }
     }
 
     private func filterUnknowns(_ unknowns: [UnknownIngredient], against names: [String]) -> [UnknownIngredient] {
@@ -327,9 +340,15 @@ struct StorageView: View {
     @MainActor
     private func resolveUnknownIngredient(_ unknown: UnknownIngredient, as ingredient: CloudIngredient) async {
         do {
-            try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
+            if !unknown.id.hasPrefix("local-inventory-") {
+                try await UnknownIngredientClient().resolve(unknown: unknown, as: ingredient)
+            }
             markLocalInventoryItems(named: unknown, as: ingredient)
-            unmatchedIngredients.removeAll { $0.id == unknown.id }
+            unmatchedIngredients.removeAll {
+                $0.id == unknown.id ||
+                normalizedUnknownKey($0.rawName) == normalizedUnknownKey(unknown.rawName) ||
+                normalizedUnknownKey($0.normalizedName) == normalizedUnknownKey(unknown.normalizedName)
+            }
             storageAlert = StorageAlertMessage(
                 title: "Saved",
                 message: "\(unknown.rawName) -> \(ingredient.canonicalName)"
@@ -365,9 +384,15 @@ struct StorageView: View {
                     continue
                 }
 
-                try await client.resolve(unknown: unknown, as: candidate.ingredient)
+                if !unknown.id.hasPrefix("local-inventory-") {
+                    try await client.resolve(unknown: unknown, as: candidate.ingredient)
+                }
                 markLocalInventoryItems(named: unknown, as: candidate.ingredient)
-                unmatchedIngredients.removeAll { $0.id == unknown.id }
+                unmatchedIngredients.removeAll {
+                    $0.id == unknown.id ||
+                    normalizedUnknownKey($0.rawName) == normalizedUnknownKey(unknown.rawName) ||
+                    normalizedUnknownKey($0.normalizedName) == normalizedUnknownKey(unknown.normalizedName)
+                }
                 matchedCount += 1
             } catch {
                 skippedCount += 1
