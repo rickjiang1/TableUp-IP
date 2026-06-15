@@ -457,7 +457,7 @@ struct RecipeCloudSync {
             localRecipe.videoURL = cloudRecipe.videoURL
             localRecipe.totalTimeMinutes = cloudRecipe.totalTimeMinutes
             localRecipe.activeTimeMinutes = cloudRecipe.activeTimeMinutes
-            localRecipe.primaryCookingMethod = cloudRecipe.recipeCookingMethod
+            localRecipe.primaryCookingMethods = cloudRecipe.recipeCookingMethods
             localRecipe.difficulty = cloudRecipe.recipeDifficulty
             localRecipe.leftoverScore = cloudRecipe.leftoverScore
             if !cloudRecipe.imageURL.isEmpty,
@@ -659,7 +659,7 @@ struct CloudRecipeSavePayload: Encodable {
         videoURL = recipe.videoURL
         totalTimeMinutes = recipe.totalTimeMinutes
         activeTimeMinutes = recipe.activeTimeMinutes
-        primaryCookingMethod = recipe.primaryCookingMethod.rawValue
+        primaryCookingMethod = recipe.primaryCookingMethodRaw
         difficulty = recipe.difficulty.rawValue
         leftoverScore = recipe.leftoverScore
         ingredients = recipe.ingredients.enumerated().map { index, ingredient in
@@ -763,8 +763,8 @@ struct CloudRecipe: Decodable {
         RecipeDifficulty.allCases.first { $0.rawValue.caseInsensitiveCompare(difficulty) == .orderedSame } ?? .medium
     }
 
-    var recipeCookingMethod: RecipeCookingMethod {
-        RecipeCookingMethod.allCases.first { $0.rawValue.caseInsensitiveCompare(primaryCookingMethod) == .orderedSame } ?? .none
+    var recipeCookingMethods: [RecipeCookingMethod] {
+        RecipeCookingMethod.decodeList(primaryCookingMethod)
     }
 }
 
@@ -837,7 +837,7 @@ struct CloudRecipeStep: Decodable {
 struct RecipeMetricsEditor: View {
     @Binding var totalTimeMinutes: Int
     @Binding var activeTimeMinutes: Int
-    @Binding var primaryCookingMethod: RecipeCookingMethod
+    @Binding var primaryCookingMethods: [RecipeCookingMethod]
     @Binding var difficulty: RecipeDifficulty
     @Binding var leftoverScore: Double
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
@@ -858,12 +858,27 @@ struct RecipeMetricsEditor: View {
                 step: 5
             )
 
-            Picker(L.text("Primary cooking method", language: appLanguage), selection: $primaryCookingMethod) {
-                ForEach(RecipeCookingMethod.allCases) { method in
-                    Text(method.displayName(language: appLanguage)).tag(method)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L.text("Primary cooking method", language: appLanguage))
+                ForEach(RecipeCookingMethod.selectableCases) { method in
+                    Button {
+                        toggleCookingMethod(method)
+                    } label: {
+                        HStack {
+                            Text(method.displayName(language: appLanguage))
+                            Spacer()
+                            if primaryCookingMethods.contains(method) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.menu)
 
             Picker(L.text("Difficulty", language: appLanguage), selection: $difficulty) {
                 ForEach(RecipeDifficulty.allCases) { difficulty in
@@ -877,6 +892,14 @@ struct RecipeMetricsEditor: View {
                 Slider(value: $leftoverScore, in: 0...100, step: 5)
                     .tint(.orange)
             }
+        }
+    }
+
+    private func toggleCookingMethod(_ method: RecipeCookingMethod) {
+        if primaryCookingMethods.contains(method) {
+            primaryCookingMethods.removeAll { $0 == method }
+        } else {
+            primaryCookingMethods.append(method)
         }
     }
 }
@@ -1032,7 +1055,7 @@ struct AddRecipeView: View {
     @State private var videoURL = ""
     @State private var totalTimeMinutes = 30
     @State private var activeTimeMinutes = 20
-    @State private var primaryCookingMethod = RecipeCookingMethod.none
+    @State private var primaryCookingMethods: [RecipeCookingMethod] = []
     @State private var difficulty = RecipeDifficulty.medium
     @State private var leftoverScore = 50.0
     @State private var selectedPhoto: PhotosPickerItem?
@@ -1052,7 +1075,7 @@ struct AddRecipeView: View {
                 RecipeMetricsEditor(
                     totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
-                    primaryCookingMethod: $primaryCookingMethod,
+                    primaryCookingMethods: $primaryCookingMethods,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
                 )
@@ -1146,13 +1169,14 @@ struct AddRecipeView: View {
             videoURL: videoURL.trimmingCharacters(in: .whitespacesAndNewlines),
             totalTimeMinutes: totalTimeMinutes,
             activeTimeMinutes: activeTimeMinutes,
-            primaryCookingMethod: primaryCookingMethod,
+            primaryCookingMethod: primaryCookingMethods.first ?? .none,
             difficulty: difficulty,
             leftoverScore: leftoverScore,
             imageData: selectedImageData,
             imageThumbnailData: selectedImageThumbnailData,
             videoFileName: selectedVideoFileName
         )
+        recipe.primaryCookingMethods = primaryCookingMethods
         recipe.setWorkflowSteps(workflowSteps)
         modelContext.insert(recipe)
 
@@ -1208,7 +1232,7 @@ struct EditRecipeView: View {
     @State private var videoURL: String
     @State private var totalTimeMinutes: Int
     @State private var activeTimeMinutes: Int
-    @State private var primaryCookingMethod: RecipeCookingMethod
+    @State private var primaryCookingMethods: [RecipeCookingMethod]
     @State private var difficulty: RecipeDifficulty
     @State private var leftoverScore: Double
     @State private var selectedPhoto: PhotosPickerItem?
@@ -1233,7 +1257,7 @@ struct EditRecipeView: View {
         _videoURL = State(initialValue: recipe.videoURL)
         _totalTimeMinutes = State(initialValue: recipe.totalTimeMinutes)
         _activeTimeMinutes = State(initialValue: recipe.activeTimeMinutes)
-        _primaryCookingMethod = State(initialValue: recipe.primaryCookingMethod)
+        _primaryCookingMethods = State(initialValue: recipe.primaryCookingMethods)
         _difficulty = State(initialValue: recipe.difficulty)
         _leftoverScore = State(initialValue: recipe.leftoverScore)
         _selectedImageData = State(initialValue: recipe.imageData)
@@ -1250,7 +1274,7 @@ struct EditRecipeView: View {
                 RecipeMetricsEditor(
                     totalTimeMinutes: $totalTimeMinutes,
                     activeTimeMinutes: $activeTimeMinutes,
-                    primaryCookingMethod: $primaryCookingMethod,
+                    primaryCookingMethods: $primaryCookingMethods,
                     difficulty: $difficulty,
                     leftoverScore: $leftoverScore
                 )
@@ -1353,7 +1377,7 @@ struct EditRecipeView: View {
         recipe.videoURL = videoURL.trimmingCharacters(in: .whitespacesAndNewlines)
         recipe.totalTimeMinutes = totalTimeMinutes
         recipe.activeTimeMinutes = activeTimeMinutes
-        recipe.primaryCookingMethod = primaryCookingMethod
+        recipe.primaryCookingMethods = primaryCookingMethods
         recipe.difficulty = difficulty
         recipe.leftoverScore = leftoverScore
         recipe.imageData = selectedImageData
@@ -1572,8 +1596,11 @@ struct RecipeMetricsSection: View {
         Section(L.text("Recipe metrics", language: appLanguage)) {
             metricRow(title: "Total Time", value: "\(recipe.totalTimeMinutes) \(L.text("minutes", language: appLanguage))")
             metricRow(title: "Active Time", value: "\(recipe.activeTimeMinutes) \(L.text("minutes", language: appLanguage))")
-            if recipe.primaryCookingMethod != .none {
-                metricRow(title: "Primary cooking method", value: recipe.primaryCookingMethod.displayName(language: appLanguage))
+            if !recipe.primaryCookingMethods.isEmpty {
+                metricRow(
+                    title: "Primary cooking method",
+                    value: recipe.primaryCookingMethods.map { $0.displayName(language: appLanguage) }.joined(separator: ", ")
+                )
             }
             metricRow(title: "Difficulty", value: recipe.difficulty.displayName(language: appLanguage))
             metricRow(title: "Fridge Rescue Score", value: "\(fridgeRescueScore)")
@@ -1659,6 +1686,13 @@ struct CloudMatchDetailSection: View {
                 Text(quantityText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.leading, 28)
+            }
+            if item.matchType == "substitute" {
+                Text("\(L.text("Substitute score", language: appLanguage)): \(Int((item.matchScore * 100).rounded()))%")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.orange)
                     .padding(.leading, 28)
             }
         }
@@ -2072,7 +2106,8 @@ struct RecipeIngredientMatchRow: View {
     private var substituteText: String? {
         guard let substituteMatch else { return nil }
         let source = substituteMatch.userInventoryIngredient.isEmpty ? L.text("Inventory", language: appLanguage) : substituteMatch.userInventoryIngredient
-        return "\(source) -> \(substituteMatch.recipeIngredient)"
+        let score = "\(L.text("Substitute score", language: appLanguage)): \(Int((substituteMatch.matchScore * 100).rounded()))%"
+        return "\(source) -> \(substituteMatch.recipeIngredient)\n\(score)"
     }
 
     private func isMatch(_ item: CloudRecipeMatchIngredient, for ingredient: RecipeIngredient) -> Bool {

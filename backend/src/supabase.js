@@ -462,7 +462,7 @@ function normalizeRecipeInput(input, recipeId) {
     videoURL: typeof input.videoURL === "string" ? input.videoURL.trim() : "",
     totalTimeMinutes: Number(input.totalTimeMinutes || 0),
     activeTimeMinutes: Number(input.activeTimeMinutes || 0),
-    primaryCookingMethod: normalizeCookingMethod(input.primaryCookingMethod),
+    primaryCookingMethod: normalizeCookingMethods(input.primaryCookingMethod),
     difficulty: typeof input.difficulty === "string" ? input.difficulty.trim() : "",
     leftoverScore: Number(input.leftoverScore || 0),
     cleanupScore: Number(input.cleanupScore || 0),
@@ -563,6 +563,14 @@ function normalizeCookingMethod(method) {
     "raw"
   ]);
   return allowed.has(value) ? value : "";
+}
+
+function normalizeCookingMethods(methods) {
+  const normalized = String(methods || "")
+    .split(",")
+    .map(normalizeCookingMethod)
+    .filter(Boolean);
+  return [...new Set(normalized)].join(",");
 }
 
 function sanitizeFileName(fileName) {

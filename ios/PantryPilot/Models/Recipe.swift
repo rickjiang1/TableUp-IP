@@ -79,8 +79,13 @@ final class Recipe {
     }
 
     var primaryCookingMethod: RecipeCookingMethod {
-        get { RecipeCookingMethod(rawValue: primaryCookingMethodRaw) ?? .none }
-        set { primaryCookingMethodRaw = newValue.rawValue }
+        get { primaryCookingMethods.first ?? .none }
+        set { primaryCookingMethods = newValue == .none ? [] : [newValue] }
+    }
+
+    var primaryCookingMethods: [RecipeCookingMethod] {
+        get { RecipeCookingMethod.decodeList(primaryCookingMethodRaw) }
+        set { primaryCookingMethodRaw = RecipeCookingMethod.encodeList(newValue) }
     }
 
     var workflowSteps: [RecipeWorkflowStep] {
@@ -120,6 +125,29 @@ enum RecipeCookingMethod: String, CaseIterable, Identifiable {
     case raw = "raw"
 
     var id: String { rawValue }
+
+    static var selectableCases: [RecipeCookingMethod] {
+        allCases.filter { $0 != .none }
+    }
+
+    static func decodeList(_ rawValue: String) -> [RecipeCookingMethod] {
+        let values = rawValue
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return values.compactMap { value in
+            allCases.first { $0.rawValue.caseInsensitiveCompare(value) == .orderedSame }
+        }
+    }
+
+    static func encodeList(_ methods: [RecipeCookingMethod]) -> String {
+        var seen = Set<String>()
+        return methods
+            .filter { $0 != .none }
+            .filter { seen.insert($0.rawValue).inserted }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
 
     func displayName(language: String) -> String {
         switch self {

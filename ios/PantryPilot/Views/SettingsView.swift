@@ -132,6 +132,7 @@ enum L {
         "Missing required ingredients": "缺少必需食材",
         "Missing optional ingredients": "缺少可选食材",
         "Substituted ingredients": "替代食材",
+        "Substitute score": "替代分数",
         "Missing pantry items": "缺少调料",
         "Add Recipe": "添加食谱",
         "Edit Recipe": "编辑食谱",

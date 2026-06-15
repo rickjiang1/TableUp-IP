@@ -59,7 +59,7 @@ function matchRecipe(recipe, inventory, resolver, substitutions, substitutionCon
 
     if (bestSubstitute) {
       return ingredientMatch(ingredient, bestSubstitute.substituteItem, "substitute", bestSubstitute.score, {
-        substitution_method: normalizeCookingMethod(recipe.primaryCookingMethod),
+        substitution_methods: normalizeCookingMethods(recipe.primaryCookingMethod),
         substitution_method_compatible: bestSubstitute.methodCompatible,
         substitution_context: bestSubstitute.context
       });
@@ -299,14 +299,14 @@ function buildSubstitutionContextMap(contexts) {
 
 function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
   const baseScore = clampScore(candidate.confidenceScore);
-  const method = normalizeCookingMethod(recipe.primaryCookingMethod);
+  const methods = normalizeCookingMethods(recipe.primaryCookingMethod);
   const context = substitutionContexts.get(`${candidate.ingredientId}|${candidate.substituteIngredientId}`);
 
-  if (!context || !method || context.compatibleMethods.length === 0) {
+  if (!context || methods.length === 0 || context.compatibleMethods.length === 0) {
     return { score: baseScore, context: context || null, methodCompatible: null };
   }
 
-  const methodCompatible = context.compatibleMethods.includes(method);
+  const methodCompatible = methods.some((method) => context.compatibleMethods.includes(method));
   const multiplier = methodCompatible ? 1 : 0.45;
   return {
     score: Math.round(clampScore(baseScore * multiplier) * 100) / 100,
@@ -317,6 +317,13 @@ function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
 
 function normalizeCookingMethod(method) {
   return String(method || "").trim().toLowerCase();
+}
+
+function normalizeCookingMethods(methods) {
+  return String(methods || "")
+    .split(",")
+    .map(normalizeCookingMethod)
+    .filter(Boolean);
 }
 
 function clampScore(value) {
