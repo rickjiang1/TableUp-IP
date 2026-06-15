@@ -12,15 +12,11 @@ struct StorageView: View {
     @State private var ingredientDictionary: [CloudIngredient] = []
     @State private var unmatchedError: String?
     @State private var isLoadingUnmatched = false
+    @State private var isBulkMatchingUnmatched = false
     @State private var unmatchedRefreshToken = UUID()
 
-    var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
-        IngredientCategory.allCases.compactMap { category in
-            let items = ingredients
-                .filter { $0.category == category }
-                .sorted(by: inventorySort)
-            return items.isEmpty ? nil : (category, items)
-        }
+    private var sortedIngredients: [StoredIngredient] {
+        ingredients.sorted(by: inventorySort)
     }
 
     private func inventorySort(_ lhs: StoredIngredient, _ rhs: StoredIngredient) -> Bool {
@@ -28,6 +24,10 @@ struct StorageView: View {
         let rhsNameKey = ingredientGroupKey(rhs)
         if lhsNameKey != rhsNameKey {
             return lhsNameKey.localizedStandardCompare(rhsNameKey) == .orderedAscending
+        }
+
+        if lhs.categoryRaw != rhs.categoryRaw {
+            return lhs.categoryRaw.localizedStandardCompare(rhs.categoryRaw) == .orderedAscending
         }
 
         if lhs.expireDate != rhs.expireDate {
@@ -51,12 +51,47 @@ struct StorageView: View {
             return canonicalId.lowercased()
         }
 
+        if let candidate = inventoryNameGroupCandidates(ingredient.name).last {
+            return candidate
+        }
+
         let normalizedName = ingredient.normalizedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedName.isEmpty {
             return normalizedName.lowercased()
         }
 
         return ingredient.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func inventoryNameGroupCandidates(_ name: String) -> [String] {
+        let normalized = IngredientNormalizer.normalizeName(name)
+        guard !normalized.isEmpty else { return [] }
+
+        var candidates: [String] = [normalized]
+        let withoutParentheses = normalized.replacingOccurrences(
+            of: #"\([^)]*\)"#,
+            with: " ",
+            options: .regularExpression
+        )
+        candidates.append(IngredientNormalizer.normalizeName(withoutParentheses))
+
+        let englishDescriptors = #"\b(american|usa?|usda|choice|prime|select|wagyu|angus|black angus|organic|grass fed|frozen|fresh|raw|cooked|boneless|bone in|bone-in|skinless|skin on|skin-on|thin sliced|thin-sliced|sliced|diced|cubed|whole|trimmed|tray|pack|package)\b"#
+        candidates.append(IngredientNormalizer.normalizeName(
+            withoutParentheses.replacingOccurrences(of: englishDescriptors, with: " ", options: .regularExpression)
+        ))
+
+        var strippedChinese = withoutParentheses
+        for descriptor in ["美国和牛", "黑安格斯", "美国", "澳洲", "日本", "加拿大", "和牛", "有机", "冷冻", "冰鲜", "新鲜", "无骨", "去骨", "带骨", "去皮", "带皮", "切片", "薄切", "片", "块", "丁", "火锅", "烧烤", "袋装", "盒装"] {
+            strippedChinese = strippedChinese.replacingOccurrences(of: descriptor, with: " ")
+        }
+        candidates.append(IngredientNormalizer.normalizeName(strippedChinese))
+
+        var seen = Set<String>()
+        return candidates.filter { candidate in
+            guard !candidate.isEmpty, !seen.contains(candidate) else { return false }
+            seen.insert(candidate)
+            return true
+        }
     }
 
     var body: some View {
@@ -126,19 +161,18 @@ struct StorageView: View {
             .listRowBackground(Color.clear)
         }
 
-        ForEach(groupedIngredients, id: \.0) { category, items in
-            Section(category.displayName(language: appLanguage)) {
-                ForEach(items) { ingredient in
-                    NavigationLink {
-                        IngredientDetailView(ingredient: ingredient)
-                    } label: {
-                        IngredientRow(ingredient: ingredient)
-                    }
+        Section(L.text("Inventory", language: appLanguage)) {
+            ForEach(sortedIngredients) { ingredient in
+                NavigationLink {
+                    IngredientDetailView(ingredient: ingredient)
+                } label: {
+                    IngredientRow(ingredient: ingredient)
                 }
-                .onDelete { indexSet in
-                    for index in indexSet {
-                        modelContext.delete(items[index])
-                    }
+            }
+            .onDelete { indexSet in
+                let items = sortedIngredients
+                for index in indexSet {
+                    modelContext.delete(items[index])
                 }
             }
         }
@@ -199,13 +233,23 @@ struct StorageView: View {
             .disabled(ingredients.isEmpty)
             .accessibilityLabel(L.text("Clear All", language: appLanguage))
         case .unmatched:
-            Button {
-                Task { await loadUnmatchedIngredients(force: true) }
-            } label: {
-                Image(systemName: "arrow.clockwise")
+            HStack {
+                Button {
+                    Task { await matchAllUnmatchedIngredients() }
+                } label: {
+                    Image(systemName: isBulkMatchingUnmatched ? "hourglass" : "wand.and.stars")
+                }
+                .disabled(isLoadingUnmatched || isBulkMatchingUnmatched || unmatchedIngredients.isEmpty)
+                .accessibilityLabel(L.text("Match all", language: appLanguage))
+
+                Button {
+                    Task { await loadUnmatchedIngredients(force: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(isLoadingUnmatched || isBulkMatchingUnmatched)
+                .accessibilityLabel(L.text("Refresh", language: appLanguage))
             }
-            .disabled(isLoadingUnmatched)
-            .accessibilityLabel(L.text("Refresh", language: appLanguage))
         }
     }
 
@@ -268,6 +312,48 @@ struct StorageView: View {
         } catch {
             storageAlert = StorageAlertMessage(title: "Save failed", message: error.localizedDescription)
         }
+    }
+
+    @MainActor
+    private func matchAllUnmatchedIngredients() async {
+        guard !isBulkMatchingUnmatched, !unmatchedIngredients.isEmpty else { return }
+
+        isBulkMatchingUnmatched = true
+        defer { isBulkMatchingUnmatched = false }
+
+        let client = UnknownIngredientClient()
+        var matchedCount = 0
+        var skippedCount = 0
+
+        for unknown in unmatchedIngredients {
+            let query = unknown.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? unknown.normalizedName
+                : unknown.rawName
+
+            do {
+                guard let candidate = try await client.fetchIngredientCandidates(
+                    query: query,
+                    language: appLanguage,
+                    limit: 1
+                ).first, candidate.score >= 0.6 else {
+                    skippedCount += 1
+                    continue
+                }
+
+                try await client.resolve(unknown: unknown, as: candidate.ingredient)
+                markLocalInventoryItems(named: unknown, as: candidate.ingredient)
+                unmatchedIngredients.removeAll { $0.id == unknown.id }
+                matchedCount += 1
+            } catch {
+                skippedCount += 1
+            }
+        }
+
+        unmatchedRefreshToken = UUID()
+        storageAlert = StorageAlertMessage(
+            title: "Saved",
+            message: "\(L.text("Matched", language: appLanguage)) \(matchedCount). \(L.text("Skipped", language: appLanguage)) \(skippedCount)."
+        )
     }
 
     private func markLocalInventoryItems(named unknown: UnknownIngredient, as ingredient: CloudIngredient) {

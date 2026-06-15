@@ -416,21 +416,13 @@ function resolveExtractedIngredient({ names, rules, resolver }) {
     }
   }
 
-  const best = bestIngredientCandidateFromRules({ queries: names, rules });
-  if (!best) {
-    return {
-      ingredientId: "",
-      canonicalName: "",
-      matchType: "",
-      matchScore: 0,
-      matchedAlias: "",
-      autoMatched: false
-    };
-  }
-
   return {
-    ...best,
-    autoMatched: best.matchScore >= 0.9
+    ingredientId: "",
+    canonicalName: "",
+    matchType: "",
+    matchScore: 0,
+    matchedAlias: "",
+    autoMatched: false
   };
 }
 
