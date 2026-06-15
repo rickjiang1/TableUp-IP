@@ -422,22 +422,75 @@ function buildIngredientResolver(rules) {
   return {
     resolve(name) {
       const value = String(name || "").trim();
-      const normalized = normalizeIngredientName(value);
-      if (!normalized) {
+      const candidates = ingredientNameCandidates(value);
+      if (candidates.length === 0) {
         return { ingredientId: "", aliasMatched: false, known: false };
       }
       if (byId.has(value)) {
         return { ingredientId: value, aliasMatched: false, known: true };
       }
-      if (byName.has(normalized)) {
-        return { ingredientId: byName.get(normalized), aliasMatched: false, known: true };
+      for (const candidate of candidates) {
+        if (byName.has(candidate)) {
+          return { ingredientId: byName.get(candidate), aliasMatched: candidate !== candidates[0], known: true };
+        }
       }
-      if (aliases.has(normalized)) {
-        return { ingredientId: aliases.get(normalized), aliasMatched: true, known: true };
+      for (const candidate of candidates) {
+        if (aliases.has(candidate)) {
+          return { ingredientId: aliases.get(candidate), aliasMatched: true, known: true };
+        }
       }
       return { ingredientId: "", aliasMatched: false, known: false };
     }
   };
+}
+
+function ingredientNameCandidates(value) {
+  const normalized = normalizeIngredientName(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const candidates = new Set([normalized]);
+  const withoutParentheses = normalized.replace(/\([^)]*\)/g, " ");
+  candidates.add(normalizeIngredientName(withoutParentheses));
+
+  const englishDescriptorPattern = /\b(american|usa?|usda|choice|prime|select|wagyu|angus|black angus|organic|grass fed|frozen|fresh|raw|cooked|boneless|bone in|bone-in|skinless|skin on|skin-on|thin sliced|thin-sliced|sliced|diced|cubed|whole|trimmed|tray|pack|package)\b/g;
+  candidates.add(normalizeIngredientName(withoutParentheses.replace(englishDescriptorPattern, " ")));
+
+  const chineseDescriptors = [
+    "美国和牛",
+    "黑安格斯",
+    "美国",
+    "澳洲",
+    "日本",
+    "加拿大",
+    "和牛",
+    "有机",
+    "冷冻",
+    "冰鲜",
+    "新鲜",
+    "无骨",
+    "去骨",
+    "带骨",
+    "去皮",
+    "带皮",
+    "切片",
+    "薄切",
+    "片",
+    "块",
+    "丁",
+    "火锅",
+    "烧烤",
+    "袋装",
+    "盒装"
+  ];
+  let strippedChinese = normalized;
+  for (const descriptor of chineseDescriptors) {
+    strippedChinese = strippedChinese.replaceAll(descriptor, " ");
+  }
+  candidates.add(normalizeIngredientName(strippedChinese));
+
+  return [...candidates].filter(Boolean);
 }
 
 function normalizeIngredientName(value) {

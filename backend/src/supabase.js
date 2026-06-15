@@ -6,9 +6,9 @@ export async function ensureSupabaseSchema() {
 
 export async function fetchCloudRecipes() {
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
-    restSelect("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
-    restSelect("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
-    restSelect("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
+    restSelectAll("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
+    restSelectAll("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
+    restSelectAll("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
   ]);
 
   const activeRecipeIds = new Set(recipeRows.map((recipe) => recipe.recipe_id));
@@ -189,16 +189,16 @@ export async function recipeCount() {
 
 export async function fetchMatchingRules() {
   const [ingredients, aliases, substitutions] = await Promise.all([
-    restSelect("ingredients", "select=ingredient_id,canonical_name,category&order=ingredient_id.asc"),
-    restSelect("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
-    restSelect("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc")
+    restSelectAll("ingredients", "select=ingredient_id,canonical_name,category&order=ingredient_id.asc"),
+    restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc")
   ]);
 
   return { ingredients, aliases, substitutions };
 }
 
 export async function fetchIngredientDictionary(language = "en") {
-  const ingredients = await restSelect(
+  const ingredients = await restSelectAll(
     "ingredients",
     "select=ingredient_id,canonical_name,category&order=category.asc,canonical_name.asc"
   );
@@ -210,7 +210,7 @@ export async function fetchIngredientDictionary(language = "en") {
     }));
   }
 
-  const aliases = await restSelect(
+  const aliases = await restSelectAll(
     "ingredient_aliases",
     "select=alias_name,ingredient_id&language=eq.zh&verified=eq.true&order=alias_name.asc"
   );
@@ -369,6 +369,20 @@ export async function restSelect(table, queryString) {
   return restRequest(`${table}?${queryString}`, { method: "GET" });
 }
 
+export async function restSelectAll(table, queryString, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await restRequest(`${table}?${queryString}`, {
+      method: "GET",
+      range: `${offset}-${offset + pageSize - 1}`
+    });
+    rows.push(...page);
+    if (page.length < pageSize) {
+      return rows;
+    }
+  }
+}
+
 export async function restWrite(path, method, body, options = {}) {
   return restRequest(path, {
     method,
@@ -377,7 +391,7 @@ export async function restWrite(path, method, body, options = {}) {
   });
 }
 
-async function restRequest(path, { method, body, prefer }) {
+async function restRequest(path, { method, body, prefer, range }) {
   const config = supabaseRestConfig();
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     method,
@@ -385,6 +399,7 @@ async function restRequest(path, { method, body, prefer }) {
       apikey: config.key,
       Authorization: `Bearer ${config.key}`,
       "Content-Type": "application/json",
+      ...(range ? { Range: range } : {}),
       ...(prefer ? { Prefer: prefer } : {})
     },
     body
