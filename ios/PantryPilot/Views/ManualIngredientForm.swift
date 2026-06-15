@@ -85,10 +85,14 @@ struct ManualIngredientForm: View {
         .onChange(of: enteredDate) { _, _ in
             refreshExpireDate()
         }
+        .onChange(of: name) { _, _ in
+            refreshExpireDate()
+        }
     }
 
     private func refreshExpireDate() {
         expireDate = StorageAdvisor.estimatedExpireDate(
+            name: name,
             category: category,
             location: location,
             enteredDate: enteredDate

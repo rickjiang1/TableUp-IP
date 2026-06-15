@@ -74,6 +74,8 @@ final class StoredIngredient {
         self.locationRaw = location.rawValue
         self.enteredDate = enteredDate
         self.expireDate = expireDate ?? StorageAdvisor.estimatedExpireDate(
+            name: name,
+            canonicalIngredientId: canonicalIngredientId,
             category: category,
             location: location,
             enteredDate: enteredDate

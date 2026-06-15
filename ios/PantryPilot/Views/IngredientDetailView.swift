@@ -209,6 +209,8 @@ struct IngredientDetailView: View {
             StorageRecommendation(
                 approach: approach,
                 expireDate: StorageAdvisor.estimatedExpireDate(
+                    name: draftName,
+                    canonicalIngredientId: draftCanonicalIngredientId,
                     category: draftCategory,
                     approach: approach,
                     enteredDate: draftEnteredDate
