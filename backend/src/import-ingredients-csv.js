@@ -34,15 +34,16 @@ async function main() {
     process.exit(1);
   }
 
-  const ingredients = parseCsv(readFileSync(csvPath, "utf8"))
+  const parsedIngredients = parseCsv(readFileSync(csvPath, "utf8"))
     .map((row) => ({
       ingredient_id: cleanId(row.ingredient_id),
       canonical_name: String(row.canonical_name || "").trim(),
       category: String(row.category || "other").trim() || "other"
     }))
     .filter((row) => row.ingredient_id && row.canonical_name && row.category !== "category");
+  const { ingredients, replacementAliases } = applyCanonicalReplacements(parsedIngredients);
 
-  const aliases = buildAliasRows(ingredients);
+  const aliases = buildAliasRows(ingredients, replacementAliases);
 
   console.log(`Target Supabase project: ${environmentTargets[args.environment].label} (${environmentTargets[args.environment].projectRef})`);
 
@@ -51,6 +52,7 @@ async function main() {
     await upsertRows("ingredients?on_conflict=ingredient_id", ingredients, 200);
     await upsertRows("ingredient_aliases?on_conflict=alias_name", aliases, 200);
     updatedRecipeIngredients = await backfillRecipeIngredientIds(ingredients, aliases);
+    await mergeReplacedIngredients(ingredients);
   }
 
   console.log(JSON.stringify({
@@ -58,6 +60,7 @@ async function main() {
     target: environmentTargets[args.environment].label,
     dryRun: args.dryRun,
     ingredients: ingredients.length,
+    mergedCanonicalIngredients: replacementAliases.length,
     aliases: aliases.length,
     recipeIngredientsBackfilled: updatedRecipeIngredients
   }, null, 2));
@@ -113,7 +116,39 @@ function assertTargetEnvironment(environment) {
 }
 
 
-function buildAliasRows(ingredientRows) {
+function applyCanonicalReplacements(rows) {
+  const ingredients = [];
+  const replacementAliases = [];
+  const seen = new Set();
+
+  for (const row of rows) {
+    const replacementId = canonicalIngredientReplacements[row.ingredient_id];
+    if (replacementId) {
+      replacementAliases.push({
+        aliasName: row.ingredient_id.replace(/_/g, " "),
+        ingredientId: replacementId,
+        canonicalName: row.canonical_name,
+        category: row.category
+      });
+      replacementAliases.push({
+        aliasName: row.canonical_name,
+        ingredientId: replacementId,
+        canonicalName: row.canonical_name,
+        category: row.category
+      });
+      continue;
+    }
+    if (seen.has(row.ingredient_id)) {
+      continue;
+    }
+    seen.add(row.ingredient_id);
+    ingredients.push(row);
+  }
+
+  return { ingredients, replacementAliases };
+}
+
+function buildAliasRows(ingredientRows, replacementAliases = []) {
   const byAlias = new Map();
 
   for (const ingredient of ingredientRows) {
@@ -136,6 +171,14 @@ function buildAliasRows(ingredientRows) {
         }
       }
     }
+  }
+
+  for (const replacement of replacementAliases) {
+    const ingredient = ingredientRows.find((row) => row.ingredient_id === replacement.ingredientId);
+    if (!ingredient) {
+      continue;
+    }
+    addAlias(byAlias, ingredient, replacement.aliasName, 1, true);
   }
 
   return [...byAlias.values()].sort((left, right) => {
@@ -240,6 +283,31 @@ async function backfillRecipeIngredientIds(ingredientRows, aliasRows) {
   }
 
   return count;
+}
+
+async function mergeReplacedIngredients(ingredientRows) {
+  for (const [fromId, toId] of Object.entries(canonicalIngredientReplacements)) {
+    const target = ingredientRows.find((ingredient) => ingredient.ingredient_id === toId);
+    if (!target) {
+      continue;
+    }
+
+    await restRequest(`pantry_recipe_ingredients?canonical_ingredient_id=eq.${encodeURIComponent(fromId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ canonical_ingredient_id: toId })
+    });
+    await restRequest(`ingredient_aliases?ingredient_id=eq.${encodeURIComponent(fromId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ingredient_id: toId,
+        canonical_name: target.canonical_name,
+        category: target.category
+      })
+    });
+    await restRequest(`ingredients?ingredient_id=eq.${encodeURIComponent(fromId)}`, {
+      method: "DELETE"
+    });
+  }
 }
 
 function buildResolver(ingredientRows, aliasRows) {
@@ -495,6 +563,25 @@ const chineseDescriptorWords = [
   "盒装"
 ];
 
+const canonicalIngredientReplacements = {
+  tomatoes: "tomato",
+  potatoes: "potato",
+  carrots: "carrot",
+  onions: "onion",
+  mushrooms: "mushroom",
+  cucumbers: "cucumber",
+  lemons: "lemon",
+  limes: "lime",
+  avocados: "avocado",
+  shallots: "shallot",
+  pork_chops: "pork_chop",
+  pork_back_ribs: "pork_back_rib",
+  bangus: "milkfish",
+  unagi: "eel",
+  pampano: "pompano",
+  saba: "mackerel"
+};
+
 const manualAliases = {
   egg: ["鸡蛋", "蛋", "鸡蛋液", "whole egg"],
   tomato: ["番茄", "西红柿", "tomatoes"],
@@ -607,7 +694,41 @@ const manualAliases = {
   beef_flat_iron: ["板腱", "flat iron"],
   beef_chuck_roast: ["肩胛烤肉", "chuck roast"],
   beef_stew_meat: ["炖牛肉", "牛肉块", "stew beef"],
-  hot_pot_beef: ["肥牛", "火锅肥牛", "牛肉卷", "涮牛肉"],
+  hot_pot_beef: [
+    "肥牛",
+    "肥牛卷",
+    "牛肉卷",
+    "火锅牛肉",
+    "火锅牛肉卷",
+    "涮牛肉",
+    "涮牛肉片",
+    "beef roll",
+    "beef rolls",
+    "beef sliced roll",
+    "beef sliced rolls",
+    "sliced beef",
+    "thin sliced beef",
+    "thin-sliced beef",
+    "thin sliced beef rolls",
+    "thin-sliced beef rolls",
+    "hot pot beef",
+    "hot pot beef slices",
+    "shabu shabu beef",
+    "shabu-shabu beef",
+    "beef for shabu shabu",
+    "beef for shabu-shabu",
+    "beef ribeye sliced roll",
+    "beef ribeye sliced rolls",
+    "ribeye sliced roll",
+    "ribeye sliced rolls",
+    "beef brisket sliced roll",
+    "beef brisket sliced rolls",
+    "beef short plate rolls",
+    "thin sliced beef short plate rolls",
+    "thin-sliced beef short plate rolls",
+    "beef chuck roll for shabu shabu",
+    "beef chuck roll for shabu-shabu"
+  ],
   rib_eye: ["肋眼", "肉眼", "ribeye", "rib eye steak"],
   short_ribs: ["牛小排", "牛肋条", "短肋"],
   picanha: ["巴西臀盖", "牛臀盖", "picahna"],

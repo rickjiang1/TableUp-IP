@@ -141,8 +141,6 @@ function buildIngredientResolver(rules) {
         if (byName.has(candidate)) {
           return { ingredientId: byName.get(candidate), aliasMatched: candidate !== candidates[0], known: true };
         }
-      }
-      for (const candidate of candidates) {
         if (aliases.has(candidate)) {
           return { ingredientId: aliases.get(candidate), aliasMatched: true, known: true };
         }
