@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 enum TableUpTheme {
     static let background = Color(red: 0.071, green: 0.071, blue: 0.071)
@@ -44,15 +45,14 @@ struct YouliaoView: View {
                 TableUpTheme.background.ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 18) {
                         hero
-                        overview
                         locationPicker
                         inventoryList
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 22)
-                    .padding(.bottom, 28)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 150)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -65,49 +65,65 @@ struct YouliaoView: View {
     }
     
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(titleText)
-                        .font(.system(size: 54, weight: .semibold, design: .serif))
-                        .foregroundStyle(TableUpTheme.inkText)
-                    Text(subtitleText)
-                        .font(.callout)
-                        .foregroundStyle(TableUpTheme.mutedText)
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(TableUpTheme.backgroundLift)
+                .overlay(YouliaoScene())
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            
+            VStack(spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(titleText)
+                            .font(.system(size: 66, weight: .semibold, design: .serif))
+                            .foregroundStyle(TableUpTheme.inkText)
+                        
+                        Text(subtitleText)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(TableUpTheme.mutedText)
+                            .tracking(3)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "bell")
+                        .font(.title3)
+                        .foregroundStyle(TableUpTheme.inkText.opacity(0.82))
+                        .frame(width: 42, height: 42)
+                        .background(Color.black.opacity(0.22))
+                        .clipShape(Circle())
                 }
                 
                 Spacer()
                 
-                Image(systemName: "bell")
-                    .font(.title3)
-                    .foregroundStyle(TableUpTheme.mutedText)
-                    .padding(.top, 10)
-            }
-            
-            Button {
-                showingAddFood = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus")
-                        .font(.headline)
-                    Text(addFoodText)
-                        .font(.headline.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    LinearGradient(
-                        colors: [TableUpTheme.softOrange, TableUpTheme.orange],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                Button {
+                    showingAddFood = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus")
+                            .font(.headline)
+                        Text(addFoodText)
+                            .font(.headline.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 230)
+                    .padding(.vertical, 15)
+                    .background(
+                        LinearGradient(
+                            colors: [TableUpTheme.softOrange, TableUpTheme.orange],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-                .clipShape(Capsule())
-                .shadow(color: TableUpTheme.orange.opacity(0.32), radius: 22, y: 10)
+                    .clipShape(Capsule())
+                    .shadow(color: TableUpTheme.orange.opacity(0.28), radius: 22, y: 10)
+                }
+                .buttonStyle(.plain)
+                
+                overview
             }
-            .buttonStyle(.plain)
         }
+        .frame(height: 500)
     }
     
     private var overview: some View {
@@ -126,7 +142,7 @@ struct YouliaoView: View {
             }
         }
         .padding(18)
-        .background(TableUpTheme.card)
+        .background(Color.black.opacity(0.38))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(TableUpTheme.cardStroke, lineWidth: 1)
@@ -183,6 +199,85 @@ struct YouliaoView: View {
             }
         }
     }
+
+private struct YouliaoScene: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.045, green: 0.047, blue: 0.041),
+                    Color(red: 0.12, green: 0.105, blue: 0.083),
+                    Color(red: 0.055, green: 0.052, blue: 0.047)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+                .offset(y: 126)
+            
+            Rectangle()
+                .fill(Color.black.opacity(0.24))
+                .frame(height: 90)
+                .offset(y: 186)
+            
+            SpotlightShape()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.18), Color.white.opacity(0.02)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 250, height: 310)
+                .rotationEffect(.degrees(-23))
+                .offset(x: 90, y: -84)
+            
+            VStack(spacing: -4) {
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(-28))
+                    .offset(x: -18)
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(22))
+                    .offset(x: 16)
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(-8))
+                    .offset(x: -4)
+            }
+            .font(.title2)
+            .foregroundStyle(Color.green.opacity(0.28))
+            .offset(x: -125, y: -70)
+            
+            HStack(spacing: 8) {
+                Image(systemName: "circle.fill")
+                Image(systemName: "circle.fill")
+                Image(systemName: "circle.fill")
+            }
+            .font(.system(size: 28))
+            .foregroundStyle(Color(red: 0.92, green: 0.84, blue: 0.72).opacity(0.55))
+            .offset(x: 112, y: 34)
+            
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(red: 0.45, green: 0.30, blue: 0.18).opacity(0.35))
+                .frame(height: 16)
+                .offset(y: 102)
+        }
+    }
+}
+
+private struct SpotlightShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.width * 0.18, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX * 0.72, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
     
     @ViewBuilder
     private var inventoryList: some View {
@@ -411,22 +506,17 @@ struct KaifanView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.92, green: 0.86, blue: 0.77), Color(red: 0.98, green: 0.94, blue: 0.88)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                KaifanPageBackground().ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 18) {
                         hero
                         filterBar
                         content
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 22)
-                    .padding(.bottom, 32)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 150)
                 }
                 .scrollIndicators(.hidden)
             }
@@ -439,38 +529,56 @@ struct KaifanView: View {
     }
     
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("开饭")
-                        .font(.system(size: 54, weight: .semibold, design: .serif))
-                        .foregroundStyle(Color(red: 0.12, green: 0.105, blue: 0.09))
-                    Text("寻好味 · 开一席")
-                        .font(.callout)
-                        .foregroundStyle(Color.black.opacity(0.48))
-                }
+        VStack(spacing: 16) {
+            ZStack(alignment: .topLeading) {
+                KaifanHeroScene(recipe: featuredRecipe)
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                 
-                Spacer()
-                
-                Button {
-                    showingRecipes = true
-                } label: {
-                    Image(systemName: "books.vertical")
-                        .font(.title3)
-                        .foregroundStyle(Color.black.opacity(0.62))
-                        .frame(width: 42, height: 42)
-                        .background(Color.white.opacity(0.55))
-                        .clipShape(Circle())
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("开饭")
+                            .font(.system(size: 66, weight: .semibold, design: .serif))
+                            .foregroundStyle(Color(red: 0.12, green: 0.105, blue: 0.09))
+                        
+                        Text("寻好味 · 开一席")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(Color.black.opacity(0.52))
+                            .tracking(3)
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        showingRecipes = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title3)
+                            .foregroundStyle(Color.black.opacity(0.66))
+                            .frame(width: 42, height: 42)
+                            .background(Color.white.opacity(0.58))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("全部食谱")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("全部食谱")
+                .padding(24)
+                
+                VStack {
+                    Spacer()
+                    HStack(spacing: 12) {
+                        KaifanQuickStat(icon: "checkmark.seal.fill", value: "\(readyCount)", label: "可做")
+                        KaifanQuickStat(icon: "sparkles", value: "\(almostCount)", label: "差一点")
+                        KaifanQuickStat(icon: "leaf.fill", value: "\(expiringSoonCount)", label: "快过期")
+                    }
+                    .padding(14)
+                    .background(Color.white.opacity(0.74))
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
+                    .padding(.horizontal, 18)
+                    .offset(y: 44)
+                }
             }
-            
-            HStack(spacing: 12) {
-                KaifanQuickStat(icon: "checkmark.seal.fill", value: "\(readyCount)", label: "可做")
-                KaifanQuickStat(icon: "sparkles", value: "\(almostCount)", label: "差一点")
-                KaifanQuickStat(icon: "leaf.fill", value: "\(expiringSoonCount)", label: "快过期")
-            }
+            .frame(height: 430)
             
             Button {
                 Task { await refreshCloudMatches() }
@@ -494,7 +602,12 @@ struct KaifanView: View {
             }
             .buttonStyle(.plain)
             .disabled(isRefreshing)
+            .padding(.top, 42)
         }
+    }
+
+    private var featuredRecipe: Recipe? {
+        recipes.first { $0.imageThumbnailData != nil || $0.imageData != nil } ?? recipes.first
     }
     
     private var filterBar: some View {
@@ -723,6 +836,127 @@ private struct KaifanQuickStat: View {
         .padding(.vertical, 12)
         .background(Color.white.opacity(0.52))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private struct KaifanPageBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.92, green: 0.86, blue: 0.77),
+                Color(red: 0.98, green: 0.94, blue: 0.88),
+                Color(red: 0.95, green: 0.89, blue: 0.80)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct KaifanHeroScene: View {
+    let recipe: Recipe?
+    
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.91, blue: 0.84),
+                    Color(red: 0.88, green: 0.78, blue: 0.66)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            if let imageData = recipe?.imageData ?? recipe?.imageThumbnailData,
+               let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(0.72)
+                    .overlay(Color.white.opacity(0.28))
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.72), Color.white.opacity(0.12), Color.white.opacity(0.38)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            } else {
+                TableSceneFallback()
+            }
+            
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    ZStack {
+                        Ellipse()
+                            .fill(Color.white.opacity(0.86))
+                            .frame(width: 178, height: 86)
+                            .shadow(color: .black.opacity(0.08), radius: 18, y: 10)
+                        
+                        Ellipse()
+                            .stroke(Color(red: 0.86, green: 0.72, blue: 0.57).opacity(0.36), lineWidth: 8)
+                            .frame(width: 144, height: 60)
+                        
+                        Image(systemName: "leaf.fill")
+                            .font(.title2)
+                            .foregroundStyle(TableUpTheme.jade.opacity(0.78))
+                            .rotationEffect(.degrees(-30))
+                            .offset(x: -26, y: -2)
+                        
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(TableUpTheme.orange.opacity(0.86))
+                            .offset(x: 24, y: 4)
+                    }
+                    .offset(x: -24, y: -34)
+                }
+            }
+            
+            LinearGradient(
+                colors: [Color.white.opacity(0.74), Color.white.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .center
+            )
+        }
+    }
+}
+
+private struct TableSceneFallback: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(red: 0.90, green: 0.80, blue: 0.66).opacity(0.25))
+                .frame(height: 120)
+                .offset(y: 126)
+            
+            HStack(spacing: 10) {
+                Capsule()
+                    .fill(Color(red: 0.45, green: 0.30, blue: 0.18).opacity(0.36))
+                    .frame(width: 120, height: 18)
+                Capsule()
+                    .fill(Color(red: 0.45, green: 0.30, blue: 0.18).opacity(0.18))
+                    .frame(width: 70, height: 12)
+            }
+            .rotationEffect(.degrees(-10))
+            .offset(x: 98, y: 92)
+            
+            VStack(spacing: -5) {
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(-26))
+                    .offset(x: -16)
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(24))
+                    .offset(x: 17)
+                Image(systemName: "leaf.fill")
+                    .rotationEffect(.degrees(8))
+            }
+            .font(.title2)
+            .foregroundStyle(TableUpTheme.jade.opacity(0.40))
+            .offset(x: 126, y: -66)
+        }
     }
 }
 
