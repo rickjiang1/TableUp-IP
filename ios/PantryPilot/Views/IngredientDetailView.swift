@@ -370,6 +370,12 @@ struct IngredientDetailView: View {
                         return
                     }
 
+                    guard !conversion.needsReview else {
+                        draftUnitConversionNeedsReview = draftSecondaryCanonicalAmount == nil
+                        draftUnitConversionReviewReason = conversion.reason
+                        return
+                    }
+
                     draftCanonicalQuantity = conversion.canonicalQuantity
                     draftCanonicalUnit = conversion.canonicalUnit
                     draftUnitConversionRatio = conversion.conversionRatio
@@ -382,6 +388,11 @@ struct IngredientDetailView: View {
                           draftCanonicalIngredientId == requestIngredientId,
                           abs(draftQuantity - requestQuantity) < 0.0001,
                           draftUnit == requestUnit else {
+                        return
+                    }
+
+                    if draftSecondaryCanonicalAmount != nil {
+                        draftUnitConversionReviewReason = "Missing conversion rule"
                         return
                     }
 

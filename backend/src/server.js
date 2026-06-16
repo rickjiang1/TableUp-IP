@@ -600,7 +600,13 @@ async function normalizeMatchedIngredientQuantity(body) {
   const rules = await getCachedMatchingRules();
   const resolver = buildIngredientResolver(rules);
   const ingredientName = String(body?.ingredientName || body?.name || "").trim();
-  let ingredientId = String(body?.ingredientId || "").trim();
+  const requestedIngredientId = String(body?.ingredientId || "").trim();
+  let ingredientId = "";
+
+  if (requestedIngredientId) {
+    const resolved = resolver.resolve(requestedIngredientId);
+    ingredientId = resolved.known ? resolved.ingredientId : "";
+  }
 
   if (!ingredientId && ingredientName) {
     const resolved = resolver.resolve(ingredientName);
