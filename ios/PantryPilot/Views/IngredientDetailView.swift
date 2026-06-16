@@ -166,6 +166,11 @@ struct IngredientDetailView: View {
         .onChange(of: draftEnteredDate) { _, _ in
             refreshDraftExpireDate()
         }
+        .onChange(of: appLanguage) { _, _ in
+            if isDraftMatched {
+                loadUnitConversions(for: draftCanonicalIngredientId)
+            }
+        }
     }
 
     private var isDraftMatched: Bool {
@@ -296,6 +301,11 @@ struct IngredientDetailView: View {
 
     private func displayName(forUnit unit: String) -> String {
         let normalized = IngredientUnit.normalizedSelection(for: unit)
+        if let conversion = ingredientUnitConversions.first(where: {
+            IngredientUnit.normalizedSelection(for: $0.fromUnit) == normalized
+        }) {
+            return conversion.displayUnit
+        }
         if let knownUnit = IngredientUnit(rawValue: normalized) {
             return knownUnit.displayName(language: appLanguage)
         }
@@ -385,7 +395,10 @@ struct IngredientDetailView: View {
 
         unitConversionLoadTask = Task {
             do {
-                let conversions = try await UnknownIngredientClient().fetchIngredientUnitConversions(ingredientId: trimmedIngredientId)
+                let conversions = try await UnknownIngredientClient().fetchIngredientUnitConversions(
+                    ingredientId: trimmedIngredientId,
+                    language: appLanguage == AppLanguage.chinese.rawValue ? "zh" : "en"
+                )
                 await MainActor.run {
                     guard draftCanonicalIngredientId == trimmedIngredientId else { return }
                     ingredientUnitConversions = conversions

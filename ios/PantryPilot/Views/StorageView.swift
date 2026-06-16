@@ -970,10 +970,13 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(IngredientCandidateResponse.self, from: data).candidates
     }
 
-    func fetchIngredientUnitConversions(ingredientId: String) async throws -> [IngredientUnitConversionRule] {
+    func fetchIngredientUnitConversions(ingredientId: String, language: String) async throws -> [IngredientUnitConversionRule] {
         let endpoint = baseURL
             .appending(path: "api/ingredient-unit-conversions")
-            .appending(queryItems: [URLQueryItem(name: "ingredientId", value: ingredientId)])
+            .appending(queryItems: [
+                URLQueryItem(name: "ingredientId", value: ingredientId),
+                URLQueryItem(name: "language", value: language)
+            ])
         let (data, response) = try await session.data(from: endpoint)
 
         guard let httpResponse = response as? HTTPURLResponse,
@@ -1120,6 +1123,7 @@ struct IngredientUnitConversionRule: Decodable, Identifiable {
     let ingredientId: String
     let ingredientSlug: String
     let fromUnit: String
+    let displayUnit: String
     let toUnit: String
     let ratio: Double
     let conversionType: String
@@ -1134,6 +1138,7 @@ struct IngredientUnitConversionRule: Decodable, Identifiable {
         case ingredientId = "ingredient_id"
         case ingredientSlug = "ingredient_slug"
         case fromUnit = "from_unit"
+        case displayUnit = "display_unit"
         case toUnit = "to_unit"
         case ratio
         case conversionType = "conversion_type"
@@ -1146,6 +1151,7 @@ struct IngredientUnitConversionRule: Decodable, Identifiable {
         ingredientId = try container.decodeIfPresent(String.self, forKey: .ingredientId) ?? ""
         ingredientSlug = try container.decodeIfPresent(String.self, forKey: .ingredientSlug) ?? ""
         fromUnit = try container.decodeIfPresent(String.self, forKey: .fromUnit) ?? ""
+        displayUnit = try container.decodeIfPresent(String.self, forKey: .displayUnit) ?? fromUnit
         toUnit = try container.decodeIfPresent(String.self, forKey: .toUnit) ?? ""
         ratio = try container.decodeIfPresent(Double.self, forKey: .ratio) ?? 0
         conversionType = try container.decodeIfPresent(String.self, forKey: .conversionType) ?? ""

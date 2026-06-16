@@ -223,6 +223,14 @@ export async function fetchIngredientUnitConversions(ingredientId) {
   );
 }
 
+export async function fetchUnitAliases(language = "") {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const query = normalizedLanguage
+    ? `select=alias,unit,language,notes&language=eq.${encodeURIComponent(normalizedLanguage)}&order=unit.asc,alias.asc`
+    : "select=alias,unit,language,notes&order=unit.asc,alias.asc";
+  return await restSelectAll("unit_aliases", query);
+}
+
 export async function fetchIngredientDictionary(language = "en") {
   const ingredients = await restSelectAll(
     "ingredients",

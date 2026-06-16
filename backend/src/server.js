@@ -5,6 +5,7 @@ import {
   fetchCloudRecipes,
   fetchIngredientUnitConversions,
   fetchIngredientStorageLifeRules,
+  fetchUnitAliases,
   fetchIngredientDictionary,
   fetchMatchingRules,
   fetchPendingUnknownIngredients,
@@ -77,7 +78,10 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/ingredient-unit-conversions") {
-      const conversions = await fetchIngredientUnitConversions(url.searchParams.get("ingredientId") || "");
+      const conversions = await ingredientUnitConversionsForDisplay({
+        ingredientId: url.searchParams.get("ingredientId") || "",
+        language: url.searchParams.get("language") || "en"
+      });
       sendJson(response, 200, { conversions });
       return;
     }
@@ -633,6 +637,62 @@ async function normalizeMatchedIngredientQuantity(body) {
       conversions
     }
   );
+}
+
+async function ingredientUnitConversionsForDisplay({ ingredientId, language }) {
+  const conversions = await fetchIngredientUnitConversions(ingredientId);
+  const aliases = await fetchUnitAliases(language);
+  const displayByUnit = preferredUnitAliasMap(aliases, language);
+  return conversions.map((conversion) => ({
+    ...conversion,
+    display_unit: displayByUnit.get(conversion.from_unit) || conversion.from_unit
+  }));
+}
+
+function preferredUnitAliasMap(aliases, language) {
+  const normalizedLanguage = String(language || "en").trim().toLowerCase();
+  const rowsByUnit = new Map();
+  for (const alias of aliases || []) {
+    const unit = String(alias.unit || "").trim();
+    const aliasText = String(alias.alias || "").trim();
+    if (!unit || !aliasText) {
+      continue;
+    }
+    if (!rowsByUnit.has(unit)) {
+      rowsByUnit.set(unit, []);
+    }
+    rowsByUnit.get(unit).push(aliasText);
+  }
+
+  const displayByUnit = new Map();
+  for (const [unit, aliasTexts] of rowsByUnit.entries()) {
+    displayByUnit.set(unit, preferredUnitAlias(aliasTexts, unit, normalizedLanguage));
+  }
+  return displayByUnit;
+}
+
+function preferredUnitAlias(aliasTexts, unit, language) {
+  const uniqueAliases = [...new Set(aliasTexts)];
+  if (language === "zh") {
+    const chineseAlias = uniqueAliases
+      .filter((aliasText) => /[\u3400-\u9fff]/.test(aliasText))
+      .sort((left, right) => left.length - right.length || left.localeCompare(right, "zh-Hans"))
+      .at(0);
+    if (chineseAlias) {
+      return chineseAlias;
+    }
+  }
+  return uniqueAliases
+    .filter((aliasText) => !/[\u3400-\u9fff]/.test(aliasText))
+    .sort((left, right) => aliasScore(left, unit) - aliasScore(right, unit) || left.length - right.length || left.localeCompare(right))
+    .at(0) || unit;
+}
+
+function aliasScore(aliasText, unit) {
+  const alias = String(aliasText || "").toLowerCase();
+  if (alias === unit) return 0;
+  if (alias.length <= 4) return 1;
+  return 2;
 }
 
 function rankIngredientCandidatesFromRules({ query, rules, limit = 10 }) {
