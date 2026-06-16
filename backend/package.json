@@ -9,6 +9,7 @@
     "migrate:databricks:supabase": "node src/migrate-databricks-to-supabase.js",
     "seed:matching": "node src/seed-matching-samples.js",
     "seed:unit-conversions": "node src/seed-unit-conversions.js",
+    "audit:unit-conversions": "node src/audit-unit-conversions.js",
     "seed:dynamic-substitutions": "node src/seed-dynamic-substitutions.js",
     "enrich:ingredient-taxonomy": "node src/enrich-ingredient-taxonomy.js",
     "enrich:substitution-rules": "node src/enrich-substitution-rules.js",

@@ -114,11 +114,19 @@ export function normalizeUnitAlias(unit) {
 
 export function canonicalUnitForIngredient(ingredient) {
   const id = String(ingredient?.ingredient_id || ingredient?.ingredientId || "").trim();
+  const slug = String(ingredient?.ingredient_slug || ingredient?.ingredientSlug || ingredient?.slug || "").trim();
+  const existingCanonicalUnit = String(ingredient?.canonical_unit || ingredient?.canonicalUnit || "").trim();
   const category = String(ingredient?.category || "").trim().toLowerCase();
-  if (canonicalUnitByIngredientId[id]) {
-    return canonicalUnitByIngredientId[id];
+  const lookupKeys = [slug, id].filter(Boolean);
+  for (const key of lookupKeys) {
+    if (canonicalUnitByIngredientId[key]) {
+      return canonicalUnitByIngredientId[key];
+    }
   }
-  if (liquidIngredientIds.has(id)) {
+  if (existingCanonicalUnit) {
+    return normalizeUnitAlias(existingCanonicalUnit);
+  }
+  if (lookupKeys.some((key) => liquidIngredientIds.has(key))) {
     return "ml";
   }
   if (["protein", "seafood", "vegetable", "fruit", "grain", "pantry", "seasoning", "spice", "herb", "aromatic", "dairy"].includes(category)) {
@@ -129,13 +137,27 @@ export function canonicalUnitForIngredient(ingredient) {
 
 export function buildConversionSeedRows(ingredientRows) {
   const rows = new Map();
+  const ingredientIdByLookupKey = new Map();
   for (const ingredient of ingredientRows) {
-    const ingredientId = ingredient.ingredient_id;
+    const ingredientId = String(ingredient.ingredient_id || "").trim();
+    if (!ingredientId) {
+      continue;
+    }
+    for (const key of ingredientLookupKeys(ingredient)) {
+      ingredientIdByLookupKey.set(key, ingredientId);
+    }
+  }
+
+  for (const ingredient of ingredientRows) {
+    const ingredientId = String(ingredient.ingredient_id || "").trim();
+    if (!ingredientId) {
+      continue;
+    }
     const canonicalUnit = canonicalUnitForIngredient(ingredient);
     addRow(rows, conversion(ingredientId, canonicalUnit, canonicalUnit, 1, "exact", true, "canonical unit identity"));
     if (canonicalUnit === "gram") {
       for (const row of massRules(ingredientId)) addRow(rows, row);
-      const average = averagePieceGrams[ingredientId];
+      const average = ingredientLookupKeys(ingredient).map((key) => averagePieceGrams[key]).find(Boolean);
       if (average) {
         addRow(rows, conversion(ingredientId, "piece", "gram", average, "average", true, "average edible unit weight"));
         addRow(rows, conversion(ingredientId, "whole", "gram", average, "average", true, "average whole item weight"));
@@ -146,8 +168,9 @@ export function buildConversionSeedRows(ingredientRows) {
     }
   }
   for (const row of specificConversions) {
-    if (ingredientRows.some((ingredient) => ingredient.ingredient_id === row.ingredient_id)) {
-      addRow(rows, row);
+    const ingredientId = ingredientIdByLookupKey.get(String(row.ingredient_id || "").trim());
+    if (ingredientId) {
+      addRow(rows, { ...row, ingredient_id: ingredientId });
     }
   }
   return [...rows.values()].sort((a, b) => a.ingredient_id.localeCompare(b.ingredient_id) || a.from_unit.localeCompare(b.from_unit));
@@ -231,4 +254,16 @@ function alias(aliasText, unit, language = "en", notes = "") {
 
 function addRow(rows, row) {
   rows.set(`${row.ingredient_id}:${row.from_unit}:${row.to_unit}`, row);
+}
+
+function ingredientLookupKeys(ingredient) {
+  return [
+    ingredient?.ingredient_slug,
+    ingredient?.ingredientSlug,
+    ingredient?.slug,
+    ingredient?.ingredient_id,
+    ingredient?.ingredientId
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
 }

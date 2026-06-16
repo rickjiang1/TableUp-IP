@@ -31,9 +31,15 @@ await bootstrapUnitConversionSchema();
 const ingredients = await fetchIngredients();
 await seedCanonicalUnits(ingredients);
 await seedUnitAliases();
-const conversions = buildConversionSeedRows(ingredients);
+const ingredientSlugById = new Map(ingredients.map((ingredient) => [
+  String(ingredient.ingredient_id),
+  String(ingredient.ingredient_slug || ingredient.ingredient_id)
+]));
+const conversions = buildConversionSeedRows(ingredients).map((row) => ({
+  ...row,
+  ingredient_slug: row.ingredient_slug || ingredientSlugById.get(String(row.ingredient_id)) || row.ingredient_id
+}));
 await seedConversions(conversions);
-await applyIngredientUuidMigration();
 
 console.log(JSON.stringify({
   environment: args.environment,
@@ -103,6 +109,7 @@ async function bootstrapUnitConversionSchema() {
     create table if not exists ingredient_unit_conversion (
       id uuid primary key default gen_random_uuid(),
       ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
+      ingredient_slug text,
       from_unit text not null,
       to_unit text not null,
       ratio numeric not null,
@@ -115,6 +122,9 @@ async function bootstrapUnitConversionSchema() {
     create unique index if not exists ingredient_unit_conversion_unique_rule_idx
       on ingredient_unit_conversion (ingredient_id, from_unit, to_unit);
 
+    alter table ingredient_unit_conversion
+      add column if not exists ingredient_slug text;
+
     create index if not exists ingredient_unit_conversion_ingredient_idx
       on ingredient_unit_conversion (ingredient_id);
 
@@ -124,11 +134,17 @@ async function bootstrapUnitConversionSchema() {
 }
 
 async function fetchIngredients() {
-  const rows = await query("select ingredient_id, canonical_name, category from ingredients order by ingredient_id;");
+  const rows = await query(`
+    select ingredient_id, ingredient_slug, canonical_name, category, canonical_unit
+    from ingredients
+    order by canonical_name asc, ingredient_id asc;
+  `);
   return rows.map((row) => ({
     ingredient_id: row.ingredient_id,
+    ingredient_slug: row.ingredient_slug,
     canonical_name: row.canonical_name,
-    category: row.category
+    category: row.category,
+    canonical_unit: row.canonical_unit
   }));
 }
 
@@ -146,7 +162,7 @@ async function seedCanonicalUnits(ingredients) {
       from (
         values ${chunk.map((row) => `(${sqlString(row.ingredient_id)}, ${sqlString(row.canonical_unit)})`).join(",\n")}
       ) as seed(ingredient_id, canonical_unit)
-      where ingredients.ingredient_id = seed.ingredient_id;
+      where ingredients.ingredient_id::text = seed.ingredient_id;
     `);
   }
 }
@@ -168,10 +184,11 @@ async function seedConversions(conversions) {
     const chunk = conversions.slice(index, index + 400);
     await query(`
       insert into ingredient_unit_conversion (
-        ingredient_id, from_unit, to_unit, ratio, conversion_type, is_default, notes
+        ingredient_id, ingredient_slug, from_unit, to_unit, ratio, conversion_type, is_default, notes
       )
       values ${chunk.map((row) => `(
         ${sqlString(row.ingredient_id)},
+        ${sqlString(row.ingredient_slug)},
         ${sqlString(row.from_unit)},
         ${sqlString(row.to_unit)},
         ${sqlNumber(row.ratio, 1)},
@@ -180,16 +197,13 @@ async function seedConversions(conversions) {
         ${sqlString(row.notes)}
       )`).join(",\n")}
       on conflict (ingredient_id, from_unit, to_unit) do update set
+        ingredient_slug = excluded.ingredient_slug,
         ratio = excluded.ratio,
         conversion_type = excluded.conversion_type,
         is_default = excluded.is_default,
         notes = excluded.notes;
     `);
   }
-}
-
-async function applyIngredientUuidMigration() {
-  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 function uniqueRows(rows, key) {
