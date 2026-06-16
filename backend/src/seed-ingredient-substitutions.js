@@ -157,6 +157,7 @@ async function applySeedFiles() {
     await query(readFileSync(seedFile, "utf8"));
   }
   await query(readFileSync("backend/migrations/20260617_drop_deprecated_substitution_tables.sql", "utf8"));
+  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 async function sampleSubstitutions() {

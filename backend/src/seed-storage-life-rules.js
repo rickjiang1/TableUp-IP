@@ -43,6 +43,7 @@ if (!args.dryRun) {
   await ensureRuleUniqueIndex();
   await seedRules(rows);
   await enforceRelationships();
+  await applyIngredientUuidMigration();
 }
 
 console.log(JSON.stringify({
@@ -214,6 +215,10 @@ async function enforceRelationships() {
       end if;
     end $$;
   `);
+}
+
+async function applyIngredientUuidMigration() {
+  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 function storageRuleIngredientId(row) {

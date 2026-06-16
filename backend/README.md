@@ -118,6 +118,31 @@ GET /api/media/:fileName
 
 For the MVP, edit recipe rows directly in Supabase or through the iOS app. The iOS app syncs active recipes through this backend, and Supabase keys stay in `backend/.env` or Render environment variables.
 
+## Ingredient UUID Relationships
+
+`ingredients.id` is the canonical UUID identifier for database relationships. The older `ingredients.ingredient_id` text value is kept as a stable legacy slug while the backend and iOS app migrate gradually.
+
+Downstream tables now keep UUID reference columns alongside the legacy text fields:
+
+```text
+ingredient_aliases.ingredient_uuid
+ingredient_substitutions.ingredient_uuid
+ingredient_substitutions.substitute_ingredient_uuid
+ingredient_substitution_components.component_ingredient_uuid
+ingredient_unit_conversion.ingredient_uuid
+ingredient_storage_life_rules.ingredient_uuid
+pantry_recipe_ingredients.canonical_ingredient_uuid
+unknown_ingredients.suggested_ingredient_uuid
+```
+
+Run the compatibility migration with:
+
+```bash
+node backend/src/apply-ingredient-uuid-migration.js --env dev
+```
+
+Use `--env prod --allow-prod-write` only when intentionally migrating production.
+
 ## Ingredient Alias Dictionary
 
 Recipe matching is rule-based. It first resolves inventory and recipe ingredient names through `ingredient_aliases`, then compares canonical ingredient IDs. For example:

@@ -7,7 +7,7 @@ export async function ensureSupabaseSchema() {
 export async function fetchCloudRecipes() {
   const [recipeRows, ingredientRows, stepRows] = await Promise.all([
     restSelectAll("pantry_recipes", "select=recipe_id,name,image_url,video_url,updated_at,total_time_minutes,active_time_minutes,primary_cooking_method,difficulty,leftover_score,cleanup_score&active=eq.true&order=updated_at.desc,name.asc"),
-    restSelectAll("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
+    restSelectAll("pantry_recipe_ingredients", "select=recipe_id,ingredient_id,canonical_ingredient_id,canonical_ingredient_uuid,role,name,quantity,unit,sort_order,required_flag,optional_flag,pantry_flag&order=recipe_id.asc,sort_order.asc,ingredient_id.asc"),
     restSelectAll("pantry_recipe_steps", "select=recipe_id,step_id,step_order,instruction&order=recipe_id.asc,step_order.asc,step_id.asc")
   ]);
 
@@ -36,6 +36,7 @@ export async function fetchCloudRecipes() {
     ingredients: (ingredientsByRecipe.get(recipe.recipe_id) || []).map((ingredient) => ({
       id: ingredient.ingredient_id,
       canonicalIngredientId: ingredient.canonical_ingredient_id || "",
+      canonicalIngredientUUID: ingredient.canonical_ingredient_uuid || "",
       role: normalizeRole(ingredient.role),
       name: ingredient.name,
       quantity: Number(ingredient.quantity || 1),
@@ -191,9 +192,9 @@ export async function recipeCount() {
 
 export async function fetchMatchingRules() {
   const [ingredients, aliases, substitutions] = await Promise.all([
-    restSelectAll("ingredients", "select=ingredient_id,canonical_name,category,canonical_unit&order=ingredient_id.asc"),
-    restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
-    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc")
+    restSelectAll("ingredients", "select=id,ingredient_id,canonical_name,category,canonical_unit&order=ingredient_id.asc"),
+    restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id,ingredient_uuid&order=alias_name.asc"),
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,ingredient_uuid,substitute_ingredient_id,substitute_ingredient_uuid,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc")
   ]);
 
   return { ingredients, aliases, substitutions };
@@ -206,14 +207,14 @@ export async function fetchIngredientUnitConversions(ingredientId) {
   }
   return await restSelectAll(
     "ingredient_unit_conversion",
-    `select=ingredient_id,from_unit,to_unit,ratio,conversion_type,is_default,notes&ingredient_id=eq.${encodeURIComponent(id)}&order=from_unit.asc`
+    `select=ingredient_id,ingredient_uuid,from_unit,to_unit,ratio,conversion_type,is_default,notes&ingredient_id=eq.${encodeURIComponent(id)}&order=from_unit.asc`
   );
 }
 
 export async function fetchIngredientDictionary(language = "en") {
   const ingredients = await restSelectAll(
     "ingredients",
-    "select=ingredient_id,canonical_name,category,canonical_unit&order=category.asc,canonical_name.asc"
+    "select=id,ingredient_id,canonical_name,category,canonical_unit&order=category.asc,canonical_name.asc"
   );
   const normalizedLanguage = String(language || "en").trim().toLowerCase();
   if (normalizedLanguage !== "zh") {
@@ -243,7 +244,7 @@ export async function fetchIngredientDictionary(language = "en") {
 export async function fetchIngredientStorageLifeRules() {
   return await restSelectAll(
     "ingredient_storage_life_rules",
-    "select=ingredient_id,category,storage_approach,storage_location,default_days,condition_state,priority,notes,source_name,source_url,source_priority,safety_note,active&active=eq.true&condition_state=eq.default&order=priority.asc,ingredient_id.asc,storage_approach.asc"
+    "select=ingredient_id,ingredient_uuid,category,storage_approach,storage_location,default_days,condition_state,priority,notes,source_name,source_url,source_priority,safety_note,active&active=eq.true&condition_state=eq.default&order=priority.asc,ingredient_id.asc,storage_approach.asc"
   );
 }
 
@@ -332,6 +333,7 @@ export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId,
     }],
     { prefer: "resolution=merge-duplicates" }
   );
+  const ingredientUUID = await fetchIngredientUUID(id);
 
   await restWrite(
     "ingredient_aliases?on_conflict=alias_name",
@@ -339,6 +341,7 @@ export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId,
     [{
       alias_name: alias,
       ingredient_id: id,
+      ingredient_uuid: ingredientUUID || null,
       canonical_name: canonical,
       category,
       language,
@@ -355,6 +358,7 @@ export async function upsertIngredientAliasSuggestion({ aliasName, ingredientId,
       {
         suggested_canonical_name: canonical,
         suggested_ingredient_id: id,
+        suggested_ingredient_uuid: ingredientUUID || null,
         ai_confidence: confidenceScore,
         status: "resolved",
         last_seen_at: new Date().toISOString()
@@ -371,6 +375,7 @@ export async function markUnknownIngredientResolved({ unknownIngredientId = "", 
   if (!id || !canonicalId) {
     throw new Error("unknownIngredientId and ingredientId are required.");
   }
+  const ingredientUUID = await fetchIngredientUUID(canonicalId);
 
   await restWrite(
     `unknown_ingredients?id=eq.${encodeURIComponent(id)}`,
@@ -378,11 +383,28 @@ export async function markUnknownIngredientResolved({ unknownIngredientId = "", 
     {
       suggested_canonical_name: canonical,
       suggested_ingredient_id: canonicalId,
+      suggested_ingredient_uuid: ingredientUUID || null,
       ai_confidence: Number(confidenceScore || 1),
       status: "resolved",
       last_seen_at: new Date().toISOString()
     }
   );
+}
+
+async function fetchIngredientUUID(ingredientId) {
+  const id = String(ingredientId || "").trim();
+  if (!id) {
+    return "";
+  }
+  try {
+    const rows = await restSelect(
+      "ingredients",
+      `select=id&ingredient_id=eq.${encodeURIComponent(id)}&limit=1`
+    );
+    return rows[0]?.id || "";
+  } catch {
+    return "";
+  }
 }
 
 export async function restSelect(table, queryString) {

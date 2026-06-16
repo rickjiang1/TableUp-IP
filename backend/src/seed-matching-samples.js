@@ -662,6 +662,7 @@ const recipes = [
 await bootstrapSchema();
 await seedRuleData();
 await seedRecipes();
+await applyIngredientUuidMigration();
 
 console.log(`Seeded ${ingredients.length} ingredients, ${aliases.length} aliases, ${substitutions.length} substitutions, and ${recipes.length} recipes.`);
 
@@ -870,6 +871,10 @@ async function seedRecipes() {
       ${sqlString(`Prepare ${item.name} using the matched ingredients.`)}
     )`).join(",\n")};
   `);
+}
+
+async function applyIngredientUuidMigration() {
+  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 function recipe(id, name, totalTimeMinutes, activeTimeMinutes, difficulty, leftoverScore, cleanupScore, recipeIngredients, primaryCookingMethod = "") {

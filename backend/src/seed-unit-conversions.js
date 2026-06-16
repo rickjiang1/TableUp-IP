@@ -33,6 +33,7 @@ await seedCanonicalUnits(ingredients);
 await seedUnitAliases();
 const conversions = buildConversionSeedRows(ingredients);
 await seedConversions(conversions);
+await applyIngredientUuidMigration();
 
 console.log(JSON.stringify({
   environment: args.environment,
@@ -185,6 +186,10 @@ async function seedConversions(conversions) {
         notes = excluded.notes;
     `);
   }
+}
+
+async function applyIngredientUuidMigration() {
+  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 function uniqueRows(rows, key) {

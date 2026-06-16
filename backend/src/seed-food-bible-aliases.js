@@ -30,6 +30,7 @@ const beforeCount = await countFoodBibleAliases();
 if (!args.dryRun) {
   await bootstrapAliasSchema();
   await applyAliasSeed();
+  await applyIngredientUuidMigration();
 }
 const afterCount = args.dryRun ? beforeCount : await countFoodBibleAliases();
 
@@ -138,6 +139,10 @@ async function bootstrapAliasSchema() {
 
 async function applyAliasSeed() {
   await query(readFileSync("backend/seeds/ingredient_aliases_food_bible_auto.sql", "utf8"));
+}
+
+async function applyIngredientUuidMigration() {
+  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
 }
 
 async function countFoodBibleAliases() {
