@@ -3,7 +3,7 @@ export const unitAliasRows = [
   alias("个", "piece", "zh"), alias("颗", "piece", "zh"), alias("只", "piece", "zh"), alias("根", "piece", "zh"),
   alias("whole", "whole"), alias("wholes", "whole"), alias("entire", "whole"), alias("完整", "whole", "zh"), alias("整", "whole", "zh"),
   alias("half", "half"), alias("halves", "half"), alias("1/2", "half"), alias("半", "half", "zh"),
-  alias("head", "head"), alias("heads", "head"), alias("bulb", "bulb"), alias("bulbs", "bulb"), alias("头", "head", "zh"), alias("整头", "head", "zh"),
+  alias("head", "head"), alias("heads", "head"), alias("bulb", "bulb"), alias("bulbs", "bulb"), alias("头", "head", "zh"), alias("整头", "head", "zh"), alias("蒜头", "bulb", "zh"), alias("球茎", "bulb", "zh"),
   alias("clove", "clove"), alias("cloves", "clove"), alias("瓣", "clove", "zh"),
   alias("bunch", "bunch"), alias("bunches", "bunch"), alias("bundle", "bunch"), alias("把", "bunch", "zh"), alias("束", "bunch", "zh"),
   alias("leaf", "leaf"), alias("leaves", "leaf"), alias("叶", "leaf", "zh"),

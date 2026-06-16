@@ -674,6 +674,9 @@ function preferredUnitAliasMap(aliases, language) {
 function preferredUnitAlias(aliasTexts, unit, language) {
   const uniqueAliases = [...new Set(aliasTexts)];
   if (language === "zh") {
+    if (unit === "bulb" && uniqueAliases.includes("蒜头")) {
+      return "蒜头";
+    }
     const chineseAlias = uniqueAliases
       .filter((aliasText) => /[\u3400-\u9fff]/.test(aliasText))
       .sort((left, right) => left.length - right.length || left.localeCompare(right, "zh-Hans"))
