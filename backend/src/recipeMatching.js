@@ -12,12 +12,11 @@ export async function matchRecipesForInventory(inventoryInput) {
 
   const resolver = buildIngredientResolver(rules);
   const substitutions = buildSubstitutionMap(rules.substitutions);
-  const substitutionContexts = buildSubstitutionContextMap(rules.substitutionContexts);
   const inventory = normalizeInventory(inventoryInput, resolver);
   await recordUnknownIngredients(inventory, recipes, resolver);
 
   return recipes
-    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions, substitutionContexts))
+    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions))
     .sort((left, right) => {
       if (right.match_score_percent !== left.match_score_percent) {
         return right.match_score_percent - left.match_score_percent;
@@ -26,7 +25,7 @@ export async function matchRecipesForInventory(inventoryInput) {
     });
 }
 
-function matchRecipe(recipe, inventory, resolver, substitutions, substitutionContexts) {
+function matchRecipe(recipe, inventory, resolver, substitutions) {
   const details = recipe.ingredients.map((ingredient) => {
     const recipeIngredientId = resolveRecipeIngredientId(ingredient, resolver);
     const exactItem = inventory.find((item) => !item.aliasMatched && item.ingredientId === recipeIngredientId);
@@ -45,7 +44,7 @@ function matchRecipe(recipe, inventory, resolver, substitutions, substitutionCon
     for (const candidate of candidates) {
       const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
       if (substituteItem) {
-        const scored = scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts);
+        const scored = scoreSubstitutionForRecipe(candidate, recipe);
         if (!bestSubstitute || scored.score > bestSubstitute.score) {
           bestSubstitute = {
             substituteItem,
@@ -299,29 +298,10 @@ function automaticSubstitutionAllowed(substitution) {
   return !["alias", "variety", "category_mapping"].includes(substitutionType);
 }
 
-function buildSubstitutionContextMap(contexts) {
-  const map = new Map();
-  for (const context of contexts || []) {
-    const ingredientId = String(context.ingredient_id || "").trim();
-    const substituteIngredientId = String(context.substitute_ingredient_id || "").trim();
-    if (!ingredientId || !substituteIngredientId) {
-      continue;
-    }
-    map.set(`${ingredientId}|${substituteIngredientId}`, {
-      compatibleMethods: Array.isArray(context.compatible_methods) ? context.compatible_methods.map(normalizeCookingMethod).filter(Boolean) : [],
-      timeAdjustment: context.time_adjustment || "same",
-      textureImpact: context.texture_impact || "",
-      fatImpact: context.fat_impact || "",
-      notes: context.notes || ""
-    });
-  }
-  return map;
-}
-
-function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
+function scoreSubstitutionForRecipe(candidate, recipe) {
   const baseScore = clampScore(candidate.confidenceScore);
   const methods = normalizeCookingMethods(recipe.primaryCookingMethod);
-  const context = substitutionContexts.get(`${candidate.ingredientId}|${candidate.substituteIngredientId}`) || {
+  const context = {
     compatibleMethods: genericSubstitutionContext(candidate.context) ? [] : normalizeCookingMethods(candidate.context),
     timeAdjustment: "same",
     textureImpact: "",
@@ -329,8 +309,8 @@ function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
     notes: candidate.limitations || ""
   };
 
-  if (!context || methods.length === 0 || context.compatibleMethods.length === 0) {
-    return { score: baseScore, context: context || null, methodCompatible: null };
+  if (methods.length === 0 || context.compatibleMethods.length === 0) {
+    return { score: baseScore, context, methodCompatible: null };
   }
 
   const methodCompatible = methods.some((method) => context.compatibleMethods.includes(method));

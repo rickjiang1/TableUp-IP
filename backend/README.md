@@ -106,7 +106,6 @@ pantry_media
 ingredients
 ingredient_aliases
 ingredient_substitutions
-ingredient_substitution_combinations
 ingredient_substitution_components
 unknown_ingredients
 ```

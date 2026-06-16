@@ -104,11 +104,17 @@ create index if not exists ingredient_substitutions_mvp_match_idx
     and confidence_score >= 0.70
     and substitution_type not in ('alias', 'variety', 'category_mapping');
 
-comment on table ingredient_substitution_contexts is
-  'Deprecated for MVP matching. Context has been folded into ingredient_substitutions.context, notes, and limitations.';
-
-comment on table ingredient_substitution_combinations is
-  'Deprecated for MVP matching. Combination substitutes are represented as ingredient_substitutions rows whose substitute_ingredient_id is a custom combo id, with components stored in ingredient_substitution_components.';
+do $$
+begin
+  if to_regclass('public.ingredient_substitution_contexts') is not null then
+    comment on table ingredient_substitution_contexts is
+      'Deprecated for MVP matching. Context has been folded into ingredient_substitutions.context, notes, and limitations.';
+  end if;
+  if to_regclass('public.ingredient_substitution_combinations') is not null then
+    comment on table ingredient_substitution_combinations is
+      'Deprecated for MVP matching. Combination substitutes are represented as ingredient_substitutions rows whose substitute_ingredient_id is a custom combo id, with components stored in ingredient_substitution_components.';
+  end if;
+end $$;
 
 comment on column ingredient_substitution_components.combination_id is
   'MVP custom substitute id. This may reference a deprecated ingredient_substitution_combinations row or a custom_combo_* substitute id in ingredient_substitutions.';

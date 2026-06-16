@@ -190,28 +190,13 @@ export async function recipeCount() {
 }
 
 export async function fetchMatchingRules() {
-  const [ingredients, aliases, substitutions, substitutionContexts] = await Promise.all([
+  const [ingredients, aliases, substitutions] = await Promise.all([
     restSelectAll("ingredients", "select=ingredient_id,canonical_name,category,canonical_unit&order=ingredient_id.asc"),
     restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
-    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc"),
-    fetchSubstitutionContexts()
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc")
   ]);
 
-  return { ingredients, aliases, substitutions, substitutionContexts };
-}
-
-async function fetchSubstitutionContexts() {
-  try {
-    return await restSelectAll(
-      "ingredient_substitution_contexts",
-      "select=ingredient_id,substitute_ingredient_id,compatible_methods,time_adjustment,texture_impact,fat_impact,notes&order=ingredient_id.asc,substitute_ingredient_id.asc"
-    );
-  } catch (error) {
-    if (String(error?.message || "").includes("ingredient_substitution_contexts")) {
-      return [];
-    }
-    throw error;
-  }
+  return { ingredients, aliases, substitutions };
 }
 
 export async function fetchIngredientUnitConversions(ingredientId) {

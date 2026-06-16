@@ -34,7 +34,7 @@ if (!args.dryRun) {
   await applySeedFiles();
 }
 const finalCount = args.dryRun ? existingCount : await countExistingSubstitutions();
-const combinationCount = args.dryRun ? 0 : await countCombinationSubstitutions();
+const customComboCount = args.dryRun ? 0 : await countCustomComboSubstitutions();
 
 console.log(JSON.stringify({
   environment: args.environment,
@@ -43,7 +43,7 @@ console.log(JSON.stringify({
   ingredients: ingredients.length,
   existingSubstitutions: existingCount,
   finalSubstitutions: finalCount,
-  combinationSubstitutions: combinationCount,
+  customComboSubstitutions: customComboCount,
   sample: args.dryRun ? [] : await sampleSubstitutions()
 }, null, 2));
 
@@ -140,8 +140,8 @@ async function countExistingSubstitutions() {
   return Number(rows[0]?.count || 0);
 }
 
-async function countCombinationSubstitutions() {
-  const rows = await query("select count(*)::int as count from ingredient_substitution_combinations where active = true");
+async function countCustomComboSubstitutions() {
+  const rows = await query("select count(*)::int as count from ingredient_substitutions where position('__' in substitute_ingredient_id) > 0 or substitute_ingredient_id like 'custom\\_combo\\_%' escape '\\'");
   return Number(rows[0]?.count || 0);
 }
 
@@ -149,13 +149,14 @@ async function applySeedFiles() {
   const seedFiles = [
     "backend/seeds/ingredient_substitutions_verified.sql",
     "backend/seeds/ingredient_substitutions_food_bible_auto.sql",
-    "backend/seeds/ingredient_substitution_combinations_food_bible_auto.sql",
+    "backend/seeds/ingredient_substitution_combo_components_food_bible_auto.sql",
     "backend/seeds/ingredient_substitutions_mvp_cleanup.sql"
   ];
 
   for (const seedFile of seedFiles) {
     await query(readFileSync(seedFile, "utf8"));
   }
+  await query(readFileSync("backend/migrations/20260617_drop_deprecated_substitution_tables.sql", "utf8"));
 }
 
 async function sampleSubstitutions() {

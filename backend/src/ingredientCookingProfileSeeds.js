@@ -81,45 +81,6 @@ const profileRules = [
   profile("egg", ["pan_fry", "boil", "steam", "bake"], "short", "egg", "medium", "egg")
 ];
 
-const substitutionContextRules = [
-  context("chicken_breast", "chicken_thigh", ["stir_fry", "pan_fry", "bake", "grill"], "slightly_longer", "juicier_dark_meat", "higher_fat", "Thigh works in many breast recipes but may need a little more cooking time."),
-  context("chicken_thigh", "chicken_breast", ["stir_fry", "pan_fry", "bake", "grill"], "slightly_shorter", "leaner_drier", "lower_fat", "Breast works for thigh in quick recipes; avoid overcooking."),
-  context("chicken_breast", "chicken_tenderloin", ["stir_fry", "pan_fry", "grill"], "slightly_shorter", "similar_lean_tender", "same", "Tenderloin is close to breast and cooks quickly."),
-  context("chicken_leg", "chicken_drumstick", ["bake", "roast", "braise", "soup"], "same", "similar_dark_meat", "same", "Drumsticks can replace legs when bone-in dark meat is acceptable."),
-  context("chicken_wing", "chicken_wingette", ["bake", "air_fry", "deep_fry", "grill"], "same", "similar", "same", "Wing pieces are interchangeable in wing recipes."),
-  context("chicken_wing", "chicken_drumette", ["bake", "air_fry", "deep_fry", "grill"], "same", "similar", "same", "Wing pieces are interchangeable in wing recipes."),
-
-  context("beef_brisket", "beef_chuck", ["braise", "stew", "slow_cook"], "same", "similar_braising_cut", "slightly_lower_fat", "Chuck is one of the best brisket substitutes for stew/braise."),
-  context("beef_chuck", "beef_brisket", ["braise", "stew", "slow_cook"], "same", "similar_braising_cut", "slightly_higher_fat", "Brisket can replace chuck in slow cooking."),
-  context("beef_brisket", "full_brisket", ["braise", "stew", "slow_cook", "smoke"], "same", "same_cut", "same", "Same cut family."),
-  context("beef_chuck", "beef_stew_meat", ["braise", "stew", "slow_cook"], "same", "similar_braising_cut", "same", "Stew meat often comes from chuck or similar braising cuts."),
-  context("beef_shank", "beef_oxtail", ["braise", "stew", "soup", "slow_cook"], "same", "gelatin_rich", "slightly_higher_fat", "Both work in gelatin-rich soups and braises."),
-  context("beef_short_rib", "beef_rib", ["braise", "stew", "grill"], "same", "rich_bone_in", "same", "Rib cuts can overlap for braise/grill but texture differs."),
-  context("beef_rib", "ribeye_steak", ["grill", "pan_fry", "roast"], "shorter", "more_tender_steak", "same", "Good for steak/roast methods, not stew."),
-  context("ribeye_steak", "rib_eye", ["pan_fry", "grill"], "same", "same_cut", "same", "Same cut family."),
-  context("beef_tenderloin", "beef_filet_mignon", ["pan_fry", "grill", "roast"], "same", "same_cut_family", "same", "Filet is a tenderloin portion."),
-  context("beef_flank", "beef_skirt_steak", ["stir_fry", "grill", "pan_fry"], "same", "similar_grain", "slightly_higher_fat", "Good quick-cook substitute when sliced against the grain."),
-  context("beef_round", "eye_of_round", ["roast", "stir_fry", "braise"], "same", "similar_lean", "same", "Round subcut with similar lean profile."),
-  context("ground_beef", "ground_pork", ["stir_fry", "pan_fry", "sauce", "stuffing"], "same", "ground_meat", "slightly_higher_fat", "Works when the recipe can accept pork flavor."),
-
-  context("pork_shoulder", "pork_butt", ["braise", "stew", "slow_cook", "roast"], "same", "same_cut_family", "same", "Very close substitutes."),
-  context("pork_rib", "pork_spare_rib", ["braise", "stew", "roast", "grill"], "same", "similar_rib", "same", "Good rib substitute."),
-  context("pork_back_rib", "baby_back_ribs", ["roast", "grill", "braise"], "same", "similar_rib", "same", "Same rib family."),
-  context("pork_chop", "pork_loin", ["pan_fry", "grill", "bake"], "same", "lean_larger_cut", "same", "Loin can be cut into chop-like portions."),
-  context("pork_loin", "pork_tenderloin", ["pan_fry", "grill", "roast"], "shorter", "more_tender_lean", "lower_fat", "Tenderloin cooks faster and dries out faster."),
-  context("pork_hock", "pork_shank", ["braise", "stew", "soup", "slow_cook"], "same", "gelatin_rich", "same", "Similar slow-cooking pork cuts."),
-
-  context("lamb_chops", "lamb_rib_rack", ["pan_fry", "grill", "roast"], "same", "similar_rib_cut", "same", "Rack can be portioned into chops."),
-  context("lamb_shank", "lamb_leg_shank_portion", ["braise", "stew", "slow_cook"], "same", "gelatin_rich", "same", "Same slow-cooking shank family."),
-  context("lamb_shoulder", "lamb_neck", ["braise", "stew", "slow_cook"], "same", "tough_to_tender", "same", "Both need long cooking."),
-
-  context("cod", "alaskan_pollock", ["pan_fry", "steam", "bake", "soup"], "same", "flaky_white_fish", "same", "Mild flaky white fish substitute."),
-  context("tilapia", "swai", ["pan_fry", "steam", "bake"], "same", "mild_white_fish", "same", "Mild white fish substitute."),
-  context("shrimp", "prawns", ["stir_fry", "pan_fry", "boil", "steam"], "same", "very_similar_shellfish", "same", "Shrimp and prawns are close for most recipes."),
-  context("clam", "mussel", ["steam", "soup"], "same", "briny_shellfish", "same", "Works in soups or steamed shellfish dishes."),
-  context("tofu", "soft_tofu", ["soup", "braise"], "same", "softer_more_delicate", "same", "Soft tofu breaks more easily; avoid firm tofu preparations.")
-];
-
 export function buildCookingProfileSeedRows(ingredients) {
   const available = new Set((ingredients || []).map((item) => item.ingredient_id));
   const rows = new Map();
@@ -134,34 +95,6 @@ export function buildCookingProfileSeedRows(ingredients) {
   return [...rows.values()].sort((a, b) => a.ingredient_id.localeCompare(b.ingredient_id));
 }
 
-export function buildSubstitutionContextSeedRows(ingredients, substitutions) {
-  const availableIngredients = new Set((ingredients || []).map((item) => item.ingredient_id));
-  const availableSubstitutions = new Set((substitutions || []).map((item) => `${item.ingredient_id}|${item.substitute_ingredient_id}`));
-  const profiles = new Map(buildCookingProfileSeedRows(ingredients).map((item) => [item.ingredient_id, item]));
-  const rows = new Map();
-
-  const add = (row) => {
-    if (!row) return;
-    if (!availableIngredients.has(row.ingredient_id) || !availableIngredients.has(row.substitute_ingredient_id)) return;
-    if (!availableSubstitutions.has(`${row.ingredient_id}|${row.substitute_ingredient_id}`)) return;
-    if (rows.has(`${row.ingredient_id}|${row.substitute_ingredient_id}`)) return;
-    rows.set(`${row.ingredient_id}|${row.substitute_ingredient_id}`, row);
-  };
-
-  for (const row of substitutionContextRules) {
-    add(row);
-    add(reverseContext(row));
-  }
-  for (const substitution of substitutions || []) {
-    add(inferContext(substitution, profiles));
-  }
-
-  return [...rows.values()].sort((a, b) =>
-    a.ingredient_id.localeCompare(b.ingredient_id) ||
-    a.substitute_ingredient_id.localeCompare(b.substitute_ingredient_id)
-  );
-}
-
 function profile(ingredientId, primaryMethods, cookingTimeClass, textureClass, fatLevel, cutGroup, notes = "") {
   return {
     ingredient_id: ingredientId,
@@ -170,18 +103,6 @@ function profile(ingredientId, primaryMethods, cookingTimeClass, textureClass, f
     texture_class: textureClass,
     fat_level: fatLevel,
     cut_group: cutGroup,
-    notes
-  };
-}
-
-function context(ingredientId, substituteIngredientId, compatibleMethods, timeAdjustment, textureImpact, fatImpact, notes = "") {
-  return {
-    ingredient_id: ingredientId,
-    substitute_ingredient_id: substituteIngredientId,
-    compatible_methods: compatibleMethods,
-    time_adjustment: timeAdjustment,
-    texture_impact: textureImpact,
-    fat_impact: fatImpact,
     notes
   };
 }
@@ -231,36 +152,6 @@ function fallbackProfile(ingredient) {
   return profile(ingredientId, ["general"], "medium", "general", "varies", "general", "Auto-generated from ingredient category.");
 }
 
-function inferContext(substitution, profiles) {
-  const source = profiles.get(substitution.ingredient_id);
-  const substitute = profiles.get(substitution.substitute_ingredient_id);
-  if (!source || !substitute) return null;
-
-  const compatibleMethods = intersect(source.primary_methods, substitute.primary_methods);
-  return context(
-    substitution.ingredient_id,
-    substitution.substitute_ingredient_id,
-    compatibleMethods.length ? compatibleMethods : ["general"],
-    compareTime(source.cooking_time_class, substitute.cooking_time_class),
-    compareTexture(source, substitute),
-    compareFat(source.fat_level, substitute.fat_level),
-    "Auto-generated from ingredient cooking profiles and verified substitution pair; review for recipe-specific precision."
-  );
-}
-
-function reverseContext(row) {
-  if (!row) return null;
-  return {
-    ingredient_id: row.substitute_ingredient_id,
-    substitute_ingredient_id: row.ingredient_id,
-    compatible_methods: row.compatible_methods,
-    time_adjustment: reverseTimeAdjustment(row.time_adjustment),
-    texture_impact: row.texture_impact,
-    fat_impact: reverseFatImpact(row.fat_impact),
-    notes: row.notes
-  };
-}
-
 function normalizeCategory(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -272,78 +163,4 @@ function proteinPrefix(ingredientId) {
   if (ingredientId.includes("turkey")) return "poultry";
   if (ingredientId.includes("lamb")) return "lamb";
   return "protein";
-}
-
-function intersect(left, right) {
-  const rightSet = new Set(right || []);
-  return (left || []).filter((item) => rightSet.has(item));
-}
-
-function compareTime(sourceClass, substituteClass) {
-  const sourceRank = timeRank(sourceClass);
-  const substituteRank = timeRank(substituteClass);
-  if (substituteRank === sourceRank) return "same";
-  if (Math.abs(substituteRank - sourceRank) === 1) {
-    return substituteRank > sourceRank ? "slightly_longer" : "slightly_shorter";
-  }
-  return substituteRank > sourceRank ? "longer" : "shorter";
-}
-
-function timeRank(value) {
-  switch (value) {
-    case "none": return 0;
-    case "short": return 1;
-    case "short_medium": return 2;
-    case "medium": return 3;
-    case "medium_long": return 4;
-    case "long": return 5;
-    default: return 3;
-  }
-}
-
-function compareTexture(source, substitute) {
-  if (source.cut_group && source.cut_group === substitute.cut_group) return "same_cut_group";
-  if (source.texture_class === substitute.texture_class) return "similar";
-  return `${source.texture_class || "unknown"}_to_${substitute.texture_class || "unknown"}`.slice(0, 120);
-}
-
-function compareFat(sourceFat, substituteFat) {
-  const sourceRank = fatRank(sourceFat);
-  const substituteRank = fatRank(substituteFat);
-  if (substituteRank === sourceRank) return "same";
-  if (Math.abs(substituteRank - sourceRank) === 1) {
-    return substituteRank > sourceRank ? "slightly_higher_fat" : "slightly_lower_fat";
-  }
-  return substituteRank > sourceRank ? "higher_fat" : "lower_fat";
-}
-
-function fatRank(value) {
-  switch (value) {
-    case "low": return 1;
-    case "low_medium": return 2;
-    case "medium": return 3;
-    case "medium_high": return 4;
-    case "high": return 5;
-    default: return 3;
-  }
-}
-
-function reverseTimeAdjustment(value) {
-  switch (value) {
-    case "shorter": return "longer";
-    case "longer": return "shorter";
-    case "slightly_shorter": return "slightly_longer";
-    case "slightly_longer": return "slightly_shorter";
-    default: return value;
-  }
-}
-
-function reverseFatImpact(value) {
-  switch (value) {
-    case "higher_fat": return "lower_fat";
-    case "lower_fat": return "higher_fat";
-    case "slightly_higher_fat": return "slightly_lower_fat";
-    case "slightly_lower_fat": return "slightly_higher_fat";
-    default: return value;
-  }
 }

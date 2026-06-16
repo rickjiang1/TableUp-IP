@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { buildCookingProfileSeedRows, buildSubstitutionContextSeedRows } from "./ingredientCookingProfileSeeds.js";
+import { buildCookingProfileSeedRows } from "./ingredientCookingProfileSeeds.js";
 import { query, sqlString } from "./postgres.js";
 
 const environmentTargets = {
@@ -29,13 +29,10 @@ assertTargetEnvironment(args.environment);
 
 await bootstrapCookingProfileSchema();
 const ingredients = await fetchIngredients();
-const substitutions = await fetchSubstitutions();
 const profiles = buildCookingProfileSeedRows(ingredients);
-const contexts = buildSubstitutionContextSeedRows(ingredients, substitutions);
 
 if (!args.dryRun) {
   await seedProfiles(profiles);
-  await seedContexts(contexts);
 }
 
 console.log(JSON.stringify({
@@ -43,11 +40,8 @@ console.log(JSON.stringify({
   target: environmentTargets[args.environment].label,
   dryRun: args.dryRun,
   ingredients: ingredients.length,
-  substitutions: substitutions.length,
   profiles: profiles.length,
-  substitutionContexts: contexts.length,
-  profileSample: profiles.slice(0, 12),
-  contextSample: contexts.slice(0, 12)
+  profileSample: profiles.slice(0, 12)
 }, null, 2));
 
 function parseArgs(argv) {
@@ -138,26 +132,10 @@ async function bootstrapCookingProfileSchema() {
       updated_at timestamptz not null default now()
     );
 
-    create table if not exists ingredient_substitution_contexts (
-      ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      substitute_ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      compatible_methods text[] not null default '{}',
-      time_adjustment text not null default 'same',
-      texture_impact text not null default '',
-      fat_impact text not null default '',
-      notes text not null default '',
-      updated_at timestamptz not null default now(),
-      primary key (ingredient_id, substitute_ingredient_id)
-    );
-
     create index if not exists ingredient_cooking_profiles_cut_group_idx
       on ingredient_cooking_profiles (cut_group);
 
-    create index if not exists ingredient_substitution_contexts_methods_idx
-      on ingredient_substitution_contexts using gin (compatible_methods);
-
     grant select, insert, update, delete on ingredient_cooking_profiles to anon;
-    grant select, insert, update, delete on ingredient_substitution_contexts to anon;
   `);
 }
 
@@ -166,14 +144,6 @@ async function fetchIngredients() {
     select ingredient_id, canonical_name, category
     from ingredients
     order by ingredient_id
-  `);
-}
-
-async function fetchSubstitutions() {
-  return await query(`
-    select ingredient_id, substitute_ingredient_id, confidence_score
-    from ingredient_substitutions
-    order by ingredient_id, substitute_ingredient_id
   `);
 }
 
@@ -199,42 +169,6 @@ async function seedProfiles(profiles) {
       texture_class = excluded.texture_class,
       fat_level = excluded.fat_level,
       cut_group = excluded.cut_group,
-      notes = excluded.notes,
-      updated_at = now()
-  `);
-}
-
-async function seedContexts(contexts) {
-  await query(`
-    delete from ingredient_substitution_contexts
-    where not exists (
-      select 1
-      from ingredient_substitutions
-      where ingredient_substitutions.ingredient_id = ingredient_substitution_contexts.ingredient_id
-        and ingredient_substitutions.substitute_ingredient_id = ingredient_substitution_contexts.substitute_ingredient_id
-    )
-  `);
-  if (!contexts.length) return;
-  await query(`
-    insert into ingredient_substitution_contexts (
-      ingredient_id, substitute_ingredient_id, compatible_methods,
-      time_adjustment, texture_impact, fat_impact, notes, updated_at
-    )
-    values ${contexts.map((item) => `(
-      ${sqlString(item.ingredient_id)},
-      ${sqlString(item.substitute_ingredient_id)},
-      ${sqlTextArray(item.compatible_methods)},
-      ${sqlString(item.time_adjustment)},
-      ${sqlString(item.texture_impact)},
-      ${sqlString(item.fat_impact)},
-      ${sqlString(item.notes)},
-      now()
-    )`).join(",\n")}
-    on conflict (ingredient_id, substitute_ingredient_id) do update set
-      compatible_methods = excluded.compatible_methods,
-      time_adjustment = excluded.time_adjustment,
-      texture_impact = excluded.texture_impact,
-      fat_impact = excluded.fat_impact,
       notes = excluded.notes,
       updated_at = now()
   `);

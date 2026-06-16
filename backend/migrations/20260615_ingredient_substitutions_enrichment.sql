@@ -35,11 +35,14 @@ alter table ingredient_substitutions
   add constraint ingredient_substitutions_type_check
   check (substitution_type in (
     'exact_equivalent',
+    'alias',
+    'variety',
     'same_family',
     'flavor_similar',
     'texture_similar',
     'functional',
-    'emergency'
+    'emergency',
+    'category_mapping'
   ));
 
 alter table ingredient_substitutions
