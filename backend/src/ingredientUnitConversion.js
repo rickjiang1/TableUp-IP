@@ -13,7 +13,7 @@ export const unitAliasRows = [
   alias("can", "can"), alias("cans", "can"), alias("tin", "can"), alias("tins", "can"), alias("罐", "can", "zh"),
   alias("bottle", "bottle"), alias("bottles", "bottle"), alias("瓶", "bottle", "zh"),
   alias("bag", "bag"), alias("bags", "bag"), alias("袋", "bag", "zh"),
-  alias("pack", "pack"), alias("packs", "pack"), alias("package", "pack"), alias("packages", "pack"), alias("pkg", "pack"), alias("pkgs", "pack"), alias("包", "pack", "zh"), alias("盒", "pack", "zh"), alias("盒装", "pack", "zh"),
+  alias("pack", "pack"), alias("packs", "pack"), alias("package", "pack"), alias("packages", "pack"), alias("pkg", "pack"), alias("pkgs", "pack"), alias("box", "pack"), alias("boxes", "pack"), alias("carton", "pack"), alias("cartons", "pack"), alias("包", "pack", "zh"), alias("盒", "pack", "zh"), alias("盒装", "pack", "zh"),
   alias("tray", "tray"), alias("trays", "tray"),
   alias("gram", "gram"), alias("grams", "gram"), alias("g", "gram"), alias("克", "gram", "zh"),
   alias("kilogram", "kg"), alias("kilograms", "kg"), alias("kg", "kg"), alias("kilo", "kg"), alias("kilos", "kg"), alias("千克", "kg", "zh"), alias("公斤", "kg", "zh"),
@@ -94,6 +94,7 @@ export const specificConversions = [
   ...rules("butter", "gram", [["tbsp", 14], ["tsp", 4.7], ["stick", 113], ["cup", 227], ["gram", 1], ["oz", 28.3495], ["lb", 453.592]]),
   ...liquidRules(["soy_sauce", "vinegar", "rice_vinegar", "white_vinegar", "balsamic_vinegar", "oil", "sesame_oil", "chili_oil", "olive_oil", "peanut_oil", "canola_oil"]),
   ...rules("rice", "gram", [["cup", 185], ["tbsp", 12], ["tsp", 4], ["gram", 1], ["kg", 1000], ["oz", 28.3495], ["lb", 453.592], ["jin", 500]]),
+  ...dryPastaRules(["pasta", "spaghetti", "macaroni", "penne", "fettuccine", "linguine"]),
   ...rules("flour", "gram", [["cup", 120], ["tbsp", 8], ["tsp", 2.6], ["gram", 1], ["kg", 1000], ["oz", 28.3495], ["lb", 453.592], ["jin", 500]]),
   ...rules("sugar", "gram", [["cup", 200], ["tbsp", 12.5], ["tsp", 4.2], ["gram", 1], ["kg", 1000], ["oz", 28.3495], ["lb", 453.592], ["jin", 500]]),
   ...rules("salt", "gram", [["tsp", 6], ["tbsp", 18], ["pinch", 0.36], ["dash", 0.6], ["gram", 1], ["kg", 1000], ["oz", 28.3495], ["lb", 453.592], ["jin", 500]])
@@ -215,6 +216,18 @@ export function normalizeIngredientQuantity(input, options = {}) {
 
 function liquidRules(ids) {
   return ids.flatMap((id) => rules(id, "ml", [["tbsp", 15], ["tsp", 5], ["cup", 240], ["ml", 1], ["l", 1000], ["fl_oz", 29.5735]]));
+}
+
+function dryPastaRules(ids) {
+  return ids.flatMap((id) => rules(id, "gram", [
+    ["pack", 454, "average", "dry pasta package/box is commonly about 1 lb / 454 g; prefer package label weight when available"],
+    ["cup", 100, "average", "dry pasta cup weight varies by shape; use package label weight when available"],
+    ["gram", 1, "exact"],
+    ["kg", 1000, "exact"],
+    ["oz", 28.3495, "exact"],
+    ["lb", 453.592, "exact"],
+    ["jin", 500, "exact"]
+  ]));
 }
 
 function volumeRules(ingredientId) {
