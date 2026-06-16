@@ -1,4 +1,5 @@
 import { fetchCloudRecipes, fetchMatchingRules, upsertUnknownIngredients } from "./supabase.js";
+import { getSubstituteCandidates } from "./dynamicSubstitutions.js";
 
 const requiredWeight = 1.0;
 const optionalWeight = 0.3;
@@ -11,12 +12,12 @@ export async function matchRecipesForInventory(inventoryInput) {
   ]);
 
   const resolver = buildIngredientResolver(rules);
-  const substitutions = buildSubstitutionMap(rules.substitutions);
+  const substitutionProvider = buildSubstitutionProvider(rules);
   const inventory = normalizeInventory(inventoryInput, resolver);
   await recordUnknownIngredients(inventory, recipes, resolver);
 
   return recipes
-    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutions))
+    .map((recipe) => matchRecipe(recipe, inventory, resolver, substitutionProvider))
     .sort((left, right) => {
       if (right.match_score_percent !== left.match_score_percent) {
         return right.match_score_percent - left.match_score_percent;
@@ -25,7 +26,7 @@ export async function matchRecipesForInventory(inventoryInput) {
     });
 }
 
-function matchRecipe(recipe, inventory, resolver, substitutions) {
+function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
   const details = recipe.ingredients.map((ingredient) => {
     const recipeIngredientId = resolveRecipeIngredientId(ingredient, resolver);
     const exactItem = inventory.find((item) => !item.aliasMatched && item.ingredientId === recipeIngredientId);
@@ -39,18 +40,16 @@ function matchRecipe(recipe, inventory, resolver, substitutions) {
       return ingredientMatch(ingredient, aliasItem, "alias", 1);
     }
 
-    const candidates = substitutions.get(recipeIngredientId) || [];
+    const candidates = substitutionProvider.getCandidates(recipeIngredientId, recipe.primaryCookingMethod);
     let bestSubstitute = null;
     for (const candidate of candidates) {
       const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
       if (substituteItem) {
-        const scored = scoreSubstitutionForRecipe(candidate, recipe);
-        if (!bestSubstitute || scored.score > bestSubstitute.score) {
+        if (!bestSubstitute || candidate.score > bestSubstitute.score) {
           bestSubstitute = {
             substituteItem,
-            score: scored.score,
-            context: scored.context,
-            methodCompatible: scored.methodCompatible
+            candidate,
+            score: candidate.score
           };
         }
       }
@@ -59,8 +58,16 @@ function matchRecipe(recipe, inventory, resolver, substitutions) {
     if (bestSubstitute) {
       return ingredientMatch(ingredient, bestSubstitute.substituteItem, "substitute", bestSubstitute.score, {
         substitution_methods: normalizeCookingMethods(recipe.primaryCookingMethod),
-        substitution_method_compatible: bestSubstitute.methodCompatible,
-        substitution_context: bestSubstitute.context
+        substitution_method_compatible: true,
+        substitution_context: {
+          source: bestSubstitute.candidate.source,
+          context: bestSubstitute.candidate.context,
+          categoryScore: bestSubstitute.candidate.categoryScore,
+          tagSimilarityScore: bestSubstitute.candidate.tagSimilarityScore,
+          contextScore: bestSubstitute.candidate.contextScore,
+          replacementRatio: bestSubstitute.candidate.replacementRatio,
+          notes: bestSubstitute.candidate.notes
+        }
       });
     }
 
@@ -265,69 +272,24 @@ function dedupeUnknowns(items) {
   return [...byKey.values()];
 }
 
-function buildSubstitutionMap(substitutions) {
-  const map = new Map();
-  for (const substitution of substitutions || []) {
-    if (!automaticSubstitutionAllowed(substitution)) {
-      continue;
-    }
-    const ingredientId = substitution.ingredient_id;
-    if (!map.has(ingredientId)) {
-      map.set(ingredientId, []);
-    }
-    map.get(ingredientId).push({
-      ingredientId,
-      substituteIngredientId: substitution.substitute_ingredient_id,
-      confidenceScore: Number(substitution.confidence_score || 0),
-      context: substitution.context || "general",
-      limitations: substitution.limitations || ""
-    });
-  }
-  return map;
-}
-
-function automaticSubstitutionAllowed(substitution) {
-  const score = Number(substitution?.confidence_score || 0);
-  const substituteIngredientId = String(substitution?.substitute_ingredient_id || "");
-  const substitutionType = String(substitution?.substitution_type || "");
-  if (!Number.isFinite(score) || score < 0.70) {
-    return false;
-  }
-  if (substitution?.needs_review === true || String(substitution?.needs_review || "").toLowerCase() === "true") {
-    return false;
-  }
-  if (substituteIngredientId.startsWith("custom_combo_") || substituteIngredientId.includes("__")) {
-    return false;
-  }
-  return !["alias", "variety", "category_mapping"].includes(substitutionType);
-}
-
-function scoreSubstitutionForRecipe(candidate, recipe) {
-  const baseScore = clampScore(candidate.confidenceScore);
-  const methods = normalizeCookingMethods(recipe.primaryCookingMethod);
-  const context = {
-    compatibleMethods: genericSubstitutionContext(candidate.context) ? [] : normalizeCookingMethods(candidate.context),
-    timeAdjustment: "same",
-    textureImpact: "",
-    fatImpact: "",
-    notes: candidate.limitations || ""
-  };
-
-  if (methods.length === 0 || context.compatibleMethods.length === 0) {
-    return { score: baseScore, context, methodCompatible: null };
-  }
-
-  const methodCompatible = methods.some((method) => context.compatibleMethods.includes(method));
-  const multiplier = methodCompatible ? 1 : 0.45;
+function buildSubstitutionProvider(rules) {
+  const cache = new Map();
   return {
-    score: Math.round(clampScore(baseScore * multiplier) * 100) / 100,
-    context,
-    methodCompatible
+    getCandidates(ingredientId, context) {
+      const normalizedContext = normalizeCookingMethods(context)[0] || "general";
+      const key = `${ingredientId}:${normalizedContext}`;
+      if (!cache.has(key)) {
+        cache.set(key, getSubstituteCandidates({
+          ingredientId,
+          context: normalizedContext,
+          rules,
+          limit: 25,
+          minimumScore: 0.70
+        }).filter((candidate) => candidate.substituteIngredientId));
+      }
+      return cache.get(key);
+    }
   };
-}
-
-function genericSubstitutionContext(context) {
-  return ["", "general", "cooking"].includes(String(context || "").trim().toLowerCase());
 }
 
 function normalizeCookingMethod(method) {
@@ -339,14 +301,6 @@ function normalizeCookingMethods(methods) {
     .split(",")
     .map(normalizeCookingMethod)
     .filter(Boolean);
-}
-
-function clampScore(value) {
-  const score = Number(value || 0);
-  if (!Number.isFinite(score)) {
-    return 0;
-  }
-  return Math.max(0, Math.min(1, score));
 }
 
 function resolveRecipeIngredientId(ingredient, resolver) {

@@ -191,13 +191,27 @@ export async function recipeCount() {
 }
 
 export async function fetchMatchingRules() {
-  const [ingredients, aliases, substitutions] = await Promise.all([
-    restSelectAll("ingredients", "select=ingredient_id,ingredient_slug,canonical_name,category,canonical_unit&order=canonical_name.asc"),
+  const [ingredients, aliases, substitutions, categories, tags, functionalProfiles, substitutionRules, verifiedSubstitutions] = await Promise.all([
+    restSelectAll("ingredients", "select=ingredient_id,ingredient_slug,canonical_name,category,category_id,subcategory_id,canonical_unit,default_unit&order=canonical_name.asc"),
     restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id,ingredient_slug&order=alias_name.asc"),
-    restSelectAll("ingredient_substitutions", "select=ingredient_id,ingredient_slug,substitute_ingredient_id,substitute_ingredient_slug,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc")
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,ingredient_slug,substitute_ingredient_id,substitute_ingredient_slug,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc"),
+    restSelectAll("ingredient_categories", "select=id,slug,name,parent_category_id&order=slug.asc"),
+    restSelectAll("ingredient_tags", "select=id,slug,name,tag_type&order=slug.asc"),
+    restSelectAll("ingredient_functional_profiles", "select=ingredient_id,tag_id,weight,source,notes&order=ingredient_id.asc,tag_id.asc"),
+    restSelectAll("substitution_rules", "select=source_category_id,target_category_id,context,base_score,notes&order=context.asc"),
+    restSelectAll("verified_substitutions", "select=ingredient_id,substitute_ingredient_id,substitute_combo_slug,context,confidence_score,replacement_ratio,notes,source_name,source_url,active&active=eq.true&order=ingredient_id.asc,confidence_score.desc")
   ]);
 
-  return { ingredients, aliases, substitutions };
+  return {
+    ingredients,
+    aliases,
+    substitutions,
+    categories,
+    tags,
+    functionalProfiles,
+    substitutionRules,
+    verifiedSubstitutions
+  };
 }
 
 export async function fetchIngredientUnitConversions(ingredientId) {

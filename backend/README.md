@@ -167,6 +167,41 @@ npm run seed:matching
 
 AI suggestions for unknown aliases should be a review workflow, not part of live matching. Only enable an AI suggestion endpoint after you explicitly approve sending unknown ingredient names to the external AI service.
 
+## Dynamic Substitution Engine
+
+Substitutions are no longer meant to be maintained as a huge static list. The MVP substitution system uses:
+
+```text
+ingredient_categories
+ingredient_tags
+ingredient_functional_profiles
+substitution_rules
+verified_substitutions
+```
+
+`ingredient_substitutions` is legacy/backup data and should only keep small, high-confidence, manually verified relationships if used at all. Recipe matching now prefers:
+
+```text
+exact / alias match
+verified_substitutions
+dynamic category + tag + context scoring
+missing
+```
+
+Dynamic substitute score:
+
+```text
+category_score * 0.45
++ tag_similarity_score * 0.40
++ context_score * 0.15
+```
+
+Seed the dynamic substitution knowledge base with:
+
+```bash
+npm run seed:dynamic-substitutions -- --env dev
+```
+
 ## Databricks Migration
 
 If the old Databricks variables are still present in `.env`, migrate existing recipes into Supabase with:
