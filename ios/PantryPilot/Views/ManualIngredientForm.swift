@@ -9,8 +9,9 @@ struct ManualIngredientForm: View {
     @State private var location = StorageLocation.fridge
     @State private var enteredDate = Date()
     @State private var expireDate = Date()
+    @State private var isSaving = false
 
-    let onSave: (IngredientInput) -> Bool
+    let onSave: (IngredientInput) async -> Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -52,26 +53,31 @@ struct ManualIngredientForm: View {
                 .datePickerStyle(.compact)
                 .environment(\.locale, datePickerLocale)
 
-            Button(L.text("Save item", language: appLanguage)) {
+            Button(isSaving ? L.text("Saving...", language: appLanguage) : L.text("Save item", language: appLanguage)) {
                 guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                let didSave = onSave(
-                    IngredientInput(
-                        name: name,
-                        quantity: quantity,
-                        unit: unit,
-                        category: category,
-                        location: location,
-                        enteredDate: enteredDate,
-                        expireDate: expireDate
+                isSaving = true
+                Task {
+                    let didSave = await onSave(
+                        IngredientInput(
+                            name: name,
+                            quantity: quantity,
+                            unit: unit,
+                            category: category,
+                            location: location,
+                            enteredDate: enteredDate,
+                            expireDate: expireDate
+                        )
                     )
-                )
-                guard didSave else { return }
-                name = ""
-                quantity = 1
-                unit = "piece"
+                    isSaving = false
+                    guard didSave else { return }
+                    name = ""
+                    quantity = 1
+                    unit = "piece"
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
+            .disabled(isSaving)
         }
         .onAppear {
             refreshExpireDate()

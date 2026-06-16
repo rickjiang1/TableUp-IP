@@ -474,7 +474,9 @@ struct CloudRecipeMatchRequest: Encodable {
                 name: $0.name,
                 ingredientID: $0.canonicalIngredientId,
                 quantity: $0.quantity,
-                unit: $0.unit
+                unit: $0.unit,
+                canonicalQuantity: $0.canonicalQuantity,
+                canonicalUnit: $0.canonicalUnit
             )
         }
     }
@@ -484,12 +486,16 @@ struct CloudRecipeMatchRequest: Encodable {
         let ingredientID: String
         let quantity: Double
         let unit: String
+        let canonicalQuantity: Double
+        let canonicalUnit: String
 
         enum CodingKeys: String, CodingKey {
             case name
             case ingredientID = "ingredient_id"
             case quantity
             case unit
+            case canonicalQuantity = "canonical_quantity"
+            case canonicalUnit = "canonical_unit"
         }
     }
 }

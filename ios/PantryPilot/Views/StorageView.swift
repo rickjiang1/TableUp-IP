@@ -1252,8 +1252,15 @@ struct IngredientRow: View {
                     }
                 }
                 Spacer()
-                Text("\(ingredient.quantity.formatted()) \(ingredient.unit)")
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(InventoryQuantityFormatter.primaryAmount(for: ingredient, language: appLanguage))
+                        .foregroundStyle(.secondary)
+                    if let canonicalAmount = InventoryQuantityFormatter.secondaryCanonicalAmount(for: ingredient, language: appLanguage) {
+                        Text("≈ \(canonicalAmount)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             if !ingredient.descriptionText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

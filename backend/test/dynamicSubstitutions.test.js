@@ -6,6 +6,7 @@ const dairy = "category-dairy";
 const poultry = "category-poultry";
 const beef = "category-beef";
 const vegetable = "category-vegetable";
+const allium = "category-allium";
 
 const milk = ingredient("milk-id", "milk", "milk", dairy);
 const heavyCream = ingredient("heavy-cream-id", "heavy_cream", "heavy cream", dairy);
@@ -14,14 +15,17 @@ const chickenBreast = ingredient("chicken-breast-id", "chicken_breast", "chicken
 const chickenThigh = ingredient("chicken-thigh-id", "chicken_thigh", "chicken thigh", poultry);
 const carrot = ingredient("carrot-id", "carrot", "carrot", vegetable);
 const beefShortRib = ingredient("beef-short-rib-id", "beef_short_rib", "beef short rib", beef);
+const garlic = ingredient("garlic-id", "garlic", "garlic", allium);
+const scallion = ingredient("scallion-id", "scallion", "scallion", allium);
 
 const rules = {
-  ingredients: [milk, heavyCream, greekYogurt, chickenBreast, chickenThigh, carrot, beefShortRib],
+  ingredients: [milk, heavyCream, greekYogurt, chickenBreast, chickenThigh, carrot, beefShortRib, garlic, scallion],
   categories: [
     { id: dairy, slug: "dairy", name: "Dairy", parent_category_id: "" },
     { id: poultry, slug: "poultry", name: "Poultry", parent_category_id: "category-meat" },
     { id: beef, slug: "beef", name: "Beef", parent_category_id: "category-meat" },
-    { id: vegetable, slug: "vegetable", name: "Vegetable", parent_category_id: "" }
+    { id: vegetable, slug: "vegetable", name: "Vegetable", parent_category_id: "" },
+    { id: allium, slug: "allium", name: "Allium", parent_category_id: "category-aromatic" }
   ],
   functionalProfiles: [
     profile(heavyCream, "dairy", 1),
@@ -41,13 +45,18 @@ const rules = {
     profile(chickenBreast, "lean", 1),
     profile(beefShortRib, "meat", 1),
     profile(beefShortRib, "fatty", 0.9),
-    profile(carrot, "crisp", 1)
+    profile(carrot, "crisp", 1),
+    profile(garlic, "allium", 1),
+    profile(garlic, "aromatic", 1),
+    profile(scallion, "allium", 1),
+    profile(scallion, "aromatic", 1)
   ],
   substitutionRules: [
     rule(dairy, dairy, "general", 0.78),
     rule(dairy, dairy, "sauce", 0.82),
     rule(poultry, poultry, "general", 0.78),
-    rule(beef, beef, "general", 0.74)
+    rule(beef, beef, "general", 0.74),
+    rule(allium, allium, "general", 0.84)
   ],
   verifiedSubstitutions: [
     {
@@ -74,6 +83,24 @@ test("verified substitutions are returned before dynamic candidates", () => {
   assert.equal(candidates[0].substituteIngredientId, chickenBreast.ingredient_id);
   assert.equal(candidates[0].matchType, "verified_substitute");
   assert.equal(candidates[0].score, 0.8);
+});
+
+test("risky aromatic family substitutes stay below automatic match threshold", () => {
+  const score = scoreDynamicSubstitute({
+    source: scallion,
+    candidate: garlic,
+    context: "general",
+    rules
+  });
+
+  assert.ok(score);
+  assert.equal(score.score, 0.69);
+  assert.equal(getSubstituteCandidates({
+    ingredientId: scallion.ingredient_id,
+    context: "general",
+    rules,
+    minimumScore: 0.7
+  }).length, 0);
 });
 
 test("dynamic scoring combines category, tag, and context scores", () => {

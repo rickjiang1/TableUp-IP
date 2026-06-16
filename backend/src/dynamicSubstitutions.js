@@ -1,6 +1,10 @@
 const categoryWeight = 0.45;
 const tagWeight = 0.40;
 const contextWeight = 0.15;
+const automaticSubstitutionCapsBySubcategory = new Map([
+  ["allium", 0.69],
+  ["rhizome_aromatic", 0.69]
+]);
 
 export function getSubstituteCandidates({ ingredientId, context = "general", rules, limit = 10, minimumScore = 0.55 }) {
   const sourceId = String(ingredientId || "").trim();
@@ -42,7 +46,8 @@ export function scoreDynamicSubstitute({ source, candidate, context = "general",
 
   const tagSimilarityScore = scoreTagSimilarity(source.ingredient_id, candidate.ingredient_id, rules.functionalProfiles || []);
   const contextScore = scoreContext(source, candidate, normalizedContext, rules.substitutionRules || []);
-  const score = clampScore(categoryScore * categoryWeight + tagSimilarityScore * tagWeight + contextScore * contextWeight);
+  const rawScore = categoryScore * categoryWeight + tagSimilarityScore * tagWeight + contextScore * contextWeight;
+  const score = capRiskyDynamicSubstitutionScore(rawScore, source, candidate, rules.categories || []);
 
   return {
     score: roundScore(score),
@@ -52,6 +57,17 @@ export function scoreDynamicSubstitute({ source, candidate, context = "general",
     source: "dynamic_rule",
     context: normalizedContext
   };
+}
+
+function capRiskyDynamicSubstitutionScore(score, source, candidate, categories) {
+  const sourceSubcategory = categorySlug(source.subcategory_id, categories);
+  const candidateSubcategory = categorySlug(candidate.subcategory_id, categories);
+  if (!sourceSubcategory || sourceSubcategory !== candidateSubcategory) {
+    return clampScore(score);
+  }
+
+  const cap = automaticSubstitutionCapsBySubcategory.get(sourceSubcategory);
+  return clampScore(cap === undefined ? score : Math.min(score, cap));
 }
 
 function verifiedSubstituteCandidates({ source, context, rules, ingredientsById }) {
@@ -133,6 +149,11 @@ function scoreCategorySimilarity(source, candidate, categories) {
   }
 
   return 0;
+}
+
+function categorySlug(categoryId, categories) {
+  const category = categories.find((item) => item.id === categoryId);
+  return category?.slug || "";
 }
 
 function scoreTagSimilarity(sourceIngredientId, candidateIngredientId, profiles) {

@@ -93,7 +93,7 @@ struct ScanView: View {
 
                     DisclosureGroup(L.text("Add manually", language: appLanguage), isExpanded: $showingManualAdd) {
                         ManualIngredientForm { input in
-                            saveManualIngredient(input)
+                            await saveManualIngredient(input)
                         }
                         .padding(.top, 12)
                     }
@@ -227,9 +227,9 @@ struct ScanView: View {
         return batchResults.flatMap(\.1)
     }
 
-    private func saveManualIngredient(_ input: IngredientInput) -> Bool {
+    private func saveManualIngredient(_ input: IngredientInput) async -> Bool {
         do {
-            let result = try InventoryStore.save([input], sourceContext: modelContext)
+            let result = try await InventoryStore.save([input], sourceContext: modelContext)
             showingManualAdd = false
             scanMessage = "Saved to storage."
             scanAlert = ScanAlertMessage(
@@ -249,7 +249,7 @@ struct ScanView: View {
 
     private func saveDetectedItems() async -> ReviewSaveResult {
         do {
-            let result = try InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
+            let result = try await InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
 
             detectedItems = []
             selectedPhotos = []
@@ -411,6 +411,11 @@ struct IngredientInput {
     var name: String
     var descriptionText: String = ""
     var canonicalIngredientId: String = ""
+    var canonicalQuantity: Double = 0
+    var canonicalUnit: String = ""
+    var unitConversionRatio: Double = 0
+    var unitConversionNeedsReview: Bool = false
+    var unitConversionReviewReason: String = ""
     var quantity: Double
     var unit: String
     var category: IngredientCategory
@@ -423,6 +428,11 @@ struct IngredientInput {
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             descriptionText: descriptionText.trimmingCharacters(in: .whitespacesAndNewlines),
             canonicalIngredientId: canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines),
+            canonicalQuantity: canonicalQuantity,
+            canonicalUnit: canonicalUnit,
+            unitConversionRatio: unitConversionRatio,
+            unitConversionNeedsReview: unitConversionNeedsReview,
+            unitConversionReviewReason: unitConversionReviewReason,
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
@@ -435,13 +445,31 @@ struct IngredientInput {
     var displayName: String {
         "\(name) (\(quantity.formatted()) \(IngredientUnit.normalizedSelection(for: unit)))"
     }
+
+    mutating func applyUnitConversion(_ conversion: NormalizedIngredientQuantity) {
+        if conversion.needsReview {
+            canonicalQuantity = 0
+            canonicalUnit = conversion.canonicalUnit
+            unitConversionRatio = 0
+            unitConversionNeedsReview = true
+            unitConversionReviewReason = conversion.reason
+            return
+        }
+
+        canonicalQuantity = conversion.canonicalQuantity
+        canonicalUnit = conversion.canonicalUnit
+        unitConversionRatio = conversion.conversionRatio
+        unitConversionNeedsReview = false
+        unitConversionReviewReason = ""
+    }
 }
 
 @MainActor
 enum InventoryStore {
-    static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) throws -> InventorySaveResult {
+    static func save(_ inputs: [IngredientInput], sourceContext: ModelContext) async throws -> InventorySaveResult {
         let cleanInputs = inputs.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !cleanInputs.isEmpty else { throw IngredientSaveError.emptyInput }
+        let normalizedInputs = await normalizeQuantities(for: cleanInputs)
 
         let container = sourceContext.container
         let beforeCount = try ModelContext(container).fetch(FetchDescriptor<StoredIngredient>()).count
@@ -449,7 +477,7 @@ enum InventoryStore {
         saveContext.autosaveEnabled = false
 
         var insertedIDs: [PersistentIdentifier] = []
-        for input in cleanInputs {
+        for input in normalizedInputs {
             let ingredient = input.storedIngredient
             saveContext.insert(ingredient)
             insertedIDs.append(ingredient.persistentModelID)
@@ -460,18 +488,57 @@ enum InventoryStore {
 
         let verifyContext = ModelContext(container)
         let afterCount = try verifyContext.fetch(FetchDescriptor<StoredIngredient>()).count
-        guard afterCount >= beforeCount + cleanInputs.count else {
+        guard afterCount >= beforeCount + normalizedInputs.count else {
             throw IngredientSaveError.notWritten(
-                expectedIncrease: cleanInputs.count,
+                expectedIncrease: normalizedInputs.count,
                 beforeCount: beforeCount,
                 afterCount: afterCount
             )
         }
 
         return InventorySaveResult(
-            savedNames: cleanInputs.map(\.displayName),
+            savedNames: normalizedInputs.map(\.displayName),
             inventoryCount: afterCount
         )
+    }
+
+    private static func normalizeQuantities(for inputs: [IngredientInput]) async -> [IngredientInput] {
+        let client = UnknownIngredientClient()
+        return await withTaskGroup(of: (Int, IngredientInput).self) { group in
+            for (index, input) in inputs.enumerated() {
+                group.addTask {
+                    var output = input
+                    let ingredientId = input.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !ingredientId.isEmpty else {
+                        return (index, output)
+                    }
+
+                    do {
+                        let conversion = try await client.normalizeIngredientQuantity(
+                            ingredientName: input.name,
+                            ingredientId: ingredientId,
+                            quantity: input.quantity,
+                            unit: input.unit
+                        )
+                        output.applyUnitConversion(conversion)
+                    } catch {
+                        output.canonicalQuantity = 0
+                        output.unitConversionRatio = 0
+                        output.unitConversionNeedsReview = true
+                        output.unitConversionReviewReason = "Missing conversion rule"
+                    }
+                    return (index, output)
+                }
+            }
+
+            var indexedInputs: [(Int, IngredientInput)] = []
+            for await result in group {
+                indexedInputs.append(result)
+            }
+            return indexedInputs
+                .sorted { $0.0 < $1.0 }
+                .map(\.1)
+        }
     }
 }
 
