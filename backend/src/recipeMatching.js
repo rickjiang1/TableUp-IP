@@ -142,10 +142,14 @@ function buildIngredientResolver(rules) {
     byId.set(ingredient.ingredient_id, ingredient);
     byName.set(normalizeName(ingredient.canonical_name), ingredient.ingredient_id);
     byName.set(normalizeName(ingredient.ingredient_id), ingredient.ingredient_id);
+    byName.set(normalizeName(ingredient.ingredient_slug), ingredient.ingredient_id);
   }
 
   for (const alias of rules.aliases || []) {
     aliases.set(normalizeName(alias.alias_name), alias.ingredient_id);
+    if (alias.ingredient_slug) {
+      byName.set(normalizeName(alias.ingredient_slug), alias.ingredient_id);
+    }
   }
 
   return {

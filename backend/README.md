@@ -120,22 +120,22 @@ For the MVP, edit recipe rows directly in Supabase or through the iOS app. The i
 
 ## Ingredient UUID Relationships
 
-`ingredients.id` is the canonical UUID identifier for database relationships. The older `ingredients.ingredient_id` text value is kept as a stable legacy slug while the backend and iOS app migrate gradually.
+`ingredients.ingredient_id` is the canonical UUID identifier for database relationships. The old readable text id is kept as `ingredients.ingredient_slug` for imports, debug, and backward compatibility.
 
-Downstream tables now keep UUID reference columns alongside the legacy text fields:
+Downstream ingredient reference columns also use UUID values:
 
 ```text
-ingredient_aliases.ingredient_uuid
-ingredient_substitutions.ingredient_uuid
-ingredient_substitutions.substitute_ingredient_uuid
-ingredient_substitution_components.component_ingredient_uuid
-ingredient_unit_conversion.ingredient_uuid
-ingredient_storage_life_rules.ingredient_uuid
-pantry_recipe_ingredients.canonical_ingredient_uuid
-unknown_ingredients.suggested_ingredient_uuid
+ingredient_aliases.ingredient_id
+ingredient_substitutions.ingredient_id
+ingredient_substitutions.substitute_ingredient_id
+ingredient_substitution_components.component_ingredient_id
+ingredient_unit_conversion.ingredient_id
+ingredient_storage_life_rules.ingredient_id
+pantry_recipe_ingredients.canonical_ingredient_id
+unknown_ingredients.suggested_ingredient_id
 ```
 
-Run the compatibility migration with:
+Legacy slugs are still available as `*_slug` columns where useful. Run the migration with:
 
 ```bash
 node backend/src/apply-ingredient-uuid-migration.js --env dev

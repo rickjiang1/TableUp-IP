@@ -143,6 +143,7 @@ async function applyAliasSeed() {
 
 async function applyIngredientUuidMigration() {
   await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
+  await query(readFileSync("backend/migrations/20260617_promote_ingredient_id_to_uuid.sql", "utf8"));
 }
 
 async function countFoodBibleAliases() {

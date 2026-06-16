@@ -27,27 +27,28 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 assertTargetEnvironment(args.environment);
 
 await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
+await query(readFileSync("backend/migrations/20260617_promote_ingredient_id_to_uuid.sql", "utf8"));
 
 const [ingredients, aliases, substitutions, conversions, storageRules, recipeIngredients, unknowns] = await Promise.all([
-  countRows("ingredients", "id is not null"),
-  countRows("ingredient_aliases", "ingredient_uuid is not null"),
-  countRows("ingredient_substitutions", "ingredient_uuid is not null"),
-  countRows("ingredient_unit_conversion", "ingredient_uuid is not null"),
-  countRows("ingredient_storage_life_rules", "ingredient_uuid is not null"),
-  countRows("pantry_recipe_ingredients", "canonical_ingredient_uuid is not null"),
-  countRows("unknown_ingredients", "suggested_ingredient_uuid is not null")
+  countRows("ingredients", "ingredient_id is not null"),
+  countRows("ingredient_aliases", "ingredient_id is not null"),
+  countRows("ingredient_substitutions", "ingredient_id is not null"),
+  countRows("ingredient_unit_conversion", "ingredient_id is not null"),
+  countRows("ingredient_storage_life_rules", "ingredient_id is not null"),
+  countRows("pantry_recipe_ingredients", "canonical_ingredient_id is not null"),
+  countRows("unknown_ingredients", "suggested_ingredient_id is not null")
 ]);
 
 console.log(JSON.stringify({
   environment: args.environment,
   target: environmentTargets[args.environment].label,
-  ingredientsWithUUID: ingredients,
-  aliasesWithIngredientUUID: aliases,
-  substitutionsWithIngredientUUID: substitutions,
-  unitConversionsWithIngredientUUID: conversions,
-  storageRulesWithIngredientUUID: storageRules,
-  recipeIngredientsWithCanonicalUUID: recipeIngredients,
-  unknownIngredientsWithSuggestedUUID: unknowns
+  ingredientsWithUuidIngredientId: ingredients,
+  aliasesWithUuidIngredientId: aliases,
+  substitutionsWithUuidIngredientId: substitutions,
+  unitConversionsWithUuidIngredientId: conversions,
+  storageRulesWithUuidIngredientId: storageRules,
+  recipeIngredientsWithUuidCanonicalIngredientId: recipeIngredients,
+  unknownIngredientsWithUuidSuggestedIngredientId: unknowns
 }, null, 2));
 
 function parseArgs(argv) {

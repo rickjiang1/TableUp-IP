@@ -648,6 +648,7 @@ function rankIngredientCandidatesFromRules({ query, rules, limit = 10 }) {
 
   for (const ingredient of rules.ingredients || []) {
     consider({ ingredientId: ingredient.ingredient_id, term: ingredient.ingredient_id, kind: "id" });
+    consider({ ingredientId: ingredient.ingredient_id, term: ingredient.ingredient_slug, kind: "slug" });
     consider({ ingredientId: ingredient.ingredient_id, term: ingredient.canonical_name, kind: "canonical" });
   }
 
@@ -755,10 +756,14 @@ function buildIngredientResolver(rules) {
     byId.set(ingredient.ingredient_id, ingredient);
     byName.set(normalizeIngredientName(ingredient.canonical_name), ingredient.ingredient_id);
     byName.set(normalizeIngredientName(ingredient.ingredient_id), ingredient.ingredient_id);
+    byName.set(normalizeIngredientName(ingredient.ingredient_slug), ingredient.ingredient_id);
   }
 
   for (const alias of rules.aliases || []) {
     aliases.set(normalizeIngredientName(alias.alias_name), alias.ingredient_id);
+    if (alias.ingredient_slug) {
+      byName.set(normalizeIngredientName(alias.ingredient_slug), alias.ingredient_id);
+    }
   }
 
   return {
