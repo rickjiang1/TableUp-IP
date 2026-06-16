@@ -193,7 +193,7 @@ export async function fetchMatchingRules() {
   const [ingredients, aliases, substitutions, substitutionContexts] = await Promise.all([
     restSelectAll("ingredients", "select=ingredient_id,canonical_name,category,canonical_unit&order=ingredient_id.asc"),
     restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id&order=alias_name.asc"),
-    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score&order=ingredient_id.asc,substitute_ingredient_id.asc"),
+    restSelectAll("ingredient_substitutions", "select=ingredient_id,substitute_ingredient_id,confidence_score,substitution_type,context,limitations,needs_review&order=ingredient_id.asc,substitute_ingredient_id.asc"),
     fetchSubstitutionContexts()
   ]);
 

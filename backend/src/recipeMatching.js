@@ -265,6 +265,9 @@ function dedupeUnknowns(items) {
 function buildSubstitutionMap(substitutions) {
   const map = new Map();
   for (const substitution of substitutions || []) {
+    if (!automaticSubstitutionAllowed(substitution)) {
+      continue;
+    }
     const ingredientId = substitution.ingredient_id;
     if (!map.has(ingredientId)) {
       map.set(ingredientId, []);
@@ -272,10 +275,28 @@ function buildSubstitutionMap(substitutions) {
     map.get(ingredientId).push({
       ingredientId,
       substituteIngredientId: substitution.substitute_ingredient_id,
-      confidenceScore: Number(substitution.confidence_score || 0)
+      confidenceScore: Number(substitution.confidence_score || 0),
+      context: substitution.context || "general",
+      limitations: substitution.limitations || ""
     });
   }
   return map;
+}
+
+function automaticSubstitutionAllowed(substitution) {
+  const score = Number(substitution?.confidence_score || 0);
+  const substituteIngredientId = String(substitution?.substitute_ingredient_id || "");
+  const substitutionType = String(substitution?.substitution_type || "");
+  if (!Number.isFinite(score) || score < 0.70) {
+    return false;
+  }
+  if (substitution?.needs_review === true || String(substitution?.needs_review || "").toLowerCase() === "true") {
+    return false;
+  }
+  if (substituteIngredientId.startsWith("custom_combo_") || substituteIngredientId.includes("__")) {
+    return false;
+  }
+  return !["alias", "variety", "category_mapping"].includes(substitutionType);
 }
 
 function buildSubstitutionContextMap(contexts) {
@@ -300,7 +321,13 @@ function buildSubstitutionContextMap(contexts) {
 function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
   const baseScore = clampScore(candidate.confidenceScore);
   const methods = normalizeCookingMethods(recipe.primaryCookingMethod);
-  const context = substitutionContexts.get(`${candidate.ingredientId}|${candidate.substituteIngredientId}`);
+  const context = substitutionContexts.get(`${candidate.ingredientId}|${candidate.substituteIngredientId}`) || {
+    compatibleMethods: genericSubstitutionContext(candidate.context) ? [] : normalizeCookingMethods(candidate.context),
+    timeAdjustment: "same",
+    textureImpact: "",
+    fatImpact: "",
+    notes: candidate.limitations || ""
+  };
 
   if (!context || methods.length === 0 || context.compatibleMethods.length === 0) {
     return { score: baseScore, context: context || null, methodCompatible: null };
@@ -313,6 +340,10 @@ function scoreSubstitutionForRecipe(candidate, recipe, substitutionContexts) {
     context,
     methodCompatible
   };
+}
+
+function genericSubstitutionContext(context) {
+  return ["", "general", "cooking"].includes(String(context || "").trim().toLowerCase());
 }
 
 function normalizeCookingMethod(method) {

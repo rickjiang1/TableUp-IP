@@ -124,6 +124,7 @@ function assertTargetEnvironment(environment) {
 
 async function bootstrapSubstitutionSchema() {
   await query(readFileSync("backend/migrations/20260615_ingredient_substitutions_enrichment.sql", "utf8"));
+  await query(readFileSync("backend/migrations/20260616_simplify_substitutions_mvp.sql", "utf8"));
 }
 
 async function fetchIngredients() {
@@ -148,7 +149,8 @@ async function applySeedFiles() {
   const seedFiles = [
     "backend/seeds/ingredient_substitutions_verified.sql",
     "backend/seeds/ingredient_substitutions_food_bible_auto.sql",
-    "backend/seeds/ingredient_substitution_combinations_food_bible_auto.sql"
+    "backend/seeds/ingredient_substitution_combinations_food_bible_auto.sql",
+    "backend/seeds/ingredient_substitutions_mvp_cleanup.sql"
   ];
 
   for (const seedFile of seedFiles) {
