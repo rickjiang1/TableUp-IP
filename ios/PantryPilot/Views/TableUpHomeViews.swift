@@ -66,9 +66,27 @@ struct YouliaoView: View {
     
     private var hero: some View {
         ZStack(alignment: .bottom) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(TableUpTheme.backgroundLift)
-                .overlay(YouliaoScene())
+            Image("TableUpPantryBackground")
+                .resizable()
+                .scaledToFill()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.10),
+                            Color.black.opacity(0.20),
+                            Color.black.opacity(0.48)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    LinearGradient(
+                        colors: [Color.black.opacity(0.22), Color.clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             
             VStack(spacing: 18) {
@@ -122,8 +140,11 @@ struct YouliaoView: View {
                 
                 overview
             }
+            .padding(24)
+            .padding(.top, 42)
         }
         .frame(height: 500)
+        .clipped()
     }
     
     private var overview: some View {
@@ -561,7 +582,8 @@ struct KaifanView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("全部食谱")
                 }
-                .padding(24)
+                .padding(.horizontal, 24)
+                .padding(.top, 96)
                 
                 VStack {
                     Spacer()
@@ -841,15 +863,12 @@ private struct KaifanQuickStat: View {
 
 private struct KaifanPageBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.92, green: 0.86, blue: 0.77),
-                Color(red: 0.98, green: 0.94, blue: 0.88),
-                Color(red: 0.95, green: 0.89, blue: 0.80)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        Image("TableUpMealBackground")
+            .resizable()
+            .scaledToFill()
+            .overlay(Color.white.opacity(0.52))
+            .blur(radius: 18)
+            .scaleEffect(1.08)
     }
 }
 
@@ -858,67 +877,18 @@ private struct KaifanHeroScene: View {
     
     var body: some View {
         ZStack {
+            Image("TableUpMealBackground")
+                .resizable()
+                .scaledToFill()
+            
             LinearGradient(
                 colors: [
-                    Color(red: 0.96, green: 0.91, blue: 0.84),
-                    Color(red: 0.88, green: 0.78, blue: 0.66)
+                    Color.white.opacity(0.50),
+                    Color.white.opacity(0.08),
+                    Color.white.opacity(0.18)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-            )
-            
-            if let imageData = recipe?.imageData ?? recipe?.imageThumbnailData,
-               let image = UIImage(data: imageData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(0.72)
-                    .overlay(Color.white.opacity(0.28))
-                    .overlay(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.72), Color.white.opacity(0.12), Color.white.opacity(0.38)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            } else {
-                TableSceneFallback()
-            }
-            
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    ZStack {
-                        Ellipse()
-                            .fill(Color.white.opacity(0.86))
-                            .frame(width: 178, height: 86)
-                            .shadow(color: .black.opacity(0.08), radius: 18, y: 10)
-                        
-                        Ellipse()
-                            .stroke(Color(red: 0.86, green: 0.72, blue: 0.57).opacity(0.36), lineWidth: 8)
-                            .frame(width: 144, height: 60)
-                        
-                        Image(systemName: "leaf.fill")
-                            .font(.title2)
-                            .foregroundStyle(TableUpTheme.jade.opacity(0.78))
-                            .rotationEffect(.degrees(-30))
-                            .offset(x: -26, y: -2)
-                        
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundStyle(TableUpTheme.orange.opacity(0.86))
-                            .offset(x: 24, y: 4)
-                    }
-                    .offset(x: -24, y: -34)
-                }
-            }
-            
-            LinearGradient(
-                colors: [Color.white.opacity(0.74), Color.white.opacity(0.08)],
-                startPoint: .topLeading,
-                endPoint: .center
             )
         }
     }
