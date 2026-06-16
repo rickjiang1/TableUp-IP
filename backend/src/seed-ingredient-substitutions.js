@@ -31,7 +31,7 @@ const ingredients = await fetchIngredients();
 const existingCount = await countExistingSubstitutions();
 
 if (!args.dryRun) {
-  await applyVerifiedSeed();
+  await applySeedFiles();
 }
 const finalCount = args.dryRun ? existingCount : await countExistingSubstitutions();
 const combinationCount = args.dryRun ? 0 : await countCombinationSubstitutions();
@@ -144,8 +144,15 @@ async function countCombinationSubstitutions() {
   return Number(rows[0]?.count || 0);
 }
 
-async function applyVerifiedSeed() {
-  await query(readFileSync("backend/seeds/ingredient_substitutions_verified.sql", "utf8"));
+async function applySeedFiles() {
+  const seedFiles = [
+    "backend/seeds/ingredient_substitutions_verified.sql",
+    "backend/seeds/ingredient_substitutions_food_bible_auto.sql"
+  ];
+
+  for (const seedFile of seedFiles) {
+    await query(readFileSync(seedFile, "utf8"));
+  }
 }
 
 async function sampleSubstitutions() {
