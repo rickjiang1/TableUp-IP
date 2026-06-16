@@ -76,6 +76,12 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/ingredient-unit-conversions") {
+      const conversions = await fetchIngredientUnitConversions(url.searchParams.get("ingredientId") || "");
+      sendJson(response, 200, { conversions });
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/api/normalize-ingredient-quantity") {
       const body = await readJsonRequest(request, 1024 * 1024);
       const normalized = await normalizeMatchedIngredientQuantity(body);

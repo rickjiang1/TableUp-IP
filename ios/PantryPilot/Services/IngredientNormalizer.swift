@@ -28,6 +28,10 @@ enum IngredientNormalizer {
         "bags": "bag",
         "packs": "pack",
         "packages": "pack",
+        "box": "pack",
+        "boxes": "pack",
+        "carton": "pack",
+        "cartons": "pack",
         "个": "piece",
         "根": "piece",
         "颗": "piece",
@@ -52,6 +56,7 @@ enum IngredientNormalizer {
         "包": "pack",
         "盒": "pack",
         "盒装": "pack",
+        "斤": "jin",
         "tray": "pack",
         "trays": "pack"
     ]
@@ -109,6 +114,6 @@ enum IngredientUnit: String, CaseIterable, Identifiable {
 
     static func normalizedSelection(for value: String) -> String {
         let normalized = IngredientNormalizer.normalizeUnit(value)
-        return allCases.contains { $0.rawValue == normalized } ? normalized : Self.piece.rawValue
+        return normalized.isEmpty ? Self.piece.rawValue : normalized
     }
 }

@@ -970,6 +970,20 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(IngredientCandidateResponse.self, from: data).candidates
     }
 
+    func fetchIngredientUnitConversions(ingredientId: String) async throws -> [IngredientUnitConversionRule] {
+        let endpoint = baseURL
+            .appending(path: "api/ingredient-unit-conversions")
+            .appending(queryItems: [URLQueryItem(name: "ingredientId", value: ingredientId)])
+        let (data, response) = try await session.data(from: endpoint)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UnknownIngredientClientError.badResponse
+        }
+
+        return try JSONDecoder().decode(IngredientUnitConversionResponse.self, from: data).conversions
+    }
+
     func normalizeIngredientQuantity(
         ingredientName: String,
         ingredientId: String,
@@ -1096,6 +1110,48 @@ struct CloudIngredientResponse: Decodable {
 
 struct IngredientCandidateResponse: Decodable {
     let candidates: [IngredientCandidate]
+}
+
+struct IngredientUnitConversionResponse: Decodable {
+    let conversions: [IngredientUnitConversionRule]
+}
+
+struct IngredientUnitConversionRule: Decodable, Identifiable {
+    let ingredientId: String
+    let ingredientSlug: String
+    let fromUnit: String
+    let toUnit: String
+    let ratio: Double
+    let conversionType: String
+    let isDefault: Bool
+    let notes: String
+
+    var id: String {
+        "\(ingredientId):\(fromUnit):\(toUnit)"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ingredientId = "ingredient_id"
+        case ingredientSlug = "ingredient_slug"
+        case fromUnit = "from_unit"
+        case toUnit = "to_unit"
+        case ratio
+        case conversionType = "conversion_type"
+        case isDefault = "is_default"
+        case notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ingredientId = try container.decodeIfPresent(String.self, forKey: .ingredientId) ?? ""
+        ingredientSlug = try container.decodeIfPresent(String.self, forKey: .ingredientSlug) ?? ""
+        fromUnit = try container.decodeIfPresent(String.self, forKey: .fromUnit) ?? ""
+        toUnit = try container.decodeIfPresent(String.self, forKey: .toUnit) ?? ""
+        ratio = try container.decodeIfPresent(Double.self, forKey: .ratio) ?? 0
+        conversionType = try container.decodeIfPresent(String.self, forKey: .conversionType) ?? ""
+        isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+        notes = try container.decodeIfPresent(String.self, forKey: .notes) ?? ""
+    }
 }
 
 struct IngredientCandidate: Decodable, Identifiable {

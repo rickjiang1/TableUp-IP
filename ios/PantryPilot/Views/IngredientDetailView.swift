@@ -19,6 +19,8 @@ struct IngredientDetailView: View {
     @State private var draftUnitConversionRatio: Double
     @State private var draftUnitConversionNeedsReview: Bool
     @State private var draftUnitConversionReviewReason: String
+    @State private var ingredientUnitConversions: [IngredientUnitConversionRule] = []
+    @State private var unitConversionLoadTask: Task<Void, Never>?
     @State private var resolveTask: Task<Void, Never>?
     @State private var normalizeTask: Task<Void, Never>?
     @State private var detailAlert: StorageAlertMessage?
@@ -44,11 +46,6 @@ struct IngredientDetailView: View {
         Form {
             Section(L.text("Ingredient", language: appLanguage)) {
                 TextField(L.text("Name", language: appLanguage), text: $draftName)
-                if isDraftMatched {
-                    Label(draftCanonicalIngredientId, systemImage: "checkmark.seal.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.green)
-                }
                 LabeledContent(L.text("Amount", language: appLanguage)) {
                     VStack(alignment: .trailing, spacing: 3) {
                         Text(InventoryQuantityFormatter.amount(
@@ -64,8 +61,8 @@ struct IngredientDetailView: View {
                     }
                 }
                 Picker(L.text("Unit", language: appLanguage), selection: $draftUnit) {
-                    ForEach(IngredientUnit.allCases) { unit in
-                        Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                    ForEach(availableDraftUnits, id: \.self) { unit in
+                        Text(displayName(forUnit: unit)).tag(unit)
                     }
                 }
                 .pickerStyle(.menu)
@@ -135,16 +132,21 @@ struct IngredientDetailView: View {
         .onAppear {
             if draftCanonicalIngredientId.isEmpty {
                 resolveIngredientName(draftName)
-            } else if shouldNormalizeDraftQuantity {
-                normalizeDraftQuantity()
+            } else {
+                loadUnitConversions(for: draftCanonicalIngredientId)
+                if shouldNormalizeDraftQuantity {
+                    normalizeDraftQuantity()
+                }
             }
         }
         .onDisappear {
             resolveTask?.cancel()
             normalizeTask?.cancel()
+            unitConversionLoadTask?.cancel()
         }
         .onChange(of: draftName) { _, newValue in
             draftCanonicalIngredientId = ""
+            ingredientUnitConversions = []
             clearDraftUnitConversion()
             resolveIngredientName(newValue)
         }
@@ -184,6 +186,19 @@ struct IngredientDetailView: View {
 
     private var shouldNormalizeDraftQuantity: Bool {
         isDraftMatched && draftQuantity > 0 && !draftUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var availableDraftUnits: [String] {
+        let currentUnit = IngredientUnit.normalizedSelection(for: draftUnit)
+        guard isDraftMatched else {
+            return uniqueUnits(IngredientUnit.allCases.map(\.rawValue), preferredUnit: currentUnit)
+        }
+
+        let units = ingredientUnitConversions
+            .map { IngredientUnit.normalizedSelection(for: $0.fromUnit) }
+            .filter { !$0.isEmpty }
+        let databaseUnits = uniqueUnits(units, preferredUnit: "")
+        return databaseUnits.isEmpty ? [currentUnit] : databaseUnits
     }
 
     private var draftSecondaryCanonicalAmount: String? {
@@ -257,6 +272,36 @@ struct IngredientDetailView: View {
         draftUnitConversionReviewReason = ""
     }
 
+    private func uniqueUnits(_ units: [String], preferredUnit: String) -> [String] {
+        var seen = Set<String>()
+        var output: [String] = []
+
+        let preferred = preferredUnit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? ""
+            : IngredientUnit.normalizedSelection(for: preferredUnit)
+        if !preferred.isEmpty {
+            seen.insert(preferred)
+            output.append(preferred)
+        }
+
+        for unit in units {
+            let normalized = IngredientUnit.normalizedSelection(for: unit)
+            guard !normalized.isEmpty, !seen.contains(normalized) else { continue }
+            seen.insert(normalized)
+            output.append(normalized)
+        }
+
+        return output
+    }
+
+    private func displayName(forUnit unit: String) -> String {
+        let normalized = IngredientUnit.normalizedSelection(for: unit)
+        if let knownUnit = IngredientUnit(rawValue: normalized) {
+            return knownUnit.displayName(language: appLanguage)
+        }
+        return L.text(normalized, language: appLanguage)
+    }
+
     private func saveChanges() {
         let trimmedName = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
@@ -311,8 +356,10 @@ struct IngredientDetailView: View {
                     guard draftName.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedName else { return }
                     draftCanonicalIngredientId = result?.known == true ? result?.ingredientId ?? "" : ""
                     if draftCanonicalIngredientId.isEmpty {
+                        ingredientUnitConversions = []
                         clearDraftUnitConversion()
                     } else {
+                        loadUnitConversions(for: draftCanonicalIngredientId)
                         normalizeDraftQuantity()
                     }
                 }
@@ -320,7 +367,42 @@ struct IngredientDetailView: View {
                 await MainActor.run {
                     guard draftName.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedName else { return }
                     draftCanonicalIngredientId = ""
+                    ingredientUnitConversions = []
                     clearDraftUnitConversion()
+                }
+            }
+        }
+    }
+
+    private func loadUnitConversions(for ingredientId: String) {
+        let trimmedIngredientId = ingredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        unitConversionLoadTask?.cancel()
+
+        guard !trimmedIngredientId.isEmpty else {
+            ingredientUnitConversions = []
+            return
+        }
+
+        unitConversionLoadTask = Task {
+            do {
+                let conversions = try await UnknownIngredientClient().fetchIngredientUnitConversions(ingredientId: trimmedIngredientId)
+                await MainActor.run {
+                    guard draftCanonicalIngredientId == trimmedIngredientId else { return }
+                    ingredientUnitConversions = conversions
+                    let databaseUnits = uniqueUnits(
+                        conversions.map { IngredientUnit.normalizedSelection(for: $0.fromUnit) },
+                        preferredUnit: ""
+                    )
+                    let currentUnit = IngredientUnit.normalizedSelection(for: draftUnit)
+                    if let firstUnit = databaseUnits.first, !databaseUnits.contains(currentUnit) {
+                        draftUnit = firstUnit
+                        normalizeDraftQuantity()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    guard draftCanonicalIngredientId == trimmedIngredientId else { return }
+                    ingredientUnitConversions = []
                 }
             }
         }
