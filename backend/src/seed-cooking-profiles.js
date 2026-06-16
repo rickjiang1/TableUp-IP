@@ -205,6 +205,15 @@ async function seedProfiles(profiles) {
 }
 
 async function seedContexts(contexts) {
+  await query(`
+    delete from ingredient_substitution_contexts
+    where not exists (
+      select 1
+      from ingredient_substitutions
+      where ingredient_substitutions.ingredient_id = ingredient_substitution_contexts.ingredient_id
+        and ingredient_substitutions.substitute_ingredient_id = ingredient_substitution_contexts.substitute_ingredient_id
+    )
+  `);
   if (!contexts.length) return;
   await query(`
     insert into ingredient_substitution_contexts (

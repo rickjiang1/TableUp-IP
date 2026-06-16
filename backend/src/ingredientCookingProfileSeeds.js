@@ -127,15 +127,21 @@ export function buildCookingProfileSeedRows(ingredients) {
     if (!available.has(row.ingredient_id)) continue;
     rows.set(row.ingredient_id, row);
   }
+  for (const ingredient of ingredients || []) {
+    if (rows.has(ingredient.ingredient_id)) continue;
+    rows.set(ingredient.ingredient_id, fallbackProfile(ingredient));
+  }
   return [...rows.values()].sort((a, b) => a.ingredient_id.localeCompare(b.ingredient_id));
 }
 
 export function buildSubstitutionContextSeedRows(ingredients, substitutions) {
   const availableIngredients = new Set((ingredients || []).map((item) => item.ingredient_id));
   const availableSubstitutions = new Set((substitutions || []).map((item) => `${item.ingredient_id}|${item.substitute_ingredient_id}`));
+  const profiles = new Map(buildCookingProfileSeedRows(ingredients).map((item) => [item.ingredient_id, item]));
   const rows = new Map();
 
   const add = (row) => {
+    if (!row) return;
     if (!availableIngredients.has(row.ingredient_id) || !availableIngredients.has(row.substitute_ingredient_id)) return;
     if (!availableSubstitutions.has(`${row.ingredient_id}|${row.substitute_ingredient_id}`)) return;
     if (rows.has(`${row.ingredient_id}|${row.substitute_ingredient_id}`)) return;
@@ -145,6 +151,9 @@ export function buildSubstitutionContextSeedRows(ingredients, substitutions) {
   for (const row of substitutionContextRules) {
     add(row);
     add(reverseContext(row));
+  }
+  for (const substitution of substitutions || []) {
+    add(inferContext(substitution, profiles));
   }
 
   return [...rows.values()].sort((a, b) =>
@@ -177,7 +186,70 @@ function context(ingredientId, substituteIngredientId, compatibleMethods, timeAd
   };
 }
 
+function fallbackProfile(ingredient) {
+  const ingredientId = ingredient.ingredient_id;
+  const category = normalizeCategory(ingredient.category);
+  const lowerId = ingredientId.toLowerCase();
+
+  if (category === "protein" || category === "meat") {
+    if (lowerId.includes("ground")) {
+      return profile(ingredientId, ["stir_fry", "pan_fry", "sauce", "stuffing"], "short", "ground", "medium", "ground_meat", "Auto-generated from ingredient category.");
+    }
+    if (lowerId.includes("rib") || lowerId.includes("shank") || lowerId.includes("brisket") || lowerId.includes("oxtail")) {
+      return profile(ingredientId, ["braise", "stew", "slow_cook", "roast"], "long", "tough_to_tender", "medium_high", `${proteinPrefix(lowerId)}_braising`, "Auto-generated from ingredient category.");
+    }
+    return profile(ingredientId, ["stir_fry", "pan_fry", "grill", "bake", "braise"], "medium", "protein", "medium", `${proteinPrefix(lowerId)}_general`, "Auto-generated from ingredient category.");
+  }
+
+  if (category === "seafood") {
+    return profile(ingredientId, ["pan_fry", "steam", "bake", "soup"], "short", "seafood", "low_medium", "seafood_general", "Auto-generated from ingredient category.");
+  }
+
+  if (category === "vegetable" || category === "aromatic" || category === "herb" || category === "mushroom") {
+    if (category === "herb" || lowerId.includes("cilantro") || lowerId.includes("parsley") || lowerId.includes("basil") || lowerId.includes("mint")) {
+      return profile(ingredientId, ["raw", "finish", "sauce"], "none", "fresh_herb", "low", "fresh_herb", "Auto-generated from ingredient category.");
+    }
+    return profile(ingredientId, ["stir_fry", "roast", "steam", "soup", "braise"], "short_medium", "vegetable", "low", "vegetable_general", "Auto-generated from ingredient category.");
+  }
+
+  if (category === "fruit") {
+    return profile(ingredientId, ["raw", "bake", "sauce"], "short", "fruit", "low", "fruit_general", "Auto-generated from ingredient category.");
+  }
+
+  if (category === "dairy") {
+    return profile(ingredientId, ["baking", "sauce", "finish"], "none", "dairy", "medium", "dairy_general", "Auto-generated from ingredient category.");
+  }
+
+  if (category === "grain" || category === "bakery") {
+    return profile(ingredientId, ["baking", "boil", "steam"], "medium", "grain", "low", "grain_general", "Auto-generated from ingredient category.");
+  }
+
+  if (category === "pantry" || category === "sauce" || category === "spice" || category === "seasoning" || category === "other") {
+    return profile(ingredientId, ["season", "sauce", "baking", "finish"], "none", "pantry", "varies", "pantry_general", "Auto-generated from ingredient category.");
+  }
+
+  return profile(ingredientId, ["general"], "medium", "general", "varies", "general", "Auto-generated from ingredient category.");
+}
+
+function inferContext(substitution, profiles) {
+  const source = profiles.get(substitution.ingredient_id);
+  const substitute = profiles.get(substitution.substitute_ingredient_id);
+  if (!source || !substitute) return null;
+
+  const compatibleMethods = intersect(source.primary_methods, substitute.primary_methods);
+  return context(
+    substitution.ingredient_id,
+    substitution.substitute_ingredient_id,
+    compatibleMethods.length ? compatibleMethods : ["general"],
+    compareTime(source.cooking_time_class, substitute.cooking_time_class),
+    compareTexture(source, substitute),
+    compareFat(source.fat_level, substitute.fat_level),
+    "Auto-generated from ingredient cooking profiles and verified substitution pair; review for recipe-specific precision."
+  );
+}
+
 function reverseContext(row) {
+  if (!row) return null;
   return {
     ingredient_id: row.substitute_ingredient_id,
     substitute_ingredient_id: row.ingredient_id,
@@ -187,6 +259,73 @@ function reverseContext(row) {
     fat_impact: reverseFatImpact(row.fat_impact),
     notes: row.notes
   };
+}
+
+function normalizeCategory(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function proteinPrefix(ingredientId) {
+  if (ingredientId.includes("beef")) return "beef";
+  if (ingredientId.includes("pork")) return "pork";
+  if (ingredientId.includes("chicken")) return "poultry";
+  if (ingredientId.includes("turkey")) return "poultry";
+  if (ingredientId.includes("lamb")) return "lamb";
+  return "protein";
+}
+
+function intersect(left, right) {
+  const rightSet = new Set(right || []);
+  return (left || []).filter((item) => rightSet.has(item));
+}
+
+function compareTime(sourceClass, substituteClass) {
+  const sourceRank = timeRank(sourceClass);
+  const substituteRank = timeRank(substituteClass);
+  if (substituteRank === sourceRank) return "same";
+  if (Math.abs(substituteRank - sourceRank) === 1) {
+    return substituteRank > sourceRank ? "slightly_longer" : "slightly_shorter";
+  }
+  return substituteRank > sourceRank ? "longer" : "shorter";
+}
+
+function timeRank(value) {
+  switch (value) {
+    case "none": return 0;
+    case "short": return 1;
+    case "short_medium": return 2;
+    case "medium": return 3;
+    case "medium_long": return 4;
+    case "long": return 5;
+    default: return 3;
+  }
+}
+
+function compareTexture(source, substitute) {
+  if (source.cut_group && source.cut_group === substitute.cut_group) return "same_cut_group";
+  if (source.texture_class === substitute.texture_class) return "similar";
+  return `${source.texture_class || "unknown"}_to_${substitute.texture_class || "unknown"}`.slice(0, 120);
+}
+
+function compareFat(sourceFat, substituteFat) {
+  const sourceRank = fatRank(sourceFat);
+  const substituteRank = fatRank(substituteFat);
+  if (substituteRank === sourceRank) return "same";
+  if (Math.abs(substituteRank - sourceRank) === 1) {
+    return substituteRank > sourceRank ? "slightly_higher_fat" : "slightly_lower_fat";
+  }
+  return substituteRank > sourceRank ? "higher_fat" : "lower_fat";
+}
+
+function fatRank(value) {
+  switch (value) {
+    case "low": return 1;
+    case "low_medium": return 2;
+    case "medium": return 3;
+    case "medium_high": return 4;
+    case "high": return 5;
+    default: return 3;
+  }
 }
 
 function reverseTimeAdjustment(value) {

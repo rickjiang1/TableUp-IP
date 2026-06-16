@@ -147,7 +147,8 @@ async function countCombinationSubstitutions() {
 async function applySeedFiles() {
   const seedFiles = [
     "backend/seeds/ingredient_substitutions_verified.sql",
-    "backend/seeds/ingredient_substitutions_food_bible_auto.sql"
+    "backend/seeds/ingredient_substitutions_food_bible_auto.sql",
+    "backend/seeds/ingredient_substitution_combinations_food_bible_auto.sql"
   ];
 
   for (const seedFile of seedFiles) {
