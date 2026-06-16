@@ -202,6 +202,14 @@ Seed the dynamic substitution knowledge base with:
 npm run seed:dynamic-substitutions -- --env dev
 ```
 
+Enrich all ingredients with taxonomy and functional tags with:
+
+```bash
+npm run enrich:ingredient-taxonomy -- --env dev
+```
+
+The enrichment script is deterministic and conservative: it assigns every ingredient a category/subcategory and functional tags, but broad cross-family substitutes stay below the automatic matching threshold unless supported by a verified rule. The rule set is based on USDA/FoodData-style food groups, storage/safety-oriented food families, and cooking-function tags such as `allium`, `rhizome`, `creamy`, `thickener`, `lean`, `fatty`, `liquid`, and `powder`.
+
 ## Databricks Migration
 
 If the old Databricks variables are still present in `.env`, migrate existing recipes into Supabase with:
