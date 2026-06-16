@@ -1,35 +1,89 @@
 import SwiftUI
 
 struct RootTabView: View {
-    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @State private var selectedTab: TableUpRootTab = .meal
 
     var body: some View {
-        TabView {
-            ScanView()
-                .tabItem {
-                    Label(L.text("Add", language: appLanguage), systemImage: "camera.fill")
+        ZStack(alignment: .bottom) {
+            Group {
+                switch selectedTab {
+                case .pantry:
+                    YouliaoView()
+                case .meal:
+                    KaifanView()
+                case .settings:
+                    SettingsView()
                 }
-
-            StorageView()
-                .tabItem {
-                    Label(L.text("Storage", language: appLanguage), systemImage: "archivebox.fill")
-                }
-
-            RecipesView()
-                .tabItem {
-                    Label(L.text("Recipes", language: appLanguage), systemImage: "book.pages.fill")
-                }
-
-            CanCookView()
-                .tabItem {
-                    Label(L.text("Can Cook", language: appLanguage), systemImage: "fork.knife")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label(L.text("Settings", language: appLanguage), systemImage: "gearshape.fill")
-                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 104)
+            }
+            
+            TableUpBottomNavigation(selectedTab: $selectedTab)
+                .padding(.horizontal, 26)
+                .padding(.bottom, 12)
         }
-        .tint(.orange)
+    }
+}
+
+private enum TableUpRootTab: Hashable, CaseIterable, Identifiable {
+    case pantry
+    case meal
+    case settings
+    
+    var id: Self { self }
+    
+    var title: String {
+        switch self {
+        case .pantry: return "有料"
+        case .meal: return "开饭"
+        case .settings: return "设置"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .pantry: return "takeoutbag.and.cup.and.straw.fill"
+        case .meal: return "fork.knife"
+        case .settings: return "gearshape.fill"
+        }
+    }
+}
+
+private struct TableUpBottomNavigation: View {
+    @Binding var selectedTab: TableUpRootTab
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(TableUpRootTab.allCases) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 23, weight: .semibold))
+                        Text(tab.title)
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(selectedTab == tab ? TableUpTheme.orange : TableUpTheme.mutedText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        Capsule()
+                            .fill(selectedTab == tab ? Color.white.opacity(0.10) : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+            }
+        }
+        .padding(8)
+        .background(TableUpTheme.backgroundLift.opacity(0.96))
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.35), radius: 24, y: 12)
     }
 }

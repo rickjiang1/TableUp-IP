@@ -1317,11 +1317,6 @@ struct IngredientRow: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(InventoryQuantityFormatter.primaryAmount(for: ingredient, language: appLanguage))
                         .foregroundStyle(.secondary)
-                    if let canonicalAmount = InventoryQuantityFormatter.secondaryCanonicalAmount(for: ingredient, language: appLanguage) {
-                        Text("≈ \(canonicalAmount)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 
