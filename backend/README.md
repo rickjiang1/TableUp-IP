@@ -210,6 +210,14 @@ npm run enrich:ingredient-taxonomy -- --env dev
 
 The enrichment script is deterministic and conservative: it assigns every ingredient a category/subcategory and functional tags, but broad cross-family substitutes stay below the automatic matching threshold unless supported by a verified rule. The rule set is based on USDA/FoodData-style food groups, storage/safety-oriented food families, and cooking-function tags such as `allium`, `rhizome`, `creamy`, `thickener`, `lean`, `fatty`, `liquid`, and `powder`.
 
+Generate category/context substitution rules from the taxonomy tree with:
+
+```bash
+npm run enrich:substitution-rules -- --env dev
+```
+
+Generated rules are category-pair rules, not ingredient-pair rows. Same-subcategory rules get usable scores, sibling categories stay conservative, and risky areas such as meat, seafood, baking, and cross-aromatic substitutions remain below automatic matching unless a verified substitution says otherwise.
+
 ## Databricks Migration
 
 If the old Databricks variables are still present in `.env`, migrate existing recipes into Supabase with:

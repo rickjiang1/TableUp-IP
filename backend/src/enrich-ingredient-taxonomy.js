@@ -310,7 +310,12 @@ function enrichIngredient(ingredient) {
     sub = "legume";
     add("plant_protein", 1, "legume pattern");
     add("starchy", 0.7, "legume pattern");
-  } else if (match(/milk|cream|yogurt|yoghurt|cheese|butter|ghee|dairy|half and half|buttermilk|乳|奶|芝士|黄油/)) {
+  } else if (match(/soy sauce|vinegar|sauce|paste|miso|ketchup|mustard|mayonnaise|dressing|condiment|酱|醋|耗油|蚝油/)) {
+    top = "pantry";
+    sub = "sauce_condiment";
+    add("sauce", 1, "sauce/condiment pattern");
+    add("savory", 0.6, "sauce/condiment pattern");
+  } else if (match(/\bmilk\b|\bcream\b|creamer|yogurt|yoghurt|cheese|butter|ghee|dairy|half and half|buttermilk|乳|奶|芝士|黄油/)) {
     top = "dairy";
     sub = dairySubcategory(text);
     add("dairy", 1, "dairy pattern");
@@ -331,11 +336,6 @@ function enrichIngredient(ingredient) {
     sub = "oil_fat";
     add("fatty", 1, "fat/oil pattern");
     add("cooking_fat", 1, "fat/oil pattern");
-  } else if (match(/soy sauce|vinegar|sauce|paste|miso|ketchup|mustard|mayonnaise|dressing|condiment|酱|醋|耗油|蚝油/)) {
-    top = "pantry";
-    sub = "sauce_condiment";
-    add("sauce", 1, "sauce/condiment pattern");
-    add("savory", 0.6, "sauce/condiment pattern");
   } else if (match(/sugar|honey|syrup|molasses|甜|糖|蜂蜜/)) {
     top = "pantry";
     sub = "sweetener";
