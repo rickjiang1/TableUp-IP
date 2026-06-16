@@ -46,8 +46,7 @@ where (child.slug, parent.slug) in (
 
 update ingredients
 set category_id = categories.id,
-    subcategory_id = categories.id,
-    default_unit = coalesce(nullif(default_unit, ''), canonical_unit, 'gram')
+    subcategory_id = categories.id
 from ingredient_categories categories
 where categories.slug = case
   when ingredients.category in ('protein', 'meat') then 'meat'

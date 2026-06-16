@@ -28,11 +28,7 @@ create table if not exists ingredient_tags (
 
 alter table ingredients
   add column if not exists category_id uuid references ingredient_categories(id) on delete set null,
-  add column if not exists subcategory_id uuid references ingredient_categories(id) on delete set null,
-  add column if not exists default_unit text;
-
-update ingredients
-set default_unit = coalesce(nullif(default_unit, ''), canonical_unit, 'gram');
+  add column if not exists subcategory_id uuid references ingredient_categories(id) on delete set null;
 
 create index if not exists ingredients_category_id_idx
   on ingredients (category_id);

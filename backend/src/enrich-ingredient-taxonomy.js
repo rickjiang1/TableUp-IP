@@ -136,7 +136,7 @@ function assertTargetEnvironment(environment) {
 
 async function fetchIngredients() {
   return await query(`
-    select ingredient_id, ingredient_slug, canonical_name, category, canonical_unit, default_unit
+    select ingredient_id, ingredient_slug, canonical_name, category, canonical_unit
     from ingredients
     order by canonical_name asc;
   `);
@@ -184,19 +184,17 @@ async function upsertTags() {
 async function updateIngredientTaxonomy(rows) {
   for (const chunk of chunks(rows, 400)) {
     await query(`
-      with rows (ingredient_id, category_slug, subcategory_slug, default_unit) as (
+      with rows (ingredient_id, category_slug, subcategory_slug) as (
         values ${chunk.map((row) => `(
           ${sqlString(row.ingredient_id)},
           ${sqlString(row.categorySlug)},
-          ${sqlString(row.subcategorySlug)},
-          ${sqlString(row.defaultUnit)}
+          ${sqlString(row.subcategorySlug)}
         )`).join(",\n")}
       )
       update ingredients
       set
         category_id = category.id,
-        subcategory_id = subcategory.id,
-        default_unit = rows.default_unit
+        subcategory_id = subcategory.id
       from rows
       left join ingredient_categories category on category.slug = rows.category_slug
       left join ingredient_categories subcategory on subcategory.slug = rows.subcategory_slug
@@ -431,7 +429,6 @@ function enrichIngredient(ingredient) {
     ...ingredient,
     categorySlug: top,
     subcategorySlug: sub,
-    defaultUnit: ingredient.default_unit || ingredient.canonical_unit || defaultUnitFor(top, sub),
     tags: [...tags.values()]
   };
 }
@@ -495,13 +492,6 @@ function applyCutTags(text, add) {
   if (/thigh|belly|rib|short rib|brisket|oxtail|fatty|五花|肋|腩/.test(text)) add("fatty", 0.8, "cut pattern");
   if (/bone in|bone-in|rib|oxtail|带骨/.test(text)) add("bone_in", 0.7, "cut pattern");
   if (/boneless|去骨|无骨/.test(text)) add("boneless", 0.7, "cut pattern");
-}
-
-function defaultUnitFor(top, sub) {
-  if (top === "dairy" || sub === "sauce_condiment" || sub === "beverage") return "ml";
-  if (sub === "egg") return "piece";
-  if (sub === "aromatic") return "piece";
-  return "gram";
 }
 
 function summarize(rows) {

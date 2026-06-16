@@ -15,6 +15,7 @@
     "enrich:substitution-rules": "node src/enrich-substitution-rules.js",
     "seed:food-bible-aliases": "node src/seed-food-bible-aliases.js",
     "drop:legacy-substitutions": "node src/apply-drop-legacy-substitution-tables.js",
+    "drop:ingredients-default-unit": "node src/apply-drop-ingredients-default-unit.js",
     "seed:storage-life-rules": "node src/seed-storage-life-rules.js",
     "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js"
   },
