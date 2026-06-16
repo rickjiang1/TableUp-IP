@@ -448,7 +448,7 @@ const aliases = [
   ["枫糖浆", "maple_syrup"]
 ];
 
-const substitutions = [
+const legacySubstitutions = [
   ["chicken_thigh", "chicken_breast", 0.8],
   ["curry_block", "curry_powder", 0.7],
   ["cilantro", "parsley", 0.7],
@@ -664,7 +664,7 @@ await seedRuleData();
 await seedRecipes();
 await applyIngredientUuidMigration();
 
-console.log(`Seeded ${ingredients.length} ingredients, ${aliases.length} aliases, ${substitutions.length} substitutions, and ${recipes.length} recipes.`);
+console.log(`Seeded ${ingredients.length} ingredients, ${aliases.length} aliases, and ${recipes.length} recipes. Legacy static substitutions skipped: ${legacySubstitutions.length}.`);
 
 async function bootstrapSchema() {
   await query(`
@@ -725,13 +725,6 @@ async function bootstrapSchema() {
     alter table ingredient_aliases add column if not exists created_at timestamptz not null default now();
     alter table ingredient_aliases add column if not exists updated_at timestamptz not null default now();
 
-    create table if not exists ingredient_substitutions (
-      ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      substitute_ingredient_id text not null references ingredients(ingredient_id) on delete cascade,
-      confidence_score double precision not null default 0,
-      primary key (ingredient_id, substitute_ingredient_id)
-    );
-
     create table if not exists unknown_ingredients (
       id uuid primary key default gen_random_uuid(),
       raw_name text not null,
@@ -771,7 +764,6 @@ async function bootstrapSchema() {
 
     grant select, insert, update, delete on ingredients to anon;
     grant select, insert, update, delete on ingredient_aliases to anon;
-    grant select, insert, update, delete on ingredient_substitutions to anon;
     grant select, insert, update, delete on unknown_ingredients to anon;
     grant select, insert, update, delete on pantry_recipes to anon;
     grant select, insert, update, delete on pantry_recipe_ingredients to anon;
@@ -809,11 +801,6 @@ async function seedRuleData() {
       confidence_score = excluded.confidence_score,
       verified = excluded.verified,
       updated_at = now();
-
-    insert into ingredient_substitutions (ingredient_id, substitute_ingredient_id, confidence_score)
-    values ${substitutions.map((item) => `(${sqlString(item[0])}, ${sqlString(item[1])}, ${sqlNumber(item[2], 0)})`).join(",\n")}
-    on conflict (ingredient_id, substitute_ingredient_id) do update set
-      confidence_score = excluded.confidence_score;
   `);
 }
 

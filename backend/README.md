@@ -105,8 +105,11 @@ pantry_recipe_steps
 pantry_media
 ingredients
 ingredient_aliases
-ingredient_substitutions
-ingredient_substitution_components
+ingredient_categories
+ingredient_tags
+ingredient_functional_profiles
+substitution_rules
+verified_substitutions
 unknown_ingredients
 ```
 
@@ -126,9 +129,6 @@ Downstream ingredient reference columns also use UUID values:
 
 ```text
 ingredient_aliases.ingredient_id
-ingredient_substitutions.ingredient_id
-ingredient_substitutions.substitute_ingredient_id
-ingredient_substitution_components.component_ingredient_id
 ingredient_unit_conversion.ingredient_id
 ingredient_storage_life_rules.ingredient_id
 pantry_recipe_ingredients.canonical_ingredient_id
@@ -179,7 +179,15 @@ substitution_rules
 verified_substitutions
 ```
 
-`ingredient_substitutions` is legacy/backup data and should only keep small, high-confidence, manually verified relationships if used at all. Recipe matching now prefers:
+The old static substitution tables have been dropped from the active schema:
+
+```text
+ingredient_substitutions
+ingredient_substitution_components
+ingredient_cooking_profiles
+```
+
+Recipe matching now prefers:
 
 ```text
 exact / alias match
@@ -206,6 +214,12 @@ Enrich all ingredients with taxonomy and functional tags with:
 
 ```bash
 npm run enrich:ingredient-taxonomy -- --env dev
+```
+
+Drop legacy substitution tables in an environment with:
+
+```bash
+npm run drop:legacy-substitutions -- --env dev
 ```
 
 The enrichment script is deterministic and conservative: it assigns every ingredient a category/subcategory and functional tags, but broad cross-family substitutes stay below the automatic matching threshold unless supported by a verified rule. The rule set is based on USDA/FoodData-style food groups, storage/safety-oriented food families, and cooking-function tags such as `allium`, `rhizome`, `creamy`, `thickener`, `lean`, `fatty`, `liquid`, and `powder`.

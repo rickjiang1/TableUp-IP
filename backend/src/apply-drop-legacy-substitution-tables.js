@@ -16,7 +16,7 @@ const args = parseArgs(process.argv.slice(2));
 loadEnv(args.environment);
 
 if (!args.environment || !environmentTargets[args.environment]) {
-  console.error("Usage: node backend/src/apply-ingredient-uuid-migration.js --env dev");
+  console.error("Usage: node backend/src/apply-drop-legacy-substitution-tables.js --env dev");
   console.error("Use --env prod --allow-prod-write only for an intentional production migration.");
   process.exit(1);
 }
@@ -26,33 +26,25 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 }
 assertTargetEnvironment(args.environment);
 
-await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
-await query(readFileSync("backend/migrations/20260617_promote_ingredient_id_to_uuid.sql", "utf8"));
-
-const [ingredients, aliases, conversions, storageRules, recipeIngredients, unknowns] = await Promise.all([
-  countRows("ingredients", "ingredient_id is not null"),
-  countRows("ingredient_aliases", "ingredient_id is not null"),
-  countRows("ingredient_unit_conversion", "ingredient_id is not null"),
-  countRows("ingredient_storage_life_rules", "ingredient_id is not null"),
-  countRows("pantry_recipe_ingredients", "canonical_ingredient_id is not null"),
-  countRows("unknown_ingredients", "suggested_ingredient_id is not null")
-]);
+const before = await tableStatuses();
+if (!args.dryRun) {
+  await query(readFileSync("backend/migrations/20260618_drop_legacy_substitution_tables.sql", "utf8"));
+}
+const after = await tableStatuses();
 
 console.log(JSON.stringify({
   environment: args.environment,
   target: environmentTargets[args.environment].label,
-  ingredientsWithUuidIngredientId: ingredients,
-  aliasesWithUuidIngredientId: aliases,
-  unitConversionsWithUuidIngredientId: conversions,
-  storageRulesWithUuidIngredientId: storageRules,
-  recipeIngredientsWithUuidCanonicalIngredientId: recipeIngredients,
-  unknownIngredientsWithUuidSuggestedIngredientId: unknowns
+  dryRun: args.dryRun,
+  before,
+  after
 }, null, 2));
 
 function parseArgs(argv) {
   const parsed = {
     environment: "",
-    allowProdWrite: false
+    allowProdWrite: false,
+    dryRun: false
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -68,6 +60,9 @@ function parseArgs(argv) {
     }
     if (value === "--allow-prod-write") {
       parsed.allowProdWrite = true;
+    }
+    if (value === "--dry-run") {
+      parsed.dryRun = true;
     }
   }
 
@@ -120,7 +115,16 @@ function assertTargetEnvironment(environment) {
   }
 }
 
-async function countRows(tableName, whereClause) {
-  const rows = await query(`select count(*)::int as count from ${tableName} where ${whereClause};`);
-  return Number(rows[0]?.count || 0);
+async function tableStatuses() {
+  const rows = await query(`
+    select table_name, to_regclass('public.' || table_name) is not null as exists
+    from (
+      values
+        ('ingredient_cooking_profiles'),
+        ('ingredient_substitutions'),
+        ('ingredient_substitution_components')
+    ) as legacy(table_name)
+    order by table_name;
+  `);
+  return Object.fromEntries(rows.map((row) => [row.table_name, row.exists === "t" || row.exists === true]));
 }
