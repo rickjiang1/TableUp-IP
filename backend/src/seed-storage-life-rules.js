@@ -107,10 +107,22 @@ async function bootstrapSchema() {
   `);
   await ensureIngredientsTable();
   await query(`
-    update ingredient_storage_life_rules
-    set ingredient_id = null
-    where ingredient_id = ''
-       or ingredient_id like '%\\_category' escape '\\';
+    do $$
+    begin
+      if exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'ingredient_storage_life_rules'
+          and column_name = 'ingredient_id'
+          and udt_name <> 'uuid'
+      ) then
+        update ingredient_storage_life_rules
+        set ingredient_id = null
+        where ingredient_id = ''
+           or ingredient_id like '%\\_category' escape '\\';
+      end if;
+    end $$;
 
     create index if not exists ingredient_storage_life_rules_lookup_idx
       on ingredient_storage_life_rules (active, ingredient_id, category, storage_approach, storage_location, priority);
@@ -142,7 +154,7 @@ async function ensureRuleUniqueIndex() {
   await query(`
     create unique index if not exists ingredient_storage_life_rules_unique_idx
       on ingredient_storage_life_rules (
-        coalesce(ingredient_id, ''),
+        coalesce(ingredient_id::text, ''),
         category,
         storage_approach,
         storage_location,
@@ -157,29 +169,52 @@ async function seedRules(rows) {
   }
 
   await query(`
+    with rows (
+      ingredient_slug, category, storage_approach, storage_location,
+      default_days, condition_state, priority, notes,
+      source_name, source_url, source_priority, safety_note, active
+    ) as (
+      values ${rows.map((row) => `(
+        ${sqlNullableString(storageRuleIngredientId(row))},
+        ${sqlString(row.category)},
+        ${sqlString(row.storage_approach)},
+        ${sqlString(row.storage_location)},
+        ${sqlNumber(row.default_days, 0)},
+        ${sqlString(row.condition_state)},
+        ${sqlNumber(row.priority, 100)},
+        ${sqlString(row.notes)},
+        ${sqlString(row.source_name)},
+        ${sqlString(row.source_url)},
+        ${sqlNumber(row.source_priority, 100)},
+        ${sqlString(row.safety_note)},
+        ${sqlBoolean(row.active)}
+      )`).join(",\n")}
+    )
     insert into ingredient_storage_life_rules (
-      ingredient_id, category, storage_approach, storage_location,
+      ingredient_id, ingredient_slug, category, storage_approach, storage_location,
       default_days, condition_state, priority, notes,
       source_name, source_url, source_priority, safety_note, active, updated_at
     )
-    values ${rows.map((row) => `(
-      ${sqlNullableString(storageRuleIngredientId(row))},
-      ${sqlString(row.category)},
-      ${sqlString(row.storage_approach)},
-      ${sqlString(row.storage_location)},
-      ${sqlNumber(row.default_days, 0)},
-      ${sqlString(row.condition_state)},
-      ${sqlNumber(row.priority, 100)},
-      ${sqlString(row.notes)},
-      ${sqlString(row.source_name)},
-      ${sqlString(row.source_url)},
-      ${sqlNumber(row.source_priority, 100)},
-      ${sqlString(row.safety_note)},
-      ${sqlBoolean(row.active)},
+    select
+      ingredients.ingredient_id,
+      rows.ingredient_slug,
+      rows.category,
+      rows.storage_approach,
+      rows.storage_location,
+      rows.default_days,
+      rows.condition_state,
+      rows.priority,
+      rows.notes,
+      rows.source_name,
+      rows.source_url,
+      rows.source_priority,
+      rows.safety_note,
+      rows.active,
       now()
-    )`).join(",\n")}
+    from rows
+    left join ingredients on ingredients.ingredient_slug = rows.ingredient_slug
     on conflict (
-      coalesce(ingredient_id, ''),
+      coalesce(ingredient_id::text, ''),
       category,
       storage_approach,
       storage_location,
@@ -218,7 +253,21 @@ async function enforceRelationships() {
 }
 
 async function applyIngredientUuidMigration() {
+  if (await ingredientsUseUuidIds()) {
+    return;
+  }
   await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
+}
+
+async function ingredientsUseUuidIds() {
+  const rows = await query(`
+    select udt_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'ingredients'
+      and column_name = 'ingredient_id';
+  `);
+  return rows[0]?.udt_name === "uuid";
 }
 
 function storageRuleIngredientId(row) {
@@ -255,32 +304,48 @@ function sqlNullableString(value) {
 async function seedIngredientData(ingredients, aliases) {
   if (ingredients.length > 0) {
     await query(`
-      insert into ingredients (ingredient_id, canonical_name, category, canonical_unit)
+      insert into ingredients (ingredient_slug, canonical_name, category, canonical_unit)
       values ${ingredients.map((row) => `(
         ${sqlString(row.ingredient_id)},
         ${sqlString(row.canonical_name)},
         ${sqlString(row.category)},
         ${sqlString(row.canonical_unit)}
       )`).join(",\n")}
-      on conflict (ingredient_id) do nothing;
+      on conflict (ingredient_slug) do update set
+        canonical_name = excluded.canonical_name,
+        category = excluded.category,
+        canonical_unit = excluded.canonical_unit;
     `);
   }
 
   for (const chunk of chunks(aliases, 300)) {
     await query(`
-      insert into ingredient_aliases (
-        alias_name, ingredient_id, canonical_name, language, category, confidence_score, verified, updated_at
+      with rows (alias_name, ingredient_slug, canonical_name, language, category, confidence_score, verified) as (
+        values ${chunk.map((row) => `(
+          ${sqlString(row.alias_name)},
+          ${sqlString(row.ingredient_id)},
+          ${sqlString(row.canonical_name)},
+          ${sqlString(row.language)},
+          ${sqlString(row.category)},
+          ${sqlNumber(row.confidence_score, 0.85)},
+          ${sqlBoolean(row.verified)}
+        )`).join(",\n")}
       )
-      values ${chunk.map((row) => `(
-        ${sqlString(row.alias_name)},
-        ${sqlString(row.ingredient_id)},
-        ${sqlString(row.canonical_name)},
-        ${sqlString(row.language)},
-        ${sqlString(row.category)},
-        ${sqlNumber(row.confidence_score, 0.85)},
-        ${sqlBoolean(row.verified)},
+      insert into ingredient_aliases (
+        alias_name, ingredient_id, ingredient_slug, canonical_name, language, category, confidence_score, verified, updated_at
+      )
+      select
+        rows.alias_name,
+        ingredients.ingredient_id,
+        rows.ingredient_slug,
+        rows.canonical_name,
+        rows.language,
+        rows.category,
+        rows.confidence_score,
+        rows.verified,
         now()
-      )`).join(",\n")}
+      from rows
+      join ingredients on ingredients.ingredient_slug = rows.ingredient_slug
       on conflict (alias_name) do nothing;
     `);
   }
@@ -324,9 +389,11 @@ function parseArgs(argv) {
 }
 
 function loadEnv(environment) {
-  const envFiles = environment === "dev"
-    ? ["backend/.env.dev.local", "backend/.env"]
-    : ["backend/.env"];
+  const envFiles = [
+    "backend/.env",
+    environment ? `backend/.env.${environment}` : "",
+    environment ? `backend/.env.${environment}.local` : ""
+  ].filter(Boolean);
 
   for (const file of envFiles) {
     if (!existsSync(file)) {

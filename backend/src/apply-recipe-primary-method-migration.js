@@ -64,9 +64,11 @@ function parseArgs(argv) {
 }
 
 function loadEnv(environment) {
-  const envFiles = environment === "dev"
-    ? ["backend/.env.dev.local", "backend/.env"]
-    : ["backend/.env"];
+  const envFiles = [
+    "backend/.env",
+    environment ? `backend/.env.${environment}` : "",
+    environment ? `backend/.env.${environment}.local` : ""
+  ].filter(Boolean);
 
   for (const file of envFiles) {
     if (!existsSync(file)) {
@@ -110,4 +112,3 @@ function assertTargetEnvironment(environment) {
     throw new Error(`Refusing to write ${target.label}. SUPABASE_DATABASE_URL points to ${host}, expected db.${target.projectRef}.*.`);
   }
 }
-
