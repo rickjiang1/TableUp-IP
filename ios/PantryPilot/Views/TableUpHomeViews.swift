@@ -1266,7 +1266,8 @@ struct KaifanView: View {
             Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: height)
+                .frame(width: width, height: height + 130)
+                .offset(y: 44)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1307,7 +1308,7 @@ struct KaifanView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(spacing: 8) {
                         Text("今天吃什么")
-                            .font(.system(size: 40, weight: .bold, design: .serif))
+                            .font(.custom("Kaiti SC", size: 44).weight(.bold))
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
                         Text("膳")
@@ -1320,16 +1321,11 @@ struct KaifanView: View {
                             )
                     }
                     Text("烟火已起 开饭正当时")
-                        .font(.title3.weight(.medium))
+                        .font(.custom("Kaiti SC", size: 22).weight(.medium))
                         .foregroundStyle(Color.white.opacity(0.90))
                 }
 
                 Spacer()
-
-                HStack(spacing: 12) {
-                    heroCircleButton(icon: "magnifyingglass")
-                    heroCircleButton(icon: "ellipsis")
-                }
             }
             .padding(.top, 76)
             .padding(.horizontal, 26)
