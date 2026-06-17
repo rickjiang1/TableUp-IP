@@ -1132,6 +1132,7 @@ struct KaifanView: View {
     @State private var hasMatched = false
     @State private var matchError: String?
     @State private var showingRecipes = false
+    @State private var showingCookPanel = false
     
     private var assessments: [CookAssessment] {
         recipes
@@ -1184,69 +1185,77 @@ struct KaifanView: View {
             NavigationStack {
                 let width = proxy.size.width
                 let height = proxy.size.height
-                let panelTop = min(510, height * 0.55)
-                let contentTop = panelTop + 104
                 
                 ZStack(alignment: .top) {
-                    kaifanFullBleedBackground(width: width, height: height)
-                    
-                    Rectangle()
-                        .fill(
+                    Image("TableUpKaifanSceneBackground")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: height)
+                        .clipped()
+                        .overlay(
                             LinearGradient(
                                 colors: [
-                                    Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.96),
-                                    Color(red: 0.91, green: 0.86, blue: 0.78).opacity(0.98)
+                                    Color.clear,
+                                    Color.clear,
+                                    Color.black.opacity(0.10)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
-                        .frame(width: width, height: max(0, height - panelTop - 58))
-                        .offset(y: panelTop + 58)
+                        .allowsHitTesting(false)
                     
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            Color.clear
-                                .frame(height: contentTop)
-                            
-                            matchHeader
-                            content
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 150)
-                        .frame(width: width, alignment: .leading)
-                    }
-                    .scrollIndicators(.hidden)
-                    
-                    kaifanTitle
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 56)
-                        .padding(.top, 144)
-                    
-                    HStack {
-                        Spacer()
+                    if showingCookPanel {
                         Button {
-                            showingRecipes = true
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                showingCookPanel = false
+                            }
                         } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 21, weight: .medium))
-                                .foregroundStyle(Color.black.opacity(0.74))
-                                .frame(width: 44, height: 44)
-                                .contentShape(Circle())
+                            Rectangle()
+                                .fill(Color.black.opacity(0.001))
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("全部食谱")
+                        .ignoresSafeArea()
+                        .zIndex(2)
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 62)
                     
-                    matchRecipeButton
-                        .padding(.horizontal, 88)
-                        .offset(y: max(396, panelTop - 76))
+                    Button {
+                        showingRecipes = true
+                    } label: {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.001))
+                            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: width * 0.48, height: height * 0.22)
+                    .position(x: width * 0.26, y: height * 0.71)
+                    .zIndex(3)
+                    .accessibilityLabel("食谱")
                     
-                    kaifanFilterPanel
-                        .padding(.horizontal, 22)
-                        .offset(y: panelTop)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            showingCookPanel.toggle()
+                        }
+                    } label: {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.001))
+                            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: width * 0.60, height: height * 0.20)
+                    .position(x: width * 0.67, y: height * 0.84)
+                    .zIndex(3)
+                    .accessibilityLabel("可制作")
+                    
+                    if showingCookPanel {
+                        cookBoardPanel
+                            .padding(.horizontal, 18)
+                            .padding(.top, max(58, height * 0.22))
+                            .padding(.bottom, 82)
+                            .zIndex(4)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
                 }
                 .frame(width: width, height: height, alignment: .top)
                 .clipped()
@@ -1264,6 +1273,58 @@ struct KaifanView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .navigationBarHidden(true)
         }
+    }
+
+    private var cookBoardPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("菜板")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color.black.opacity(0.82))
+                    Text("按家里的食材，看看今天能做什么")
+                        .font(.footnote)
+                        .foregroundStyle(Color.black.opacity(0.48))
+                }
+                
+                Spacer()
+                
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showingCookPanel = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Color.black.opacity(0.62))
+                        .frame(width: 30, height: 30)
+                        .background(Color.black.opacity(0.06))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            
+            matchRecipeButton
+            
+            kaifanFilterPanel
+            
+            matchHeader
+            
+            ScrollView {
+                content
+                    .padding(.bottom, 18)
+            }
+            .frame(maxHeight: 420)
+            .scrollIndicators(.hidden)
+        }
+        .padding(18)
+        .background(.ultraThinMaterial.opacity(0.94))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
     }
     
     private func kaifanFullBleedBackground(width: CGFloat, height: CGFloat) -> some View {
