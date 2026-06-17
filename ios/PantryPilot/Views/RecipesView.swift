@@ -73,7 +73,7 @@ struct RecipesView: View {
                         Spacer()
 
                         recipeBookShelf(width: width, height: height)
-                            .padding(.bottom, 44)
+                            .padding(.bottom, 28)
                     }
                 }
                 .frame(width: width, height: height)
@@ -214,7 +214,7 @@ struct RecipesView: View {
             }
             .scrollTargetBehavior(.paging)
             .scrollIndicators(.hidden)
-            .frame(height: min(430, height * 0.44))
+            .frame(height: min(560, height * 0.60))
         }
     }
 
@@ -230,7 +230,7 @@ struct RecipesView: View {
                 Button {
                     folderPath.append(folder)
                 } label: {
-                    let cardWidth = min(width - 32, 382)
+                    let cardWidth = min(width - 42, 360)
                     RecipeFolderBookHotspot(
                         title: folder.name,
                         subtitle: folderSummary(for: folder),
@@ -251,7 +251,7 @@ struct RecipesView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 50)
+        .padding(.leading, 34)
         .padding(.bottom, 6)
     }
 
@@ -712,9 +712,8 @@ private struct RecipeFolderBookHotspot: View {
             ZStack(alignment: .leading) {
                 Image("TableUpRecipeFolderTemplate")
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
 
                 if let coverImageData, let image = UIImage(data: coverImageData) {
                     Image(uiImage: image)
