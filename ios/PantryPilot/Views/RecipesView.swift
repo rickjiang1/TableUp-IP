@@ -626,53 +626,71 @@ private struct RecipeFolderBookHotspot: View {
     let row: Int
 
     var body: some View {
-        HStack(spacing: 14) {
-            VStack(spacing: 5) {
-                Text(title)
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
-                    .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
-                    .lineLimit(3)
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.68)
-                    .frame(width: 62)
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Image("TableUpRecipeBooksBackground")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .scaleEffect(1.08 + CGFloat(row) * 0.02)
+                    .offset(x: CGFloat(row) * -18, y: CGFloat(row) * -12)
+                    .clipped()
 
-                Image(systemName: "seal.fill")
-                    .font(.caption2)
-                    .foregroundStyle(TableUpTheme.orange.opacity(0.78))
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.82),
+                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.42),
+                        Color(red: 0.18, green: 0.10, blue: 0.05).opacity(0.20)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+
+                HStack(spacing: 12) {
+                    VStack(spacing: 5) {
+                        Text(title)
+                            .font(.system(size: 22, weight: .semibold, design: .serif))
+                            .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
+                            .lineLimit(3)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.68)
+                            .frame(width: 62)
+
+                        Image(systemName: "seal.fill")
+                            .font(.caption2)
+                            .foregroundStyle(TableUpTheme.orange.opacity(0.82))
+                    }
+                    .padding(.leading, 2)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Text(title)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.24, green: 0.14, blue: 0.08))
+                            .lineLimit(1)
+
+                        Text(subtitle)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
+                            .lineLimit(1)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TableUpTheme.orange.opacity(0.92))
+                    }
+                    .padding(.trailing, 12)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
             }
-            .padding(.leading, 2)
-
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 6) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.24, green: 0.14, blue: 0.08))
-                    .lineLimit(1)
-
-                Text(subtitle)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.72))
-                    .lineLimit(1)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(TableUpTheme.orange.opacity(0.85))
-            }
-            .padding(.trailing, 12)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(row == 0 ? 0.20 : 0.14))
-                .background(.ultraThinMaterial.opacity(0.34))
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                .stroke(Color.white.opacity(0.50), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.14), radius: 14, y: 8)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
