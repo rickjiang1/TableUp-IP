@@ -1249,12 +1249,9 @@ struct KaifanView: View {
                     .accessibilityLabel("可制作")
                     
                     if showingCookPanel {
-                        cookBoardPanel
-                            .padding(.horizontal, 18)
-                            .padding(.top, max(58, height * 0.22))
-                            .padding(.bottom, 82)
+                        cookRecommendationsOverlay(width: width, height: height)
                             .zIndex(4)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .transition(.opacity)
                     }
                 }
                 .frame(width: width, height: height, alignment: .top)
@@ -1272,6 +1269,508 @@ struct KaifanView: View {
             .toolbar(.hidden, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             .navigationBarHidden(true)
+        }
+    }
+
+    private func cookRecommendationsOverlay(width: CGFloat, height: CGFloat) -> some View {
+        ZStack(alignment: .top) {
+            Color(red: 0.22, green: 0.13, blue: 0.06)
+                .ignoresSafeArea()
+
+            Image("TableUpKaifanSceneBackground")
+                .resizable()
+                .scaledToFill()
+                .frame(width: width, height: min(height * 0.58, 540))
+                .clipped()
+                .overlay(
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.12),
+                            Color.black.opacity(0.02),
+                            Color(red: 0.48, green: 0.25, blue: 0.09).opacity(0.70)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: width, height: height, alignment: .top)
+                .allowsHitTesting(false)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    cookHero(width: width, height: height)
+                    cookFilterShelf
+                        .padding(.horizontal, 24)
+                        .padding(.top, -28)
+                    recommendationPaper
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                }
+                .padding(.bottom, 108)
+            }
+            .scrollIndicators(.hidden)
+
+            HStack {
+                Spacer()
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showingCookPanel = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .frame(width: 44, height: 44)
+                        .background(Color.black.opacity(0.20))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 50)
+            .padding(.horizontal, 24)
+        }
+        .frame(width: width, height: height)
+        .ignoresSafeArea()
+    }
+
+    private func cookHero(width: CGFloat, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 8) {
+                        Text("今天吃什么")
+                            .font(.system(size: 40, weight: .bold, design: .serif))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+                        Text("膳")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(TableUpTheme.orange)
+                            .padding(4)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 2)
+                                    .stroke(TableUpTheme.orange.opacity(0.8), lineWidth: 1)
+                            )
+                    }
+                    Text("用心做饭，好好吃饭")
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(Color.white.opacity(0.90))
+                }
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    heroCircleButton(icon: "magnifyingglass")
+                    heroCircleButton(icon: "ellipsis")
+                }
+            }
+            .padding(.top, 76)
+            .padding(.horizontal, 26)
+
+            Spacer(minLength: 0)
+        }
+        .frame(width: width, height: min(height * 0.47, 430), alignment: .topLeading)
+    }
+
+    private func heroCircleButton(icon: String) -> some View {
+        Button {
+        } label: {
+            Image(systemName: icon)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.black.opacity(0.78))
+                .frame(width: 52, height: 52)
+                .background(Color(red: 0.98, green: 0.91, blue: 0.80).opacity(0.92))
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cookFilterShelf: some View {
+        HStack(spacing: 0) {
+            cookFilterButton(.ready, icon: "pot.fill", value: readyCount)
+            Divider()
+                .frame(height: 54)
+                .overlay(Color.black.opacity(0.08))
+            cookFilterButton(.almost, icon: "basket.fill", value: almostCount)
+            Divider()
+                .frame(height: 54)
+                .overlay(Color.black.opacity(0.08))
+            cookFilterButton(.favorite, icon: "star.fill", value: 0)
+
+            Button {
+                selectedFilter = .recommended
+                Task { await refreshCloudMatches() }
+            } label: {
+                VStack(spacing: 6) {
+                    if isRefreshing {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "bowl.fill")
+                            .font(.title2.weight(.semibold))
+                    }
+                    Text("今日推荐")
+                        .font(.headline.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: 118, height: 92)
+                .background(
+                    LinearGradient(
+                        colors: [TableUpTheme.softOrange, TableUpTheme.orange],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: TableUpTheme.orange.opacity(0.28), radius: 18, y: 8)
+            }
+            .buttonStyle(.plain)
+            .disabled(isRefreshing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color(red: 1.0, green: 0.94, blue: 0.84).opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(Color.white.opacity(0.58), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
+    }
+
+    private func cookFilterButton(_ filter: KaifanFilter, icon: String, value: Int) -> some View {
+        Button {
+            selectedFilter = filter
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(selectedFilter == filter ? TableUpTheme.orange : Color(red: 0.31, green: 0.21, blue: 0.12))
+                Text(filter.title(language: appLanguage))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.22, green: 0.15, blue: 0.09))
+                HStack(spacing: 2) {
+                    Text("\(value)")
+                        .foregroundStyle(value == 0 ? Color.black.opacity(0.38) : TableUpTheme.orange)
+                    Text("道")
+                        .foregroundStyle(Color.black.opacity(0.34))
+                }
+                .font(.footnote.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 90)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var recommendationPaper: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if isRefreshing {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+
+            if let matchError {
+                Text(matchError)
+                    .font(.footnote)
+                    .foregroundStyle(Color(red: 0.50, green: 0.25, blue: 0.12))
+            }
+
+            if let featured = featuredRecommendation {
+                featuredRecommendationCard(featured)
+            } else {
+                emptyState
+            }
+
+            HStack {
+                Text("为你推荐")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.20, green: 0.13, blue: 0.08))
+                Spacer()
+                Button {
+                    Task { await refreshCloudMatches() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("换一换")
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color.black.opacity(0.48))
+                }
+                .buttonStyle(.plain)
+                .disabled(isRefreshing)
+            }
+
+            recommendationRows
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(red: 1.0, green: 0.94, blue: 0.83).opacity(0.96))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.48), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.20), radius: 24, y: 14)
+    }
+
+    private var recommendationRows: some View {
+        LazyVStack(spacing: 12) {
+            if useCloudMatches {
+                ForEach(Array(cloudFilteredMatches.dropFirst()), id: \.recipeID) { match in
+                    cloudRecommendationRow(match)
+                }
+            } else {
+                ForEach(Array(localFilteredAssessments.dropFirst()), id: \.recipe.id) { assessment in
+                    NavigationLink {
+                        RecipeDetailView(recipe: assessment.recipe, assessment: assessment)
+                    } label: {
+                        recommendationRow(
+                            title: assessment.recipe.name,
+                            imageData: assessment.recipe.imageThumbnailData ?? assessment.recipe.imageData,
+                            matchPercent: Int((assessment.matchRatio * 100).rounded()),
+                            time: assessment.recipe.totalTimeMinutes,
+                            missing: assessment.missing.map(\.name),
+                            isReady: assessment.matchRatio >= threshold,
+                            ingredientNames: assessment.recipe.ingredients.map(\.name)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func cloudRecommendationRow(_ match: CloudRecipeMatch) -> some View {
+        let recipe = localRecipe(for: match)
+        return Group {
+            if let recipe {
+                NavigationLink {
+                    RecipeDetailView(recipe: recipe, cloudMatch: match)
+                } label: {
+                    recommendationRow(
+                        title: match.recipeName,
+                        imageData: recipe.imageThumbnailData ?? recipe.imageData,
+                        matchPercent: Int(match.matchScorePercent.rounded()),
+                        time: recipe.totalTimeMinutes,
+                        missing: match.missingRequiredIngredients.map(\.recipeIngredient),
+                        isReady: match.matchRatio >= threshold,
+                        ingredientNames: recipe.ingredients.map(\.name)
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                recommendationRow(
+                    title: match.recipeName,
+                    imageData: nil,
+                    matchPercent: Int(match.matchScorePercent.rounded()),
+                    time: nil,
+                    missing: match.missingRequiredIngredients.map(\.recipeIngredient),
+                    isReady: match.matchRatio >= threshold,
+                    ingredientNames: match.matchedIngredients.map(\.recipeIngredient)
+                )
+            }
+        }
+    }
+
+    private var featuredRecommendation: KaifanRecommendationItem? {
+        if useCloudMatches, let match = cloudFilteredMatches.first {
+            let recipe = localRecipe(for: match)
+            return KaifanRecommendationItem(
+                title: match.recipeName,
+                imageData: recipe?.imageThumbnailData ?? recipe?.imageData,
+                matchPercent: Int(match.matchScorePercent.rounded()),
+                totalTimeMinutes: recipe?.totalTimeMinutes,
+                difficulty: recipe?.difficulty,
+                missing: match.missingRequiredIngredients.map(\.recipeIngredient),
+                ingredientNames: recipe?.ingredients.map(\.name) ?? match.matchedIngredients.map(\.recipeIngredient),
+                recipe: recipe,
+                cloudMatch: match
+            )
+        }
+
+        guard let assessment = localFilteredAssessments.first else { return nil }
+        return KaifanRecommendationItem(
+            title: assessment.recipe.name,
+            imageData: assessment.recipe.imageThumbnailData ?? assessment.recipe.imageData,
+            matchPercent: Int((assessment.matchRatio * 100).rounded()),
+            totalTimeMinutes: assessment.recipe.totalTimeMinutes,
+            difficulty: assessment.recipe.difficulty,
+            missing: assessment.missing.map(\.name),
+            ingredientNames: assessment.recipe.ingredients.map(\.name),
+            recipe: assessment.recipe,
+            assessment: assessment
+        )
+    }
+
+    private func featuredRecommendationCard(_ item: KaifanRecommendationItem) -> some View {
+        Group {
+            if let recipe = item.recipe, let cloudMatch = item.cloudMatch {
+                NavigationLink {
+                    RecipeDetailView(recipe: recipe, cloudMatch: cloudMatch)
+                } label: {
+                    featuredRecommendationContent(item)
+                }
+                .buttonStyle(.plain)
+            } else if let recipe = item.recipe, let assessment = item.assessment {
+                NavigationLink {
+                    RecipeDetailView(recipe: recipe, assessment: assessment)
+                } label: {
+                    featuredRecommendationContent(item)
+                }
+                .buttonStyle(.plain)
+            } else {
+                featuredRecommendationContent(item)
+            }
+        }
+    }
+
+    private func featuredRecommendationContent(_ item: KaifanRecommendationItem) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            kaifanFoodImage(imageData: item.imageData, width: 154, height: 128, cornerRadius: 18)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.title)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.19, green: 0.12, blue: 0.08))
+                        .lineLimit(2)
+
+                    Text(item.missing.isEmpty ? "可做" : "差一点")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(item.missing.isEmpty ? Color(red: 0.30, green: 0.50, blue: 0.12) : TableUpTheme.orange)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background((item.missing.isEmpty ? Color.green : Color.orange).opacity(0.12))
+                        .clipShape(Capsule())
+                }
+
+                HStack(spacing: 10) {
+                    if let totalTimeMinutes = item.totalTimeMinutes, totalTimeMinutes > 0 {
+                        Label("\(totalTimeMinutes) 分钟", systemImage: "clock")
+                    }
+                    if let difficulty = item.difficulty {
+                        Text(difficulty.displayName(language: appLanguage))
+                    }
+                    Text("\(item.matchPercent)%")
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.black.opacity(0.48))
+
+                Text(item.missing.isEmpty ? "家里食材已经满足，今天可以直接开做。" : "还缺 \(item.missing.prefix(2).joined(separator: "、"))，补一点就能开做。")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.black.opacity(0.60))
+                    .lineLimit(2)
+
+                ingredientBubbleRow(item.ingredientNames)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.34))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private func recommendationRow(
+        title: String,
+        imageData: Data?,
+        matchPercent: Int,
+        time: Int?,
+        missing: [String],
+        isReady: Bool,
+        ingredientNames: [String]
+    ) -> some View {
+        HStack(spacing: 14) {
+            kaifanFoodImage(imageData: imageData, width: 112, height: 86, cornerRadius: 16)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.19, green: 0.12, blue: 0.08))
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    if let time, time > 0 {
+                        Text("\(time) 分钟")
+                    }
+                    Text("\(matchPercent)%")
+                    if !missing.isEmpty {
+                        Text("缺 \(missing.prefix(1).joined())")
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color.black.opacity(0.50))
+
+                ingredientBubbleRow(ingredientNames)
+            }
+
+            Spacer(minLength: 6)
+
+            VStack(spacing: 10) {
+                Text(isReady ? "✓ 可做" : "差一点")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(isReady ? Color(red: 0.30, green: 0.50, blue: 0.12) : TableUpTheme.orange)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background((isReady ? Color.green : Color.orange).opacity(0.14))
+                    .clipShape(Capsule())
+
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.black.opacity(0.30))
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.24))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func kaifanFoodImage(imageData: Data?, width: CGFloat, height: CGFloat, cornerRadius: CGFloat) -> some View {
+        Group {
+            if let imageData, let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Color(red: 0.91, green: 0.76, blue: 0.55)
+                    Image(systemName: "fork.knife")
+                        .font(.title2)
+                        .foregroundStyle(Color.white.opacity(0.86))
+                }
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    private func ingredientBubbleRow(_ names: [String]) -> some View {
+        HStack(spacing: 7) {
+            ForEach(Array(names.prefix(3).enumerated()), id: \.offset) { _, name in
+                Text(String(name.prefix(1)))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.36, green: 0.22, blue: 0.10))
+                    .frame(width: 28, height: 28)
+                    .background(Color(red: 0.92, green: 0.82, blue: 0.66).opacity(0.72))
+                    .clipShape(Circle())
+            }
+
+            if names.count > 3 {
+                Text("...")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.black.opacity(0.48))
+                    .frame(width: 28, height: 28)
+                    .background(Color.black.opacity(0.06))
+                    .clipShape(Circle())
+            }
         }
     }
 
@@ -1698,6 +2197,19 @@ private struct KaifanQuickStat: View {
         .background(Color.white.opacity(0.52))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
+}
+
+private struct KaifanRecommendationItem {
+    let title: String
+    let imageData: Data?
+    let matchPercent: Int
+    let totalTimeMinutes: Int?
+    let difficulty: RecipeDifficulty?
+    let missing: [String]
+    let ingredientNames: [String]
+    let recipe: Recipe?
+    var assessment: CookAssessment?
+    var cloudMatch: CloudRecipeMatch?
 }
 
 private struct KaifanPageBackground: View {
