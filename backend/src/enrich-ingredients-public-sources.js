@@ -41,10 +41,16 @@ async function main() {
   await bootstrapSourceReferenceTable();
   const existing = await fetchExistingIngredientIndex();
   const candidates = buildCandidates(existing);
-  const accepted = [...candidates.values()]
+  const usableCandidates = [...candidates.values()]
     .filter((candidate) => candidate.qualityScore >= 0.78)
+    .sort((left, right) => right.qualityScore - left.qualityScore || left.ingredient_slug.localeCompare(right.ingredient_slug));
+  const accepted = usableCandidates
     .filter((candidate) => !existing.slugSet.has(candidate.ingredient_slug))
     .sort((left, right) => right.qualityScore - left.qualityScore || left.ingredient_slug.localeCompare(right.ingredient_slug));
+  const enrichedExisting = usableCandidates
+    .filter((candidate) => existing.slugSet.has(candidate.ingredient_slug))
+    .sort((left, right) => right.qualityScore - left.qualityScore || left.ingredient_slug.localeCompare(right.ingredient_slug));
+  const enrichmentTargets = [...accepted, ...enrichedExisting];
 
   const ingredients = accepted.map((candidate) => ({
     ingredient_slug: candidate.ingredient_slug,
@@ -57,8 +63,8 @@ async function main() {
     })
   }));
 
-  const aliases = buildAliasRows(accepted, existing.aliasSet);
-  const references = accepted.flatMap((candidate) => candidate.sources.map((source) => ({
+  const aliases = buildAliasRows(enrichmentTargets, existing.aliasSet);
+  const references = enrichmentTargets.flatMap((candidate) => candidate.sources.map((source) => ({
     ingredient_slug: candidate.ingredient_slug,
     source_name: source.source_name,
     source_id: source.source_id,
@@ -76,7 +82,8 @@ async function main() {
     acceptedIngredients: ingredients.length,
     aliases: aliases.length,
     sourceReferences: references.length,
-    byPrimarySource: countBy(accepted, (item) => item.sources[0]?.source_name || "unknown"),
+    enrichedExistingIngredients: enrichedExisting.length,
+    byPrimarySource: countBy(enrichmentTargets, (item) => item.sources[0]?.source_name || "unknown"),
     byCategory: countBy(accepted, (item) => item.category),
     samples: accepted.slice(0, 30).map((item) => ({
       ingredient_slug: item.ingredient_slug,
@@ -89,7 +96,7 @@ async function main() {
 
   if (!args.dryRun) {
     await upsertIngredients(ingredients);
-    const refreshed = await fetchIngredientIds(ingredients.map((item) => item.ingredient_slug));
+    const refreshed = await fetchIngredientIds([...new Set(enrichmentTargets.map((item) => item.ingredient_slug))]);
     await upsertAliases(aliases, refreshed);
     await upsertReferences(references, refreshed);
   }
@@ -114,9 +121,10 @@ function addCandidate(candidates, existing, candidate) {
 
   const slug = cleanSlug(candidate.ingredient_slug || canonicalName);
   if (!slug || slug.length < 2 || slug.length > 80) return;
-  if (existing.aliasSet.has(normalizeName(canonicalName)) || existing.slugSet.has(slug)) return;
+  const existingMatch = findExistingIngredientMatch(existing, slug, [canonicalName, ...(candidate.aliases || [])]);
+  const targetSlug = existingMatch?.ingredient_slug || slug;
 
-  const current = candidates.get(slug);
+  const current = candidates.get(targetSlug);
   const source = {
     source_name: candidate.source_name,
     source_id: candidate.source_id,
@@ -124,21 +132,31 @@ function addCandidate(candidates, existing, candidate) {
     notes: candidate.notes || ""
   };
   if (!current) {
-    candidates.set(slug, {
-      ingredient_slug: slug,
-      canonical_name: titleIngredient(canonicalName),
-      category: normalizeCategory(candidate.category),
+    candidates.set(targetSlug, {
+      ingredient_slug: targetSlug,
+      canonical_name: existingMatch?.canonical_name || titleIngredient(canonicalName),
+      category: normalizeCategory(existingMatch?.category || candidate.category),
       qualityScore: candidate.qualityScore,
-      aliases: new Set(candidate.aliases || []),
+      aliases: new Set([canonicalName, slug.replace(/_/g, " "), ...(candidate.aliases || [])]),
       sources: [source]
     });
     return;
   }
 
   current.qualityScore = Math.min(1, Math.max(current.qualityScore, candidate.qualityScore) + 0.08);
-  current.category = bestCategory(current.category, normalizeCategory(candidate.category));
+  current.category = bestCategory(current.category, normalizeCategory(existingMatch?.category || candidate.category));
   current.sources.push(source);
-  for (const alias of candidate.aliases || []) current.aliases.add(alias);
+  for (const alias of [canonicalName, slug.replace(/_/g, " "), ...(candidate.aliases || [])]) current.aliases.add(alias);
+}
+
+function findExistingIngredientMatch(existing, slug, aliases) {
+  const direct = existing.ingredientBySlug.get(slug);
+  if (direct) return direct;
+  for (const alias of aliases) {
+    const match = existing.ingredientByAlias.get(normalizeName(alias));
+    if (match) return match;
+  }
+  return null;
 }
 
 function usdaCandidates() {
@@ -381,14 +399,27 @@ async function bootstrapSourceReferenceTable() {
 }
 
 async function fetchExistingIngredientIndex() {
-  const ingredients = await query(`select ingredient_slug, canonical_name from ingredients;`);
-  const aliases = await query(`select alias_name from ingredient_aliases;`);
-  const slugSet = new Set(ingredients.map((row) => String(row.ingredient_slug || "").toLowerCase()));
+  const ingredients = await query(`select ingredient_id, ingredient_slug, canonical_name, category from ingredients;`);
+  const aliases = await query(`select alias_name, ingredient_slug, ingredient_id from ingredient_aliases;`);
+  const ingredientBySlug = new Map(ingredients.map((row) => [String(row.ingredient_slug || "").toLowerCase(), row]));
+  const ingredientById = new Map(ingredients.map((row) => [String(row.ingredient_id || ""), row]));
+  const ingredientByAlias = new Map();
+  for (const row of ingredients) {
+    ingredientByAlias.set(normalizeName(row.ingredient_slug), row);
+    ingredientByAlias.set(normalizeName(row.canonical_name), row);
+  }
+  for (const row of aliases) {
+    const ingredient = ingredientBySlug.get(String(row.ingredient_slug || "").toLowerCase()) || ingredientById.get(String(row.ingredient_id || ""));
+    if (ingredient) {
+      ingredientByAlias.set(normalizeName(row.alias_name), ingredient);
+    }
+  }
+  const slugSet = new Set(ingredientBySlug.keys());
   const aliasSet = new Set([
     ...ingredients.flatMap((row) => [row.ingredient_slug, row.canonical_name].map(normalizeName)),
     ...aliases.map((row) => normalizeName(row.alias_name))
   ].filter(Boolean));
-  return { slugSet, aliasSet };
+  return { slugSet, aliasSet, ingredientBySlug, ingredientByAlias };
 }
 
 async function fetchIngredientIds(slugs) {
