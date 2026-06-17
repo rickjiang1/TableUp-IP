@@ -43,156 +43,49 @@ struct RecipesView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Picker(L.text("Recipe Library", language: appLanguage), selection: $selectedSource) {
-                    ForEach(RecipeSource.allCases) { source in
-                        Text(source.displayName(language: appLanguage)).tag(source)
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let height = proxy.size.height
+
+                ZStack(alignment: .top) {
+                    Image("TableUpRecipeBooksBackground")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: height)
+                        .clipped()
+                        .overlay(
+                            LinearGradient(
+                                colors: [
+                                    Color.black.opacity(0.02),
+                                    Color.clear,
+                                    Color.black.opacity(0.08)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 12) {
+                        recipeTopControls
+                            .padding(.horizontal, 18)
+                            .padding(.top, 54)
+
+                        folderShelf
+                            .padding(.horizontal, 18)
+
+                        Spacer()
+
+                        recipeBookShelf(width: width)
+                            .padding(.bottom, 44)
                     }
                 }
-                .pickerStyle(.segmented)
-                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 8, trailing: 16))
-                .onChange(of: selectedSource) { _, _ in
-                    folderPath = []
-                }
-
-                if !folderPath.isEmpty {
-                    Button {
-                        _ = folderPath.popLast()
-                    } label: {
-                        Label(parentFolderTitle, systemImage: "chevron.left")
-                    }
-                }
-
-                if visibleFolders.isEmpty && visibleRecipes.isEmpty {
-                    ContentUnavailableView(
-                        L.text("No recipes here", language: appLanguage),
-                        systemImage: selectedSource == .central ? "books.vertical" : "folder",
-                        description: Text(L.text("Create a folder or add a recipe.", language: appLanguage))
-                    )
-                }
-
-                ForEach(visibleFolders) { folder in
-                    Button {
-                        folderPath.append(folder)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "folder.fill")
-                                .font(.title2)
-                                .foregroundStyle(.orange)
-                                .frame(width: 58, height: 58)
-                                .background(Color.orange.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(folder.name)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(.primary)
-                                Text(folderSummary(for: folder))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-                .onDelete(perform: deleteFolders)
-
-                ForEach(visibleRecipes) { recipe in
-                    NavigationLink {
-                        RecipeDetailView(recipe: recipe)
-                    } label: {
-                        HStack(spacing: 12) {
-                            RecipeThumbnail(imageData: recipe.imageThumbnailData ?? recipe.imageData)
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(recipe.name)
-                                    .fontWeight(.semibold)
-                                Text(recipe.ingredients.map(\.displayText).joined(separator: " - "))
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .contextMenu {
-                        Menu {
-                            Button {
-                                move(recipe, to: "")
-                            } label: {
-                                Label(L.text("Root Folder", language: appLanguage), systemImage: "books.vertical")
-                            }
-                            .disabled(recipe.folderId.isEmpty)
-
-                            ForEach(moveDestinationFolders) { folder in
-                                Button {
-                                    move(recipe, to: folder.id)
-                                } label: {
-                                    Label(folderPathTitle(for: folder), systemImage: "folder")
-                                }
-                                .disabled(recipe.folderId == folder.id)
-                            }
-                        } label: {
-                            Label(L.text("Move to Folder", language: appLanguage), systemImage: "folder")
-                        }
-                    }
-                }
-                .onDelete(perform: deleteRecipes)
+                .frame(width: width, height: height)
+                .ignoresSafeArea()
             }
-            .navigationTitle(navigationTitle)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if !folderPath.isEmpty {
-                        Button {
-                            folderPath = []
-                        } label: {
-                            Image(systemName: "house")
-                        }
-                        .accessibilityLabel(L.text("Recipe Library", language: appLanguage))
-                    }
-                }
-
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        showingUnmatchedIngredients = true
-                    } label: {
-                        Text(L.text("Unmatched", language: appLanguage))
-                    }
-                    .accessibilityLabel(L.text("Unmatched ingredients", language: appLanguage))
-
-                    Button {
-                        Task {
-                            await syncRecipes()
-                        }
-                    } label: {
-                        Image(systemName: isSyncing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
-                    }
-                    .disabled(isSyncing)
-                    .accessibilityLabel(L.text("Sync Recipes", language: appLanguage))
-
-                    Menu {
-                        Button {
-                            showingAddFolder = true
-                        } label: {
-                            Label(L.text("New Folder", language: appLanguage), systemImage: "folder.badge.plus")
-                        }
-
-                        Button {
-                            showingAddRecipe = true
-                        } label: {
-                            Label(L.text("Add Recipe", language: appLanguage), systemImage: "plus")
-                        }
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                    }
-                }
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarHidden(true)
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAddRecipe) {
                 AddRecipeView(
                     source: selectedSource,
@@ -232,6 +125,200 @@ struct RecipesView: View {
                     dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
+        }
+    }
+
+    private var recipeTopControls: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Picker(L.text("Recipe Library", language: appLanguage), selection: $selectedSource) {
+                ForEach(RecipeSource.allCases) { source in
+                    Text(source.displayName(language: appLanguage)).tag(source)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 210)
+            .onChange(of: selectedSource) { _, _ in
+                folderPath = []
+            }
+
+            Spacer()
+
+            Button {
+                showingUnmatchedIngredients = true
+            } label: {
+                Image(systemName: "exclamationmark.magnifyingglass")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.42))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L.text("Unmatched ingredients", language: appLanguage))
+
+            Button {
+                Task { await syncRecipes() }
+            } label: {
+                Image(systemName: isSyncing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.42))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isSyncing)
+            .accessibilityLabel(L.text("Sync Recipes", language: appLanguage))
+
+            Menu {
+                Button {
+                    showingAddFolder = true
+                } label: {
+                    Label(L.text("New Folder", language: appLanguage), systemImage: "folder.badge.plus")
+                }
+
+                Button {
+                    showingAddRecipe = true
+                } label: {
+                    Label(L.text("Add Recipe", language: appLanguage), systemImage: "plus")
+                }
+            } label: {
+                Image(systemName: "plus")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(TableUpTheme.orange)
+                    .clipShape(Circle())
+                    .shadow(color: TableUpTheme.orange.opacity(0.34), radius: 12, y: 6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var folderShelf: some View {
+        if !folderPath.isEmpty || !visibleFolders.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    if !folderPath.isEmpty {
+                        Button {
+                            _ = folderPath.popLast()
+                        } label: {
+                            Label(parentFolderTitle, systemImage: "chevron.left")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.white.opacity(0.50))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            folderPath = []
+                        } label: {
+                            Image(systemName: "house")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                                .frame(width: 34, height: 34)
+                                .background(Color.white.opacity(0.50))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    ForEach(visibleFolders) { folder in
+                        Button {
+                            folderPath.append(folder)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "books.vertical.fill")
+                                Text(folder.name)
+                                    .lineLimit(1)
+                            }
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.white.opacity(0.50))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteFolderTree(folder)
+                                try? modelContext.save()
+                            } label: {
+                                Label(L.text("Delete", language: appLanguage), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func recipeBookShelf(width: CGFloat) -> some View {
+        if visibleRecipes.isEmpty && visibleFolders.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: selectedSource == .central ? "books.vertical" : "folder")
+                    .font(.title2)
+                Text(L.text("No recipes here", language: appLanguage))
+                    .font(.headline.weight(.semibold))
+                Text(L.text("Create a folder or add a recipe.", language: appLanguage))
+                    .font(.footnote)
+            }
+            .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08).opacity(0.78))
+            .padding(18)
+            .background(Color.white.opacity(0.46))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .padding(.horizontal, 26)
+        } else {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 18) {
+                    ForEach(visibleRecipes) { recipe in
+                        NavigationLink {
+                            RecipeDetailView(recipe: recipe)
+                        } label: {
+                            RecipeBookButton(recipe: recipe, language: appLanguage)
+                                .frame(width: min(320, width * 0.72), height: 172)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Menu {
+                                Button {
+                                    move(recipe, to: "")
+                                } label: {
+                                    Label(L.text("Root Folder", language: appLanguage), systemImage: "books.vertical")
+                                }
+                                .disabled(recipe.folderId.isEmpty)
+
+                                ForEach(moveDestinationFolders) { folder in
+                                    Button {
+                                        move(recipe, to: folder.id)
+                                    } label: {
+                                        Label(folderPathTitle(for: folder), systemImage: "folder")
+                                    }
+                                    .disabled(recipe.folderId == folder.id)
+                                }
+                            } label: {
+                                Label(L.text("Move to Folder", language: appLanguage), systemImage: "folder")
+                            }
+
+                            Button(role: .destructive) {
+                                deleteRecipe(recipe)
+                            } label: {
+                                Label(L.text("Delete", language: appLanguage), systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 
@@ -387,6 +474,23 @@ struct RecipesView: View {
         }
     }
 
+    private func deleteRecipe(_ recipe: Recipe) {
+        let cloudId = recipe.cloudId
+        RecipeMediaStore.deleteVideo(fileName: recipe.videoFileName)
+        modelContext.delete(recipe)
+        try? modelContext.save()
+
+        guard !cloudId.isEmpty else { return }
+        Task {
+            do {
+                try await RecipeCloudSync().deleteRecipe(id: cloudId)
+            } catch {
+                guard !error.isCancellation else { return }
+                recipeAlert = RecipeAlertMessage(title: "Sync failed", message: error.localizedDescription)
+            }
+        }
+    }
+
     @MainActor
     private func syncRecipes() async {
         guard !isSyncing else { return }
@@ -425,6 +529,116 @@ struct RecipeAlertMessage: Identifiable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+private struct RecipeBookButton: View {
+    let recipe: Recipe
+    let language: String
+
+    private var imageData: Data? {
+        recipe.imageThumbnailData ?? recipe.imageData
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.88, blue: 0.73),
+                            Color(red: 0.82, green: 0.64, blue: 0.43)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .shadow(color: .black.opacity(0.26), radius: 16, y: 10)
+
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.46), lineWidth: 1)
+
+            HStack(spacing: 0) {
+                VStack(spacing: 10) {
+                    Text(recipe.name)
+                        .font(.system(size: 24, weight: .semibold, design: .serif))
+                        .foregroundStyle(Color(red: 0.24, green: 0.14, blue: 0.08))
+                        .lineLimit(3)
+                        .multilineTextAlignment(.center)
+                        .minimumScaleFactor(0.62)
+                        .frame(width: 54)
+
+                    Image(systemName: "seal.fill")
+                        .font(.caption)
+                        .foregroundStyle(TableUpTheme.orange.opacity(0.82))
+                }
+                .frame(width: 76)
+                .frame(maxHeight: .infinity)
+                .background(Color(red: 0.98, green: 0.93, blue: 0.82).opacity(0.86))
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Color(red: 0.42, green: 0.27, blue: 0.16).opacity(0.24))
+                        .frame(width: 1)
+                }
+
+                ZStack(alignment: .bottomLeading) {
+                    if let imageData {
+                        RecipeThumbnail(imageData: imageData)
+                            .frame(width: 112, height: 112)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
+                    } else {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.44))
+                            .frame(width: 112, height: 112)
+                            .overlay {
+                                Image(systemName: "fork.knife")
+                                    .font(.title2)
+                                    .foregroundStyle(Color(red: 0.40, green: 0.25, blue: 0.14).opacity(0.56))
+                            }
+                    }
+                }
+                .frame(width: 132)
+                .frame(maxHeight: .infinity)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(recipe.name)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
+                        .lineLimit(2)
+
+                    HStack(spacing: 8) {
+                        if recipe.totalTimeMinutes > 0 {
+                            bookMetric("clock", "\(recipe.totalTimeMinutes)m")
+                        }
+                        if recipe.activeTimeMinutes > 0 {
+                            bookMetric("hand.raised", "\(recipe.activeTimeMinutes)m")
+                        }
+                    }
+
+                    if !recipe.ingredients.isEmpty {
+                        Text(recipe.ingredients.prefix(3).map(\.name).joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
+                            .lineLimit(2)
+                    }
+                }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.trailing, 14)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityLabel(recipe.name)
+    }
+
+    private func bookMetric(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.72))
+    }
 }
 
 struct RecipeCloudSync {
