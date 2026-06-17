@@ -230,13 +230,14 @@ struct RecipesView: View {
                 Button {
                     folderPath.append(folder)
                 } label: {
+                    let cardWidth = min(width - 32, 382)
                     RecipeFolderBookHotspot(
                         title: folder.name,
                         subtitle: folderSummary(for: folder),
                         coverImageData: folder.coverImageData,
                         row: index
                     )
-                    .frame(width: width * 0.84, height: 146)
+                    .frame(width: cardWidth, height: cardWidth / 2.253)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -719,26 +720,16 @@ private struct RecipeFolderBookHotspot: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: proxy.size.width * 0.36, height: proxy.size.height * 0.76)
+                        .frame(width: proxy.size.width * 0.345, height: proxy.size.height * 0.710)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .position(x: proxy.size.width * 0.315, y: proxy.size.height * 0.45)
+                        .position(x: proxy.size.width * 0.265, y: proxy.size.height * 0.445)
                         .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
                 } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(red: 0.95, green: 0.88, blue: 0.74))
-                        .frame(width: proxy.size.width * 0.36, height: proxy.size.height * 0.76)
-                        .overlay {
-                            Image(systemName: "photo")
-                                .font(.title3)
-                                .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.46))
-                        }
-                        .position(x: proxy.size.width * 0.315, y: proxy.size.height * 0.45)
+                    Image(systemName: "photo")
+                        .font(.title3)
+                        .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.42))
+                        .position(x: proxy.size.width * 0.265, y: proxy.size.height * 0.445)
                 }
-
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color(red: 0.96, green: 0.90, blue: 0.78).opacity(0.94))
-                    .frame(width: proxy.size.width * 0.39, height: proxy.size.height * 0.68)
-                    .position(x: proxy.size.width * 0.70, y: proxy.size.height * 0.48)
 
                 LinearGradient(
                     colors: [
@@ -769,7 +760,7 @@ private struct RecipeFolderBookHotspot: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
                     }
-                    .padding(.trailing, 42)
+                    .padding(.trailing, 38)
 
                     Spacer(minLength: 0)
                 }
