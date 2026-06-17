@@ -1351,7 +1351,7 @@ struct KaifanView: View {
                                     .stroke(TableUpTheme.orange.opacity(0.8), lineWidth: 1)
                             )
                     }
-                    Text("用心做饭，好好吃饭")
+                    Text("烟火已起 开饭正当时")
                         .font(.title3.weight(.medium))
                         .foregroundStyle(Color.white.opacity(0.90))
                 }
