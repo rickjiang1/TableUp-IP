@@ -1205,21 +1205,6 @@ struct KaifanView: View {
                         )
                         .allowsHitTesting(false)
                     
-                    if showingCookPanel {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.18)) {
-                                showingCookPanel = false
-                            }
-                        } label: {
-                            Rectangle()
-                                .fill(Color.black.opacity(0.001))
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .ignoresSafeArea()
-                        .zIndex(2)
-                    }
-                    
                     Button {
                         showingRecipes = true
                     } label: {
@@ -1247,12 +1232,6 @@ struct KaifanView: View {
                     .position(x: width * 0.67, y: height * 0.84)
                     .zIndex(3)
                     .accessibilityLabel("可制作")
-                    
-                    if showingCookPanel {
-                        cookRecommendationsOverlay(width: width, height: height)
-                            .zIndex(4)
-                            .transition(.opacity)
-                    }
                 }
                 .frame(width: width, height: height, alignment: .top)
                 .clipped()
@@ -1262,6 +1241,13 @@ struct KaifanView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .sheet(isPresented: $showingRecipes) {
                     RecipesView()
+                }
+                .sheet(isPresented: $showingCookPanel) {
+                    GeometryReader { sheetProxy in
+                        cookRecommendationsOverlay(width: sheetProxy.size.width, height: sheetProxy.size.height)
+                    }
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -1280,7 +1266,7 @@ struct KaifanView: View {
             Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: min(height * 0.58, 540))
+                .frame(width: width, height: height)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1310,24 +1296,6 @@ struct KaifanView: View {
             }
             .scrollIndicators(.hidden)
 
-            HStack {
-                Spacer()
-                Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        showingCookPanel = false
-                    }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(Color.white.opacity(0.92))
-                        .frame(width: 44, height: 44)
-                        .background(Color.black.opacity(0.20))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 50)
-            .padding(.horizontal, 24)
         }
         .frame(width: width, height: height)
         .ignoresSafeArea()
