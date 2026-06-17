@@ -230,14 +230,13 @@ struct RecipesView: View {
                 Button {
                     folderPath.append(folder)
                 } label: {
-                    let cardWidth = min(width - 72, 324)
+                    let cardWidth = min(width - 64, 330)
                     RecipeFolderBookHotspot(
                         title: folder.name,
                         subtitle: folderSummary(for: folder),
-                        coverImageData: folder.coverImageData,
                         row: index
                     )
-                    .frame(width: cardWidth, height: cardWidth / 2.253)
+                    .frame(width: cardWidth, height: 92)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -622,34 +621,12 @@ private struct AddRecipeFolderView: View {
     let onSave: (String, Data?) -> Void
 
     @State private var name = ""
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var coverImageData: Data?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField(L.text("Folder name", language: language), text: $name)
-
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                        HStack(spacing: 12) {
-                            folderCoverPreview
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(L.text("Choose Photo", language: language))
-                                    .font(.subheadline.weight(.semibold))
-                                Text(L.text("Used as the recipe folder cover.", language: language))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "photo")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
             }
             .navigationTitle(L.text("New Folder", language: language))
@@ -663,120 +640,60 @@ private struct AddRecipeFolderView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Save", language: language)) {
-                        onSave(name, coverImageData)
+                        onSave(name, nil)
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .task(id: selectedPhoto) {
-                await loadSelectedPhoto()
-            }
         }
-    }
-
-    @ViewBuilder
-    private var folderCoverPreview: some View {
-        if let coverImageData, let image = UIImage(data: coverImageData) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 74, height: 54)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.secondary.opacity(0.12))
-                .frame(width: 74, height: 54)
-                .overlay {
-                    Image(systemName: "photo.on.rectangle")
-                        .foregroundStyle(.secondary)
-                }
-        }
-    }
-
-    private func loadSelectedPhoto() async {
-        guard let selectedPhoto else { return }
-        guard let data = try? await selectedPhoto.loadTransferable(type: Data.self) else { return }
-        coverImageData = RecipeImageProcessor.jpegData(from: data, maxDimension: 900, compression: 0.70) ?? data
     }
 }
 
 private struct RecipeFolderBookHotspot: View {
     let title: String
     let subtitle: String
-    let coverImageData: Data?
     let row: Int
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Image("TableUpRecipeFolderTemplate")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+        HStack(spacing: 14) {
+            Image(systemName: row == 0 ? "books.vertical.fill" : "folder.fill")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(TableUpTheme.orange)
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.32))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                if let coverImageData, let image = UIImage(data: coverImageData) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: proxy.size.width * 0.331, height: proxy.size.height * 0.630)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .position(x: proxy.size.width * 0.300, y: proxy.size.height * 0.500)
-                        .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
-                } else {
-                    Image(systemName: "photo")
-                        .font(.title3)
-                        .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.42))
-                        .position(x: proxy.size.width * 0.300, y: proxy.size.height * 0.500)
-                }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
 
-                LinearGradient(
-                    colors: [
-                        Color.clear,
-                        Color.clear,
-                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.24)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-
-                HStack(spacing: 12) {
-                    Spacer()
-                        .frame(width: proxy.size.width * 0.52)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(title)
-                            .font(.system(size: 20, weight: .semibold, design: .serif))
-                            .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.72)
-
-                        HStack(spacing: 6) {
-                            Image(systemName: "books.vertical")
-                            Text(subtitle)
-                                .lineLimit(1)
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
-                    }
-                    .padding(.trailing, 38)
-
-                    Spacer(minLength: 0)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.82))
-                    .position(x: proxy.size.width * 0.90, y: proxy.size.height * 0.50)
+                Text(subtitle)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.72))
+                    .lineLimit(1)
             }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.72))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial.opacity(0.72))
+        .background(Color.white.opacity(0.28))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color(red: 0.78, green: 0.62, blue: 0.40).opacity(0.24), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.38), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.09), radius: 10, y: 5)
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 6)
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 
