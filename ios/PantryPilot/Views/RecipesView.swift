@@ -230,7 +230,7 @@ struct RecipesView: View {
                 Button {
                     folderPath.append(folder)
                 } label: {
-                    let cardWidth = min(width - 42, 360)
+                    let cardWidth = min(width - 72, 324)
                     RecipeFolderBookHotspot(
                         title: folder.name,
                         subtitle: folderSummary(for: folder),
@@ -719,15 +719,15 @@ private struct RecipeFolderBookHotspot: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: proxy.size.width * 0.345, height: proxy.size.height * 0.710)
+                        .frame(width: proxy.size.width * 0.331, height: proxy.size.height * 0.630)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .position(x: proxy.size.width * 0.265, y: proxy.size.height * 0.445)
+                        .position(x: proxy.size.width * 0.300, y: proxy.size.height * 0.500)
                         .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
                 } else {
                     Image(systemName: "photo")
                         .font(.title3)
                         .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.42))
-                        .position(x: proxy.size.width * 0.265, y: proxy.size.height * 0.445)
+                        .position(x: proxy.size.width * 0.300, y: proxy.size.height * 0.500)
                 }
 
                 LinearGradient(
@@ -746,7 +746,7 @@ private struct RecipeFolderBookHotspot: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text(title)
-                            .font(.system(size: 22, weight: .semibold, design: .serif))
+                            .font(.system(size: 20, weight: .semibold, design: .serif))
                             .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
@@ -773,9 +773,9 @@ private struct RecipeFolderBookHotspot: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color(red: 0.78, green: 0.62, blue: 0.40).opacity(0.42), lineWidth: 1)
+                .stroke(Color(red: 0.78, green: 0.62, blue: 0.40).opacity(0.24), lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.14), radius: 14, y: 8)
+        .shadow(color: .black.opacity(0.09), radius: 10, y: 5)
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
