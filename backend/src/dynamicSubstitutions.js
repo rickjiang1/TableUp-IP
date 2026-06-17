@@ -6,7 +6,14 @@ const automaticSubstitutionCapsBySubcategory = new Map([
   ["rhizome_aromatic", 0.69]
 ]);
 
-export function getSubstituteCandidates({ ingredientId, context = "general", rules, limit = 10, minimumScore = 0.55 }) {
+export function getSubstituteCandidates({
+  ingredientId,
+  context = "general",
+  rules,
+  limit = 10,
+  minimumScore = 0.55,
+  candidateIngredientIds = null
+}) {
   const sourceId = String(ingredientId || "").trim();
   if (!sourceId || !rules) {
     return [];
@@ -19,9 +26,10 @@ export function getSubstituteCandidates({ ingredientId, context = "general", rul
     return [];
   }
 
-  const verified = verifiedSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById });
+  const allowedCandidateIds = normalizeCandidateIngredientIds(candidateIngredientIds);
+  const verified = verifiedSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, allowedCandidateIds });
   const verifiedTargetIds = new Set(verified.map((candidate) => candidate.substituteIngredientId).filter(Boolean));
-  const dynamic = dynamicSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById })
+  const dynamic = dynamicSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, allowedCandidateIds })
     .filter((candidate) => !verifiedTargetIds.has(candidate.substituteIngredientId));
 
   return [...verified, ...dynamic]
@@ -70,10 +78,11 @@ function capRiskyDynamicSubstitutionScore(score, source, candidate, categories) 
   return clampScore(cap === undefined ? score : Math.min(score, cap));
 }
 
-function verifiedSubstituteCandidates({ source, context, rules, ingredientsById }) {
+function verifiedSubstituteCandidates({ source, context, rules, ingredientsById, allowedCandidateIds }) {
   return (rules.verifiedSubstitutions || [])
     .filter((row) => String(row.ingredient_id || "") === source.ingredient_id)
     .filter((row) => contextMatches(row.context, context))
+    .filter((row) => !allowedCandidateIds || allowedCandidateIds.has(String(row.substitute_ingredient_id || "")))
     .map((row) => {
       const substitute = ingredientsById.get(row.substitute_ingredient_id);
       const comboSlug = String(row.substitute_combo_slug || "").trim();
@@ -97,9 +106,13 @@ function verifiedSubstituteCandidates({ source, context, rules, ingredientsById 
     });
 }
 
-function dynamicSubstituteCandidates({ source, context, rules, ingredientsById }) {
+function dynamicSubstituteCandidates({ source, context, rules, ingredientsById, allowedCandidateIds }) {
   const candidates = [];
-  for (const candidate of ingredientsById.values()) {
+  const candidatePool = allowedCandidateIds
+    ? [...allowedCandidateIds].map((id) => ingredientsById.get(id)).filter(Boolean)
+    : [...ingredientsById.values()];
+
+  for (const candidate of candidatePool) {
     if (candidate.ingredient_id === source.ingredient_id) {
       continue;
     }
@@ -126,6 +139,21 @@ function dynamicSubstituteCandidates({ source, context, rules, ingredientsById }
     });
   }
   return candidates;
+}
+
+function normalizeCandidateIngredientIds(candidateIngredientIds) {
+  if (!candidateIngredientIds) {
+    return null;
+  }
+  const values = candidateIngredientIds instanceof Set
+    ? [...candidateIngredientIds]
+    : Array.isArray(candidateIngredientIds)
+      ? candidateIngredientIds
+      : [];
+  const normalized = values
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return normalized.length > 0 ? new Set(normalized) : null;
 }
 
 function scoreCategorySimilarity(source, candidate, categories) {

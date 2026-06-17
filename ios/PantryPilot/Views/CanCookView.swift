@@ -447,7 +447,7 @@ struct CloudRecipeMatcher {
         let url = baseURL.appending(path: "api/recipe-matches")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 20
+        request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CloudRecipeMatchRequest(inventory: inventory))
 

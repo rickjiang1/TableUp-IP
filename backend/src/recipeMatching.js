@@ -27,6 +27,7 @@ export async function matchRecipesForInventory(inventoryInput) {
 }
 
 function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
+  const inventoryIngredientIds = new Set(inventory.map((item) => item.ingredientId).filter(Boolean));
   const details = recipe.ingredients.map((ingredient) => {
     const recipeIngredientId = resolveRecipeIngredientId(ingredient, resolver);
     const exactItem = inventory.find((item) => !item.aliasMatched && item.ingredientId === recipeIngredientId);
@@ -40,7 +41,9 @@ function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
       return ingredientMatch(ingredient, aliasItem, "alias", 1);
     }
 
-    const candidates = substitutionProvider.getCandidates(recipeIngredientId, recipe.primaryCookingMethod);
+    const candidates = inventoryIngredientIds.size > 0
+      ? substitutionProvider.getCandidates(recipeIngredientId, recipe.primaryCookingMethod, inventoryIngredientIds)
+      : [];
     let bestSubstitute = null;
     for (const candidate of candidates) {
       const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
@@ -275,16 +278,18 @@ function dedupeUnknowns(items) {
 function buildSubstitutionProvider(rules) {
   const cache = new Map();
   return {
-    getCandidates(ingredientId, context) {
+    getCandidates(ingredientId, context, candidateIngredientIds = new Set()) {
       const normalizedContext = normalizeCookingMethods(context)[0] || "general";
-      const key = `${ingredientId}:${normalizedContext}`;
+      const candidateKey = [...candidateIngredientIds].sort().join(",");
+      const key = `${ingredientId}:${normalizedContext}:${candidateKey}`;
       if (!cache.has(key)) {
         cache.set(key, getSubstituteCandidates({
           ingredientId,
           context: normalizedContext,
           rules,
           limit: 25,
-          minimumScore: 0.70
+          minimumScore: 0.70,
+          candidateIngredientIds
         }).filter((candidate) => candidate.substituteIngredientId));
       }
       return cache.get(key);
