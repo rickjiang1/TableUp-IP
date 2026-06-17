@@ -317,18 +317,21 @@ final class RecipeFolder {
     var sourceRaw: String
     var parentId: String
     var name: String
+    @Attribute(.externalStorage) var coverImageData: Data?
     var createdAt: Date
 
     init(
         id: String = UUID().uuidString,
         source: RecipeSource = .user,
         parentId: String = "",
-        name: String
+        name: String,
+        coverImageData: Data? = nil
     ) {
         self.id = id
         self.sourceRaw = source.rawValue
         self.parentId = parentId
         self.name = name
+        self.coverImageData = coverImageData
         self.createdAt = .now
     }
 

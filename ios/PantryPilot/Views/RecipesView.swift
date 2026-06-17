@@ -14,7 +14,6 @@ struct RecipesView: View {
     @State private var folderPath: [RecipeFolder] = []
     @State private var showingAddRecipe = false
     @State private var showingAddFolder = false
-    @State private var newFolderName = ""
     @State private var isSyncing = false
     @State private var recipeAlert: RecipeAlertMessage?
     @State private var showingUnmatchedIngredients = false
@@ -105,15 +104,10 @@ struct RecipesView: View {
                     }
                 )
             }
-            .alert(L.text("New Folder", language: appLanguage), isPresented: $showingAddFolder) {
-                TextField(L.text("Folder name", language: appLanguage), text: $newFolderName)
-                Button(L.text("Cancel", language: appLanguage), role: .cancel) {
-                    newFolderName = ""
+            .sheet(isPresented: $showingAddFolder) {
+                AddRecipeFolderView(language: appLanguage) { name, coverImageData in
+                    saveFolder(name: name, coverImageData: coverImageData)
                 }
-                Button(L.text("Save", language: appLanguage)) {
-                    saveFolder()
-                }
-                .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .alert(item: $recipeAlert) { alert in
                 Alert(
@@ -239,9 +233,10 @@ struct RecipesView: View {
                     RecipeFolderBookHotspot(
                         title: folder.name,
                         subtitle: folderSummary(for: folder),
+                        coverImageData: folder.coverImageData,
                         row: index
                     )
-                    .frame(width: width * 0.76, height: 110)
+                    .frame(width: width * 0.84, height: 146)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
@@ -503,15 +498,16 @@ struct RecipesView: View {
         }
     }
 
-    private func saveFolder() {
-        let trimmedName = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func saveFolder(name: String, coverImageData: Data?) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
 
         modelContext.insert(
             RecipeFolder(
                 source: selectedSource,
                 parentId: currentFolderId,
-                name: trimmedName
+                name: trimmedName,
+                coverImageData: coverImageData
             )
         )
         do {
@@ -520,7 +516,6 @@ struct RecipesView: View {
         } catch {
             recipeAlert = RecipeAlertMessage(title: "Save failed", message: error.localizedDescription)
         }
-        newFolderName = ""
     }
 
     private func deleteFolders(_ indexSet: IndexSet) {
@@ -620,78 +615,178 @@ struct RecipeAlertMessage: Identifiable {
     let message: String
 }
 
+private struct AddRecipeFolderView: View {
+    @Environment(\.dismiss) private var dismiss
+    let language: String
+    let onSave: (String, Data?) -> Void
+
+    @State private var name = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var coverImageData: Data?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(L.text("Folder name", language: language), text: $name)
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        HStack(spacing: 12) {
+                            folderCoverPreview
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L.text("Choose Photo", language: language))
+                                    .font(.subheadline.weight(.semibold))
+                                Text(L.text("Used as the recipe folder cover.", language: language))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle(L.text("New Folder", language: language))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L.text("Cancel", language: language)) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L.text("Save", language: language)) {
+                        onSave(name, coverImageData)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .task(id: selectedPhoto) {
+                await loadSelectedPhoto()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var folderCoverPreview: some View {
+        if let coverImageData, let image = UIImage(data: coverImageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 74, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.secondary.opacity(0.12))
+                .frame(width: 74, height: 54)
+                .overlay {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundStyle(.secondary)
+                }
+        }
+    }
+
+    private func loadSelectedPhoto() async {
+        guard let selectedPhoto else { return }
+        guard let data = try? await selectedPhoto.loadTransferable(type: Data.self) else { return }
+        coverImageData = RecipeImageProcessor.jpegData(from: data, maxDimension: 900, compression: 0.70) ?? data
+    }
+}
+
 private struct RecipeFolderBookHotspot: View {
     let title: String
     let subtitle: String
+    let coverImageData: Data?
     let row: Int
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Image("TableUpRecipeBooksBackground")
+                Image("TableUpRecipeFolderTemplate")
                     .resizable()
                     .scaledToFill()
                     .frame(width: proxy.size.width, height: proxy.size.height)
-                    .scaleEffect(1.08 + CGFloat(row) * 0.02)
-                    .offset(x: CGFloat(row) * -18, y: CGFloat(row) * -12)
                     .clipped()
+
+                if let coverImageData, let image = UIImage(data: coverImageData) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: proxy.size.width * 0.36, height: proxy.size.height * 0.76)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .position(x: proxy.size.width * 0.315, y: proxy.size.height * 0.45)
+                        .shadow(color: .black.opacity(0.16), radius: 5, y: 3)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(red: 0.95, green: 0.88, blue: 0.74))
+                        .frame(width: proxy.size.width * 0.36, height: proxy.size.height * 0.76)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.title3)
+                                .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.46))
+                        }
+                        .position(x: proxy.size.width * 0.315, y: proxy.size.height * 0.45)
+                }
+
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(red: 0.96, green: 0.90, blue: 0.78).opacity(0.94))
+                    .frame(width: proxy.size.width * 0.39, height: proxy.size.height * 0.68)
+                    .position(x: proxy.size.width * 0.70, y: proxy.size.height * 0.48)
 
                 LinearGradient(
                     colors: [
-                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.82),
-                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.42),
-                        Color(red: 0.18, green: 0.10, blue: 0.05).opacity(0.20)
+                        Color.clear,
+                        Color.clear,
+                        Color(red: 0.98, green: 0.91, blue: 0.76).opacity(0.24)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
 
                 HStack(spacing: 12) {
-                    VStack(spacing: 5) {
+                    Spacer()
+                        .frame(width: proxy.size.width * 0.52)
+
+                    VStack(alignment: .leading, spacing: 10) {
                         Text(title)
                             .font(.system(size: 22, weight: .semibold, design: .serif))
                             .foregroundStyle(Color(red: 0.25, green: 0.15, blue: 0.08))
-                            .lineLimit(3)
-                            .multilineTextAlignment(.center)
-                            .minimumScaleFactor(0.68)
-                            .frame(width: 62)
-
-                        Image(systemName: "seal.fill")
-                            .font(.caption2)
-                            .foregroundStyle(TableUpTheme.orange.opacity(0.82))
-                    }
-                    .padding(.leading, 2)
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 6) {
-                        Text(title)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color(red: 0.24, green: 0.14, blue: 0.08))
                             .lineLimit(1)
+                            .minimumScaleFactor(0.72)
 
-                        Text(subtitle)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
-                            .lineLimit(1)
-
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(TableUpTheme.orange.opacity(0.92))
+                        HStack(spacing: 6) {
+                            Image(systemName: "books.vertical")
+                            Text(subtitle)
+                                .lineLimit(1)
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color(red: 0.34, green: 0.24, blue: 0.16).opacity(0.76))
                     }
-                    .padding(.trailing, 12)
+                    .padding(.trailing, 42)
+
+                    Spacer(minLength: 0)
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 10)
+
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color(red: 0.48, green: 0.35, blue: 0.20).opacity(0.82))
+                    .position(x: proxy.size.width * 0.90, y: proxy.size.height * 0.50)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.50), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(red: 0.78, green: 0.62, blue: 0.40).opacity(0.42), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.14), radius: 14, y: 8)
-        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
