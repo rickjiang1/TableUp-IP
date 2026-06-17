@@ -1266,8 +1266,7 @@ struct KaifanView: View {
             Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: height + 130)
-                .offset(y: 44)
+                .frame(width: width, height: height)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1303,35 +1302,7 @@ struct KaifanView: View {
     }
 
     private func cookHero(width: CGFloat, height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 8) {
-                        Text("今天吃什么")
-                            .font(.custom("Kaiti SC", size: 44).weight(.bold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
-                        Text("膳")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(TableUpTheme.orange)
-                            .padding(4)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 2)
-                                    .stroke(TableUpTheme.orange.opacity(0.8), lineWidth: 1)
-                            )
-                    }
-                    Text("烟火已起 开饭正当时")
-                        .font(.custom("Kaiti SC", size: 22).weight(.medium))
-                        .foregroundStyle(Color.white.opacity(0.90))
-                }
-
-                Spacer()
-            }
-            .padding(.top, 76)
-            .padding(.horizontal, 26)
-
-            Spacer(minLength: 0)
-        }
+        Spacer(minLength: 0)
         .frame(width: width, height: min(height * 0.47, 430), alignment: .topLeading)
     }
 
