@@ -1266,7 +1266,8 @@ struct KaifanView: View {
             Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: height)
+                .frame(width: width, height: height * 1.12)
+                .offset(y: 18)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1292,7 +1293,7 @@ struct KaifanView: View {
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
                 }
-                .padding(.bottom, 108)
+                .padding(.bottom, 28)
             }
             .scrollIndicators(.hidden)
 
