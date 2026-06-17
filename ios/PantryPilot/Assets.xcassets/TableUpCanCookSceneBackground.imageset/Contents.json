@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "tableup-can-cook-scene-background.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

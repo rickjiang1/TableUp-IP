@@ -1277,7 +1277,7 @@ struct KaifanView: View {
             Color(red: 0.22, green: 0.13, blue: 0.06)
                 .ignoresSafeArea()
 
-            Image("TableUpKaifanSceneBackground")
+            Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
                 .frame(width: width, height: min(height * 0.58, 540))
