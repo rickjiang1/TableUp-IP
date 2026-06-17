@@ -11,15 +11,21 @@ enum TableUpTheme {
     static let orange = Color(red: 0.96, green: 0.56, blue: 0.25)
     static let softOrange = Color(red: 1.0, green: 0.68, blue: 0.42)
     static let jade = Color(red: 0.42, green: 0.72, blue: 0.50)
+    static let warningRed = Color(red: 0.93, green: 0.30, blue: 0.22)
     static let inkText = Color(red: 0.96, green: 0.92, blue: 0.85)
     static let mutedText = Color(red: 0.72, green: 0.68, blue: 0.61)
 }
 
 struct YouliaoView: View {
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
     @State private var showingAddFood = false
+    @State private var showingBasketMenu = false
+    @State private var showingIngredientMatcher = false
+    @State private var showingClearConfirmation = false
+    @State private var cabinetOpen = false
     @State private var locationFilter: YouliaoLocationFilter = .all
     
     private var expiringSoonCount: Int {
@@ -38,29 +44,331 @@ struct YouliaoView: View {
             .filter { locationFilter.includes($0.location) }
             .sorted(by: pantrySort)
     }
+
+    private var unmatchedInventoryCount: Int {
+        ingredients.filter {
+            $0.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                TableUpTheme.background.ignoresSafeArea()
+        GeometryReader { proxy in
+            NavigationStack {
+                let width = proxy.size.width
+                let height = proxy.size.height
                 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        hero
-                        locationPicker
-                        inventoryList
+                ZStack(alignment: .top) {
+                    Image("TableUpYouliaoMockBackground")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: width, height: height)
+                        .clipped()
+                        .allowsHitTesting(false)
+                    
+                    VStack {
+                        Spacer()
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                TableUpTheme.background.opacity(0.86),
+                                TableUpTheme.background
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 190)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
-                    .padding(.bottom, 150)
+                    .allowsHitTesting(false)
+                    
+                    if cabinetOpen || showingBasketMenu {
+                        Button {
+                            closeFloatingPanels()
+                        } label: {
+                            Rectangle()
+                                .fill(Color.black.opacity(showingBasketMenu ? 0.18 : 0.001))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .ignoresSafeArea()
+                        .zIndex(3)
+                    }
+                    
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            cabinetOpen = false
+                            showingBasketMenu = true
+                        }
+                    } label: {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.001))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: width * 0.88, height: height * 0.27)
+                    .position(x: width * 0.43, y: height * 0.43)
+                    .zIndex(2)
+                    .accessibilityLabel("添加食材")
+                    
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            showingBasketMenu = false
+                            cabinetOpen.toggle()
+                        }
+                    } label: {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.001))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: width * 0.88, height: height * 0.26)
+                    .position(x: width * 0.45, y: height * 0.70)
+                    .zIndex(2)
+                    .accessibilityLabel("查看库存")
+                    
+                    if cabinetOpen {
+                        VStack(alignment: .leading, spacing: 14) {
+                            overview
+                            inventorySectionHeader
+                            locationPicker
+                            
+                            inventoryList
+                        }
+                        .padding(16)
+                        .frame(height: height * 0.78)
+                        .background(Color.black.opacity(0.78))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(TableUpTheme.cardStroke, lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .padding(.horizontal, 18)
+                        .padding(.top, max(58, height * 0.14))
+                        .padding(.bottom, 72)
+                        .zIndex(4)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        
+                        Button {
+                            showingIngredientMatcher = true
+                        } label: {
+                            matchBellButton
+                        }
+                        .buttonStyle(.plain)
+                        .position(x: width - 48, y: max(132, height * 0.22))
+                        .zIndex(5)
+                        .accessibilityLabel(L.text("Match ingredient library", language: appLanguage))
+                    }
+                    
+                    if showingBasketMenu {
+                        basketMenu
+                            .padding(.horizontal, 34)
+                            .padding(.top, height * 0.33)
+                            .zIndex(5)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                    }
+                    
                 }
-                .scrollIndicators(.hidden)
+                .frame(width: width, height: height, alignment: .top)
+                .clipped()
+                .ignoresSafeArea()
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .navigationBarHidden(true)
+                .sheet(isPresented: $showingAddFood) {
+                    ScanView()
+                }
+                .sheet(isPresented: $showingIngredientMatcher) {
+                    StorageView(initialTab: .unmatched, showsTabPicker: false)
+                }
+                .confirmationDialog(
+                    L.text("Clear all storage?", language: appLanguage),
+                    isPresented: $showingClearConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(L.text("Clear All", language: appLanguage), role: .destructive) {
+                        clearAllIngredients()
+                    }
+                    Button(L.text("Cancel", language: appLanguage), role: .cancel) {}
+                } message: {
+                    Text(L.text("This will remove every saved ingredient.", language: appLanguage))
+                }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingAddFood) {
-                ScanView()
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            .ignoresSafeArea()
+        }
+    }
+    
+    private func closeFloatingPanels() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            showingBasketMenu = false
+            cabinetOpen = false
+        }
+    }
+
+    private var matchBellButton: some View {
+        ZStack(alignment: .topTrailing) {
+            Image("TableUpMatchBell")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 62, height: 62)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(unmatchedInventoryCount > 0 ? TableUpTheme.warningRed.opacity(0.74) : Color.white.opacity(0.20), lineWidth: unmatchedInventoryCount > 0 ? 2 : 1)
+                )
+                .shadow(
+                    color: unmatchedInventoryCount > 0 ? TableUpTheme.warningRed.opacity(0.50) : TableUpTheme.orange.opacity(0.30),
+                    radius: unmatchedInventoryCount > 0 ? 24 : 16,
+                    y: 7
+                )
+                .contentShape(Circle())
+            
+            if unmatchedInventoryCount > 0 {
+                Text("\(min(unmatchedInventoryCount, 99))")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                    .frame(minWidth: 20, minHeight: 20)
+                    .padding(.horizontal, unmatchedInventoryCount > 9 ? 4 : 0)
+                    .background(TableUpTheme.warningRed)
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.72), lineWidth: 1)
+                    )
+                    .offset(x: 4, y: -4)
             }
+        }
+    }
+    
+    private var basketMenu: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("收纳食材")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(TableUpTheme.inkText)
+                    Text("选择一种方式添加")
+                        .font(.footnote)
+                        .foregroundStyle(TableUpTheme.mutedText)
+                }
+                
+                Spacer()
+                
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        showingBasketMenu = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(TableUpTheme.inkText.opacity(0.84))
+                        .frame(width: 30, height: 30)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, 18)
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                basketMenuButton(title: "拍照识别", subtitle: "拍照识别食材", icon: "camera.fill")
+                basketMenuButton(title: "相册自选", subtitle: "从照片选择", icon: "photo.on.rectangle")
+                basketMenuButton(title: "手动录入", subtitle: "手动添加食材", icon: "pencil")
+                basketMenuButton(title: "语音输入", subtitle: "语音识别食材", icon: "mic.fill")
+            }
+        }
+        .padding(18)
+        .background(.ultraThinMaterial.opacity(0.92))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.34), radius: 22, y: 14)
+    }
+    
+    private func basketMenuButton(title: String, subtitle: String, icon: String) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showingBasketMenu = false
+            }
+            showingAddFood = true
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(TableUpTheme.softOrange)
+                    .frame(width: 38, height: 38)
+                    .background(TableUpTheme.softOrange.opacity(0.14))
+                    .clipShape(Circle())
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(TableUpTheme.inkText)
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(TableUpTheme.mutedText)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 116, alignment: .topLeading)
+            .padding(14)
+            .background(Color.black.opacity(0.18))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private func youliaoFullBleedBackground(width: CGFloat, height: CGFloat) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.045, green: 0.040, blue: 0.034),
+                    Color(red: 0.075, green: 0.064, blue: 0.052),
+                    TableUpTheme.background
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            RadialGradient(
+                colors: [
+                    TableUpTheme.softOrange.opacity(0.18),
+                    Color.clear
+                ],
+                center: UnitPoint(x: 0.84, y: 0.16),
+                startRadius: 20,
+                endRadius: 360
+            )
+            
+            LinearGradient(
+                colors: [Color.clear, Color.black.opacity(0.38)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+        }
+        .frame(width: width, height: height)
+    }
+    
+    private var youliaoTitle: some View {
+        HStack(alignment: .top, spacing: 24) {
+            Text("有\n料")
+                .font(.system(size: 58, weight: .regular, design: .serif))
+                .foregroundStyle(TableUpTheme.inkText)
+                .lineSpacing(4)
+                .fixedSize()
+            
+            Text("知\n食\n材\n·\n善\n料\n理")
+                .font(.system(size: 15, weight: .regular, design: .serif))
+                .foregroundStyle(TableUpTheme.mutedText)
+                .lineSpacing(6)
+                .fixedSize()
         }
     }
     
@@ -148,22 +456,23 @@ struct YouliaoView: View {
     }
     
     private var overview: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 12) {
             HStack(spacing: 14) {
                 overviewMetric(value: "\(ingredients.count)", label: "食材总数")
                 Divider().overlay(Color.white.opacity(0.12))
                 overviewMetric(value: "\(expiringSoonCount)", label: "即将过期")
             }
-            .frame(height: 74)
+            .frame(height: 58)
             
             HStack(spacing: 10) {
                 locationMiniMetric(.fridge)
                 locationMiniMetric(.freezer)
                 locationMiniMetric(.room)
             }
+            .frame(height: 62)
         }
-        .padding(18)
-        .background(Color.black.opacity(0.38))
+        .padding(14)
+        .background(Color.black.opacity(0.46))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(TableUpTheme.cardStroke, lineWidth: 1)
@@ -172,22 +481,124 @@ struct YouliaoView: View {
         .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
     }
     
+    private var groceryBasket: some View {
+        Button {
+            showingBasketMenu = true
+        } label: {
+            HStack(alignment: .center, spacing: 16) {
+                Image("TableUpBasketObject")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 252, height: 216)
+                    .accessibilityHidden(true)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(basketTitle)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(TableUpTheme.inkText)
+                    Text(basketSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(TableUpTheme.mutedText)
+                    if !ingredients.isEmpty {
+                        Text("\(ingredients.count) 种")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TableUpTheme.softOrange)
+                            .padding(.top, 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 10)
+            }
+            .frame(maxWidth: .infinity, minHeight: 218, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var basketTitle: String {
+        if ingredients.isEmpty { return "收纳食材" }
+        if ingredients.count >= 12 { return "篮子已满" }
+        return "待收纳食材"
+    }
+    
+    private var basketSubtitle: String {
+        if ingredients.isEmpty { return "添加新食材" }
+        if ingredients.count >= 12 { return "整理后可放入橱柜" }
+        return "\(ingredients.count) 种食材待整理"
+    }
+    
+    private var inventoryCabinet: some View {
+        VStack(spacing: 14) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    cabinetOpen.toggle()
+                }
+            } label: {
+                HStack(alignment: .center, spacing: 16) {
+                    Image(cabinetOpen ? "TableUpCabinetOpen" : "TableUpCabinetObject")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: cabinetOpen ? 210 : 238, height: cabinetOpen ? 236 : 250)
+                        .accessibilityHidden(true)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(cabinetOpen ? "橱柜已打开" : "查看库存")
+                            .font(.title2.weight(.semibold))
+                            .foregroundStyle(TableUpTheme.inkText)
+                        Text(cabinetOpen ? "按分类查看已有食材" : "管理已有食材库存")
+                            .font(.footnote)
+                            .foregroundStyle(TableUpTheme.mutedText)
+                        Text("\(ingredients.count) 种 · 即将过期 \(expiringSoonCount)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TableUpTheme.softOrange)
+                        
+                        Image(systemName: cabinetOpen ? "chevron.up" : "chevron.down")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(TableUpTheme.inkText.opacity(0.88))
+                            .padding(.top, 8)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 8)
+                }
+                .frame(maxWidth: .infinity, minHeight: cabinetOpen ? 252 : 260, alignment: .leading)
+                .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            
+            if cabinetOpen {
+                VStack(alignment: .leading, spacing: 14) {
+                    overview
+                    inventorySectionHeader
+                    locationPicker
+                    inventoryList
+                }
+                .padding(16)
+                .background(Color.black.opacity(0.34))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(TableUpTheme.cardStroke, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+        }
+    }
+    
     private func overviewMetric(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(TableUpTheme.mutedText)
             Text(value)
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .font(.system(size: 30, weight: .semibold, design: .rounded))
                 .foregroundStyle(TableUpTheme.inkText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private func locationMiniMetric(_ filter: YouliaoLocationFilter) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             Image(systemName: filter.icon)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(TableUpTheme.softOrange)
             Text(filter.shortTitle(language: appLanguage))
                 .font(.caption2)
@@ -197,7 +608,7 @@ struct YouliaoView: View {
                 .foregroundStyle(TableUpTheme.inkText)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
         .background(Color.white.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -219,6 +630,38 @@ struct YouliaoView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+    
+    private var inventorySectionHeader: some View {
+        HStack {
+            Text("库存")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(TableUpTheme.inkText)
+            Spacer()
+            Button(role: .destructive) {
+                showingClearConfirmation = true
+            } label: {
+                Label(L.text("Clear All", language: appLanguage), systemImage: "trash")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TableUpTheme.warningRed)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(TableUpTheme.warningRed.opacity(0.14))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(ingredients.isEmpty)
+            .accessibilityLabel(L.text("Clear All", language: appLanguage))
+
+            Text("\(filteredIngredients.count) 种")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TableUpTheme.softOrange)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(TableUpTheme.softOrange.opacity(0.14))
+                .clipShape(Capsule())
+        }
+        .padding(.top, 4)
     }
 
 private struct YouliaoScene: View {
@@ -303,38 +746,63 @@ private struct SpotlightShape: Shape {
     @ViewBuilder
     private var inventoryList: some View {
         if filteredIngredients.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "takeoutbag.and.cup.and.straw")
-                    .font(.largeTitle)
-                    .foregroundStyle(TableUpTheme.mutedText)
-                Text("还没有食材")
-                    .font(.headline)
-                    .foregroundStyle(TableUpTheme.inkText)
-                Text("拍照或手动添加后会显示在这里")
-                    .font(.footnote)
-                    .foregroundStyle(TableUpTheme.mutedText)
+            List {
+                HStack(spacing: 12) {
+                    Image(systemName: "takeoutbag.and.cup.and.straw")
+                        .font(.title2)
+                        .foregroundStyle(TableUpTheme.mutedText)
+                        .frame(width: 42, height: 42)
+                        .background(Color.white.opacity(0.055))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("还没有食材")
+                            .font(.headline)
+                            .foregroundStyle(TableUpTheme.inkText)
+                        Text("拍照或手动添加后会显示在这里")
+                            .font(.footnote)
+                            .foregroundStyle(TableUpTheme.mutedText)
+                    }
+                    
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(14)
+                .background(TableUpTheme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
-            .frame(maxWidth: .infinity)
-            .padding(28)
-            .background(TableUpTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
         } else {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("库存")
-                    .font(.headline)
-                    .foregroundStyle(TableUpTheme.inkText)
-                
-                VStack(spacing: 10) {
-                    ForEach(filteredIngredients) { ingredient in
-                        NavigationLink {
-                            IngredientDetailView(ingredient: ingredient)
+            List {
+                ForEach(filteredIngredients) { ingredient in
+                    NavigationLink {
+                        IngredientDetailView(ingredient: ingredient)
+                    } label: {
+                        YouliaoIngredientRow(ingredient: ingredient)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            deleteIngredient(ingredient)
                         } label: {
-                            YouliaoIngredientRow(ingredient: ingredient)
+                            Label(L.text("Delete", language: appLanguage), systemImage: "trash")
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
         }
     }
     
@@ -354,6 +822,20 @@ private struct SpotlightShape: Shape {
             return lhs.expireDate < rhs.expireDate
         }
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private func deleteIngredient(_ ingredient: StoredIngredient) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            modelContext.delete(ingredient)
+            try? modelContext.save()
+        }
+    }
+
+    private func clearAllIngredients() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            ingredients.forEach(modelContext.delete)
+            try? modelContext.save()
+        }
     }
 }
 
@@ -379,7 +861,7 @@ private struct YouliaoIngredientRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(ingredient.name)
                     .font(.headline)
-                    .foregroundStyle(TableUpTheme.inkText)
+                    .foregroundStyle(isUnmatched ? TableUpTheme.warningRed : TableUpTheme.inkText)
                     .lineLimit(1)
                 
                 HStack(spacing: 8) {
@@ -419,6 +901,179 @@ private struct YouliaoIngredientRow: View {
         case .freezer: return Color.cyan.opacity(0.16)
         case .pantry, .counter: return Color.orange.opacity(0.15)
         }
+    }
+
+    private var isUnmatched: Bool {
+        ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct BasketIllustration: View {
+    let isFilled: Bool
+    
+    var body: some View {
+        ZStack {
+            if isFilled {
+                HStack(spacing: -7) {
+                    Image(systemName: "leaf.fill")
+                        .foregroundStyle(Color.green.opacity(0.72))
+                        .rotationEffect(.degrees(-20))
+                    Image(systemName: "carrot.fill")
+                        .foregroundStyle(TableUpTheme.softOrange)
+                        .rotationEffect(.degrees(12))
+                    Image(systemName: "circle.fill")
+                        .foregroundStyle(Color(red: 0.86, green: 0.25, blue: 0.18).opacity(0.86))
+                    Image(systemName: "leaf.fill")
+                        .foregroundStyle(Color.green.opacity(0.78))
+                        .rotationEffect(.degrees(24))
+                }
+                .font(.system(size: 28))
+                .offset(y: -18)
+            }
+            
+            BasketHandle()
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.72, green: 0.46, blue: 0.24),
+                            Color(red: 0.42, green: 0.24, blue: 0.11)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    style: StrokeStyle(lineWidth: 7, lineCap: .round)
+                )
+                .frame(width: 88, height: 58)
+                .offset(y: -18)
+            
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.55, green: 0.34, blue: 0.17),
+                            Color(red: 0.31, green: 0.17, blue: 0.08)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 112, height: 54)
+                .overlay(
+                    VStack(spacing: 6) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Capsule()
+                                .fill(Color(red: 0.78, green: 0.52, blue: 0.28).opacity(0.38))
+                                .frame(height: 4)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                )
+                .offset(y: 20)
+                .shadow(color: .black.opacity(0.28), radius: 10, y: 6)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+private struct BasketHandle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY),
+            control: CGPoint(x: rect.midX, y: rect.minY)
+        )
+        return path
+    }
+}
+
+private struct CabinetIllustration: View {
+    let isOpen: Bool
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(red: 0.20, green: 0.12, blue: 0.065))
+                .frame(width: 118, height: 104)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color(red: 0.64, green: 0.42, blue: 0.22).opacity(0.55), lineWidth: 2)
+                )
+            
+            if isOpen {
+                VStack(spacing: 16) {
+                    cabinetShelf(label: "冷藏", count: 0)
+                    cabinetShelf(label: "常温", count: 0)
+                }
+                .frame(width: 86)
+                
+                HStack {
+                    CabinetDoor()
+                        .fill(Color(red: 0.35, green: 0.20, blue: 0.10))
+                        .frame(width: 34, height: 104)
+                        .rotation3DEffect(.degrees(-24), axis: (x: 0, y: 1, z: 0), anchor: .trailing)
+                    Spacer()
+                    CabinetDoor()
+                        .fill(Color(red: 0.35, green: 0.20, blue: 0.10))
+                        .frame(width: 34, height: 104)
+                        .rotation3DEffect(.degrees(24), axis: (x: 0, y: 1, z: 0), anchor: .leading)
+                }
+                .frame(width: 132)
+            } else {
+                HStack(spacing: 2) {
+                    cabinetClosedDoor
+                    cabinetClosedDoor
+                }
+                .frame(width: 104, height: 92)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+    
+    private var cabinetClosedDoor: some View {
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.42, green: 0.24, blue: 0.12),
+                        Color(red: 0.25, green: 0.14, blue: 0.07)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                Circle()
+                    .fill(Color(red: 0.86, green: 0.62, blue: 0.34).opacity(0.62))
+                    .frame(width: 8, height: 8)
+                    .offset(x: 18)
+            )
+    }
+    
+    private func cabinetShelf(label: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+            Text("\(count)")
+                .font(.caption2.weight(.bold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(TableUpTheme.inkText.opacity(0.86))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color(red: 0.46, green: 0.30, blue: 0.16).opacity(0.50))
+        .clipShape(Capsule())
+    }
+}
+
+private struct CabinetDoor: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: 6, height: 6))
+        return path
     }
 }
 
@@ -525,133 +1180,256 @@ struct KaifanView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            ZStack {
-                KaifanPageBackground().ignoresSafeArea()
+        GeometryReader { proxy in
+            NavigationStack {
+                let width = proxy.size.width
+                let height = proxy.size.height
+                let panelTop = min(510, height * 0.55)
+                let contentTop = panelTop + 104
                 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        hero
-                        filterBar
-                        content
+                ZStack(alignment: .top) {
+                    kaifanFullBleedBackground(width: width, height: height)
+                    
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.96),
+                                    Color(red: 0.91, green: 0.86, blue: 0.78).opacity(0.98)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: width, height: max(0, height - panelTop - 58))
+                        .offset(y: panelTop + 58)
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            Color.clear
+                                .frame(height: contentTop)
+                            
+                            matchHeader
+                            content
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 150)
+                        .frame(width: width, alignment: .leading)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
-                    .padding(.bottom, 150)
+                    .scrollIndicators(.hidden)
+                    
+                    kaifanTitle
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 56)
+                        .padding(.top, 144)
+                    
+                    HStack {
+                        Spacer()
+                        Button {
+                            showingRecipes = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 21, weight: .medium))
+                                .foregroundStyle(Color.black.opacity(0.74))
+                                .frame(width: 44, height: 44)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("全部食谱")
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.top, 62)
+                    
+                    matchRecipeButton
+                        .padding(.horizontal, 88)
+                        .offset(y: max(396, panelTop - 76))
+                    
+                    kaifanFilterPanel
+                        .padding(.horizontal, 22)
+                        .offset(y: panelTop)
                 }
-                .scrollIndicators(.hidden)
+                .frame(width: width, height: height, alignment: .top)
+                .clipped()
+                .ignoresSafeArea()
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
+                .sheet(isPresented: $showingRecipes) {
+                    RecipesView()
+                }
             }
-            .navigationBarTitleDisplayMode(.inline)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            .ignoresSafeArea()
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingRecipes) {
-                RecipesView()
-            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .navigationBarHidden(true)
         }
     }
     
-    private var hero: some View {
-        VStack(spacing: 16) {
-            ZStack(alignment: .topLeading) {
-                KaifanHeroScene(recipe: featuredRecipe)
-                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("开饭")
-                            .font(.system(size: 66, weight: .semibold, design: .serif))
-                            .foregroundStyle(Color(red: 0.12, green: 0.105, blue: 0.09))
-                        
-                        Text("寻好味 · 开一席")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(Color.black.opacity(0.52))
-                            .tracking(3)
-                    }
-                    
-                    Spacer()
-                    
-                    Button {
-                        showingRecipes = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                            .font(.title3)
-                            .foregroundStyle(Color.black.opacity(0.66))
-                            .frame(width: 42, height: 42)
-                            .background(Color.white.opacity(0.58))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("全部食谱")
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 96)
-                
-                VStack {
-                    Spacer()
-                    HStack(spacing: 12) {
-                        KaifanQuickStat(icon: "checkmark.seal.fill", value: "\(readyCount)", label: "可做")
-                        KaifanQuickStat(icon: "sparkles", value: "\(almostCount)", label: "差一点")
-                        KaifanQuickStat(icon: "leaf.fill", value: "\(expiringSoonCount)", label: "快过期")
-                    }
-                    .padding(14)
-                    .background(Color.white.opacity(0.74))
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .shadow(color: .black.opacity(0.08), radius: 16, y: 8)
-                    .padding(.horizontal, 18)
-                    .offset(y: 44)
-                }
-            }
-            .frame(height: 430)
+    private func kaifanFullBleedBackground(width: CGFloat, height: CGFloat) -> some View {
+        let imageHeight = min(670, height * 0.72)
+        
+        return ZStack {
+            Color(red: 0.96, green: 0.93, blue: 0.88)
+                .ignoresSafeArea()
             
-            Button {
-                Task { await refreshCloudMatches() }
-            } label: {
-                HStack(spacing: 10) {
-                    if isRefreshing {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "wand.and.stars")
-                    }
-                    Text("匹配菜谱")
-                        .font(.headline.weight(.semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(TableUpTheme.orange)
-                .clipShape(Capsule())
-                .shadow(color: TableUpTheme.orange.opacity(0.25), radius: 20, y: 9)
-            }
-            .buttonStyle(.plain)
-            .disabled(isRefreshing)
-            .padding(.top, 42)
+            Image("TableUpMealBackground")
+                .resizable()
+                .scaledToFill()
+                .frame(width: width, height: imageHeight)
+                .clipped()
+                .frame(width: width, height: height, alignment: .top)
+            
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.20),
+                    Color.white.opacity(0.00),
+                    Color.white.opacity(0.16)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            LinearGradient(
+                colors: [
+                    Color.clear,
+                    Color.clear,
+                    Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.62)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
+        .frame(width: width, height: height)
     }
 
     private var featuredRecipe: Recipe? {
         recipes.first { $0.imageThumbnailData != nil || $0.imageData != nil } ?? recipes.first
     }
     
-    private var filterBar: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(KaifanFilter.allCases) { filter in
-                    Button {
-                        selectedFilter = filter
-                    } label: {
-                        Text(filter.title(language: appLanguage))
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(selectedFilter == filter ? .white : Color.black.opacity(0.62))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(selectedFilter == filter ? TableUpTheme.orange : Color.white.opacity(0.58))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
+    private var kaifanTitle: some View {
+        HStack(alignment: .top, spacing: 22) {
+            Text("开\n饭")
+                .font(.system(size: 62, weight: .regular, design: .serif))
+                .foregroundStyle(Color(red: 0.10, green: 0.09, blue: 0.075))
+                .lineSpacing(2)
+                .fixedSize()
+            
+            Text("寻\n好\n味\n·\n开\n一\n席")
+                .font(.system(size: 16, weight: .regular, design: .serif))
+                .foregroundStyle(Color.black.opacity(0.58))
+                .lineSpacing(7)
+                .fixedSize()
         }
-        .scrollIndicators(.hidden)
+    }
+    
+    private var kaifanFilterPanel: some View {
+        HStack(spacing: 0) {
+            kaifanFilterButton(.ready, icon: "camera.viewfinder", value: readyCount)
+            kaifanFilterButton(.almost, icon: "sparkles", value: almostCount)
+            kaifanFilterButton(.all, icon: "square.grid.2x2", value: recipes.count)
+            kaifanFilterButton(.favorite, icon: "star", value: 0)
+        }
+        .padding(.vertical, 18)
+        .padding(.horizontal, 10)
+        .background(.ultraThinMaterial)
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.white.opacity(0.65), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(0.14), radius: 18, y: 10)
+    }
+
+    private func kaifanFilterButton(_ filter: KaifanFilter, icon: String, value: Int) -> some View {
+        Button {
+            selectedFilter = filter
+        } label: {
+            VStack(spacing: 7) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(selectedFilter == filter ? TableUpTheme.orange : Color.black.opacity(0.70))
+                    .frame(width: 42, height: 42)
+                    .background(
+                        Circle()
+                            .fill(selectedFilter == filter ? TableUpTheme.orange.opacity(0.13) : Color.white.opacity(0.26))
+                    )
+                
+                Text(filter.title(language: appLanguage))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.black.opacity(0.76))
+                
+                HStack(spacing: 2) {
+                    Text("\(value)")
+                        .foregroundStyle(TableUpTheme.orange)
+                    Text("道")
+                        .foregroundStyle(Color.black.opacity(0.38))
+                }
+                .font(.caption2.weight(.medium))
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var matchHeader: some View {
+        HStack(spacing: 12) {
+            Text("今日推荐")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.black.opacity(0.78))
+            
+            Spacer()
+            
+            Button {
+                Task { await refreshCloudMatches() }
+            } label: {
+                HStack(spacing: 6) {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Color.black.opacity(0.36))
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    Text("换一换")
+                }
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.black.opacity(0.32))
+            }
+            .buttonStyle(.plain)
+            .disabled(isRefreshing)
+        }
+    }
+    
+    private var matchRecipeButton: some View {
+        Button {
+            Task { await refreshCloudMatches() }
+        } label: {
+            HStack(spacing: 10) {
+                if isRefreshing {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "wand.and.stars")
+                }
+                Text("匹配菜谱")
+                    .font(.headline.weight(.semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                LinearGradient(
+                    colors: [TableUpTheme.softOrange, TableUpTheme.orange],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(Capsule())
+            .shadow(color: TableUpTheme.orange.opacity(0.22), radius: 18, y: 8)
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
     }
     
     @ViewBuilder

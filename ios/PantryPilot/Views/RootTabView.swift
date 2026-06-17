@@ -15,14 +15,16 @@ struct RootTabView: View {
                     SettingsView()
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                Color.clear.frame(height: 104)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             
             TableUpBottomNavigation(selectedTab: $selectedTab)
                 .padding(.horizontal, 26)
                 .padding(.bottom, 12)
         }
+        .background(TableUpTheme.background.ignoresSafeArea())
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(edges: .bottom)
+        .statusBarHidden(selectedTab == .pantry)
     }
 }
 

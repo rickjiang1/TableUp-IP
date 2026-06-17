@@ -356,6 +356,8 @@ struct DetectedIngredient: Identifiable {
     var unit: String
     var category: IngredientCategory
     var location: StorageLocation
+    var enteredDate: Date = .now
+    var expireDate: Date?
 
     var storedIngredient: StoredIngredient {
         ingredientInput.storedIngredient
@@ -369,7 +371,9 @@ struct DetectedIngredient: Identifiable {
             quantity: quantity,
             unit: IngredientUnit.normalizedSelection(for: unit),
             category: category,
-            location: location
+            location: location,
+            enteredDate: enteredDate,
+            expireDate: expireDate
         )
     }
 
@@ -552,6 +556,7 @@ struct DetectedItemsReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var isSaving = false
+    @State private var unitConversionsByItem: [UUID: [IngredientUnitConversionRule]] = [:]
     let save: () async -> Void
 
     var body: some View {
@@ -575,17 +580,6 @@ struct DetectedItemsReviewView: View {
                                 .foregroundStyle(.secondary)
                             TextField(L.text("Description", language: appLanguage), text: $item.description, axis: .vertical)
                                 .lineLimit(2...4)
-                        }
-
-                        if !item.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(L.text("Original detected text", language: appLanguage))
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(item.sourceText)
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
                         }
 
                         if !item.canonicalIngredientId.isEmpty {
@@ -640,8 +634,8 @@ struct DetectedItemsReviewView: View {
                             TextField(L.text("Quantity", language: appLanguage), value: $item.quantity, format: .number)
                                 .keyboardType(.decimalPad)
                             Picker(L.text("Unit", language: appLanguage), selection: $item.unit) {
-                                ForEach(IngredientUnit.allCases) { unit in
-                                    Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                                ForEach(availableUnits(for: item), id: \.self) { unit in
+                                    Text(displayName(forUnit: unit, item: item)).tag(unit)
                                 }
                             }
                             .labelsHidden()
@@ -656,11 +650,36 @@ struct DetectedItemsReviewView: View {
                         .pickerStyle(.menu)
 
                         Picker(L.text("Location", language: appLanguage), selection: $item.location) {
-                            ForEach(StorageLocation.allCases) { location in
+                            ForEach(StorageLocation.selectableCases) { location in
                                 Text(location.displayName(language: appLanguage)).tag(location)
                             }
                         }
                         .pickerStyle(.menu)
+
+                        DatePicker(L.text("Enter date", language: appLanguage), selection: $item.enteredDate, displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .environment(\.locale, datePickerLocale)
+                        DatePicker(L.text("Expire date", language: appLanguage), selection: Binding(
+                            get: { item.expireDate ?? estimatedExpireDate(for: item) },
+                            set: { item.expireDate = $0 }
+                        ), displayedComponents: .date)
+                            .datePickerStyle(.compact)
+                            .environment(\.locale, datePickerLocale)
+                    }
+                    .task(id: item.canonicalIngredientId) {
+                        await loadUnitConversions(for: item)
+                    }
+                    .onChange(of: item.category) { _, _ in
+                        item.expireDate = estimatedExpireDate(for: item)
+                    }
+                    .onChange(of: item.location) { _, _ in
+                        item.expireDate = estimatedExpireDate(for: item)
+                    }
+                    .onChange(of: item.enteredDate) { _, _ in
+                        item.expireDate = estimatedExpireDate(for: item)
+                    }
+                    .onChange(of: item.canonicalIngredientId) { _, _ in
+                        item.expireDate = estimatedExpireDate(for: item)
                     }
                 }
                 .onDelete { indexSet in
@@ -670,6 +689,9 @@ struct DetectedItemsReviewView: View {
             .onAppear {
                 for index in items.indices {
                     items[index].unit = IngredientUnit.normalizedSelection(for: items[index].unit)
+                    if items[index].expireDate == nil {
+                        items[index].expireDate = estimatedExpireDate(for: items[index])
+                    }
                 }
             }
             .task {
@@ -712,5 +734,90 @@ struct DetectedItemsReviewView: View {
             label = L.text("Match", language: appLanguage)
         }
         return "\(label) \(percent)%"
+    }
+
+    private var datePickerLocale: Locale {
+        Locale(identifier: appLanguage == AppLanguage.chinese.rawValue ? "zh_Hans_US" : "en_US")
+    }
+
+    private func estimatedExpireDate(for item: DetectedIngredient) -> Date {
+        StorageAdvisor.estimatedExpireDate(
+            name: item.name,
+            canonicalIngredientId: item.canonicalIngredientId,
+            category: item.category,
+            location: item.location,
+            enteredDate: item.enteredDate
+        )
+    }
+
+    private func availableUnits(for item: DetectedIngredient) -> [String] {
+        let currentUnit = IngredientUnit.normalizedSelection(for: item.unit)
+        guard !item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return currentUnit.isEmpty ? [] : [currentUnit]
+        }
+
+        let units = unitConversionsByItem[item.id, default: []]
+            .map { IngredientUnit.normalizedSelection(for: $0.fromUnit) }
+            .filter { !$0.isEmpty }
+        let databaseUnits = uniqueUnits(units, preferredUnit: "")
+        return databaseUnits.isEmpty ? (currentUnit.isEmpty ? [] : [currentUnit]) : databaseUnits
+    }
+
+    private func displayName(forUnit unit: String, item: DetectedIngredient) -> String {
+        let normalized = IngredientUnit.normalizedSelection(for: unit)
+        if let conversion = unitConversionsByItem[item.id, default: []].first(where: {
+            IngredientUnit.normalizedSelection(for: $0.fromUnit) == normalized
+        }) {
+            return conversion.displayUnit
+        }
+        if let knownUnit = IngredientUnit(rawValue: normalized) {
+            return knownUnit.displayName(language: appLanguage)
+        }
+        return L.text(normalized, language: appLanguage)
+    }
+
+    private func uniqueUnits(_ units: [String], preferredUnit: String) -> [String] {
+        var seen = Set<String>()
+        var output: [String] = []
+        let preferred = IngredientUnit.normalizedSelection(for: preferredUnit)
+        if !preferred.isEmpty {
+            seen.insert(preferred)
+            output.append(preferred)
+        }
+
+        for unit in units {
+            let normalized = IngredientUnit.normalizedSelection(for: unit)
+            guard !normalized.isEmpty, !seen.contains(normalized) else { continue }
+            seen.insert(normalized)
+            output.append(normalized)
+        }
+        return output
+    }
+
+    @MainActor
+    private func loadUnitConversions(for item: DetectedIngredient) async {
+        let ingredientId = item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ingredientId.isEmpty else {
+            unitConversionsByItem[item.id] = []
+            return
+        }
+        do {
+            let conversions = try await UnknownIngredientClient().fetchIngredientUnitConversions(
+                ingredientId: ingredientId,
+                language: appLanguage == AppLanguage.chinese.rawValue ? "zh" : "en"
+            )
+            unitConversionsByItem[item.id] = conversions
+            let units = uniqueUnits(
+                conversions.map { IngredientUnit.normalizedSelection(for: $0.fromUnit) },
+                preferredUnit: ""
+            )
+            guard let itemIndex = items.firstIndex(where: { $0.id == item.id }) else { return }
+            let currentUnit = IngredientUnit.normalizedSelection(for: items[itemIndex].unit)
+            if let firstUnit = units.first, !units.contains(currentUnit) {
+                items[itemIndex].unit = firstUnit
+            }
+        } catch {
+            unitConversionsByItem[item.id] = []
+        }
     }
 }

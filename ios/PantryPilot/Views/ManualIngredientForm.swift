@@ -40,7 +40,7 @@ struct ManualIngredientForm: View {
             .pickerStyle(.menu)
 
             Picker(L.text("Location", language: appLanguage), selection: $location) {
-                ForEach(StorageLocation.allCases) { location in
+                ForEach(StorageLocation.selectableCases) { location in
                     Text(location.displayName(language: appLanguage)).tag(location)
                 }
             }

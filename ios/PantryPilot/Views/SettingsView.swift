@@ -179,7 +179,7 @@ enum L {
         "Quantity": "数量",
         "Unit": "单位",
         "Category": "分类",
-        "Location": "位置",
+        "Location": "方式",
         "Add manually": "手动添加",
         "Ingredient name": "食材名称",
         "Enter date": "入库日期",
@@ -270,13 +270,25 @@ enum TableUpDateFormatter {
 
 extension IngredientCategory {
     func displayName(language: String) -> String {
-        L.text(rawValue, language: language)
+        return L.text(rawValue, language: language)
     }
 }
 
 extension StorageLocation {
+    static var selectableCases: [StorageLocation] {
+        [.fridge, .freezer, .pantry]
+    }
+
     func displayName(language: String) -> String {
-        L.text(rawValue, language: language)
+        if language == AppLanguage.chinese.rawValue {
+            switch self {
+            case .pantry, .counter:
+                return "常温"
+            default:
+                break
+            }
+        }
+        return L.text(rawValue, language: language)
     }
 }
 

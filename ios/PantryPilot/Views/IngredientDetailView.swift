@@ -31,7 +31,7 @@ struct IngredientDetailView: View {
         _draftQuantity = State(initialValue: ingredient.quantity)
         _draftUnit = State(initialValue: IngredientUnit.normalizedSelection(for: ingredient.unit))
         _draftCategoryRaw = State(initialValue: ingredient.categoryRaw)
-        _draftLocationRaw = State(initialValue: ingredient.locationRaw)
+        _draftLocationRaw = State(initialValue: ingredient.location == .counter ? StorageLocation.pantry.rawValue : ingredient.locationRaw)
         _draftEnteredDate = State(initialValue: ingredient.enteredDate)
         _draftExpireDate = State(initialValue: ingredient.expireDate)
         _draftCanonicalIngredientId = State(initialValue: ingredient.canonicalIngredientId)
@@ -79,7 +79,7 @@ struct IngredientDetailView: View {
                 .pickerStyle(.menu)
 
                 Picker(L.text("Location", language: appLanguage), selection: $draftLocationRaw) {
-                    ForEach(StorageLocation.allCases) { location in
+                    ForEach(StorageLocation.selectableCases) { location in
                         Text(location.displayName(language: appLanguage)).tag(location.rawValue)
                     }
                 }
@@ -196,7 +196,7 @@ struct IngredientDetailView: View {
     private var availableDraftUnits: [String] {
         let currentUnit = IngredientUnit.normalizedSelection(for: draftUnit)
         guard isDraftMatched else {
-            return uniqueUnits(IngredientUnit.allCases.map(\.rawValue), preferredUnit: currentUnit)
+            return currentUnit.isEmpty ? [] : [currentUnit]
         }
 
         let units = ingredientUnitConversions
@@ -227,9 +227,8 @@ struct IngredientDetailView: View {
     }
 
     private var storageRecommendations: [StorageRecommendation] {
-        let best = StorageAdvisor.approach(for: draftLocation)
-        return StorageApproach.allCases.map { approach in
-            StorageRecommendation(
+        let candidates = StorageApproach.allCases.map { approach in
+            (
                 approach: approach,
                 expireDate: StorageAdvisor.estimatedExpireDate(
                     name: draftName,
@@ -237,8 +236,16 @@ struct IngredientDetailView: View {
                     category: draftCategory,
                     approach: approach,
                     enteredDate: draftEnteredDate
-                ),
-                isRecommended: approach == best
+                )
+            )
+        }
+        let bestExpireDate = candidates.map(\.expireDate).max()
+
+        return candidates.map { candidate in
+            StorageRecommendation(
+                approach: candidate.approach,
+                expireDate: candidate.expireDate,
+                isRecommended: bestExpireDate.map { Calendar.current.isDate(candidate.expireDate, inSameDayAs: $0) } ?? false
             )
         }
     }

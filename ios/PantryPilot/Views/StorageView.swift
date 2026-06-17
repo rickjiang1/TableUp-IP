@@ -5,7 +5,8 @@ struct StorageView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
-    @State private var selectedTab: StorageTab = .inventory
+    private let showsTabPicker: Bool
+    @State private var selectedTab: StorageTab
     @State private var showingClearConfirmation = false
     @State private var showingMatchAllConfirmation = false
     @State private var storageAlert: StorageAlertMessage?
@@ -15,6 +16,11 @@ struct StorageView: View {
     @State private var isLoadingUnmatched = false
     @State private var isBulkMatchingUnmatched = false
     @State private var unmatchedRefreshToken = UUID()
+
+    init(initialTab: StorageTab = .inventory, showsTabPicker: Bool = true) {
+        self.showsTabPicker = showsTabPicker
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     private var groupedIngredients: [(IngredientCategory, [StoredIngredient])] {
         IngredientCategory.allCases.compactMap { category in
@@ -103,13 +109,15 @@ struct StorageView: View {
     var body: some View {
         NavigationStack {
             List {
-                Picker(L.text("Storage view", language: appLanguage), selection: $selectedTab) {
-                    ForEach(StorageTab.allCases) { tab in
-                        Text(tab.displayName(language: appLanguage)).tag(tab)
+                if showsTabPicker {
+                    Picker(L.text("Storage view", language: appLanguage), selection: $selectedTab) {
+                        ForEach(StorageTab.allCases) { tab in
+                            Text(tab.displayName(language: appLanguage)).tag(tab)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
                 }
-                .pickerStyle(.segmented)
-                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 8, trailing: 16))
 
                 switch selectedTab {
                 case .inventory:
@@ -118,7 +126,7 @@ struct StorageView: View {
                     unmatchedContent
                 }
             }
-            .navigationTitle(L.text("Storage", language: appLanguage))
+            .navigationTitle(showsTabPicker ? L.text("Storage", language: appLanguage) : L.text("Match ingredient library", language: appLanguage))
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     toolbarButton
@@ -418,6 +426,13 @@ struct StorageView: View {
             let normalized = item.normalizedName.replacingOccurrences(of: "_", with: " ").lowercased()
             if targetNames.contains(itemName) || targetNames.contains(normalized) {
                 item.canonicalIngredientId = ingredient.id
+                item.expireDate = StorageAdvisor.estimatedExpireDate(
+                    name: item.name,
+                    canonicalIngredientId: ingredient.id,
+                    category: item.category,
+                    location: item.location,
+                    enteredDate: item.enteredDate
+                )
                 do {
                     let normalizedQuantity = try await client.normalizeIngredientQuantity(
                         ingredientName: item.name,
@@ -472,7 +487,7 @@ struct StorageView: View {
     }
 }
 
-private enum StorageTab: String, CaseIterable, Identifiable {
+enum StorageTab: String, CaseIterable, Identifiable {
     case inventory
     case unmatched
 
