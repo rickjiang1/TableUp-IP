@@ -693,7 +693,9 @@ struct RecipesView: View {
 
     private func closeRecipeFolderLayer() {
         if !folderPath.isEmpty {
-            _ = folderPath.popLast()
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.86)) {
+                _ = folderPath.popLast()
+            }
         } else {
             dismiss()
         }
@@ -855,12 +857,8 @@ private struct AddRecipeFolderView: View {
 
     private func loadFolderCover(from item: PhotosPickerItem?) {
         guard let item else { return }
-        Task {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-            let processed = RecipeImageProcessor.jpegData(from: data, maxDimension: 420, compression: 0.70) ?? data
-            await MainActor.run {
-                selectedCoverImageData = processed
-            }
+        loadRecipeFolderCover(from: item) { data in
+            selectedCoverImageData = data
         }
     }
 }
@@ -924,12 +922,18 @@ private struct EditRecipeFolderView: View {
 
     private func loadFolderCover(from item: PhotosPickerItem?) {
         guard let item else { return }
-        Task {
-            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-            let processed = RecipeImageProcessor.jpegData(from: data, maxDimension: 420, compression: 0.70) ?? data
-            await MainActor.run {
-                selectedCoverImageData = processed
-            }
+        loadRecipeFolderCover(from: item) { data in
+            selectedCoverImageData = data
+        }
+    }
+}
+
+private func loadRecipeFolderCover(from item: PhotosPickerItem, onLoaded: @escaping (Data) -> Void) {
+    Task {
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        let processed = RecipeImageProcessor.jpegData(from: data, maxDimension: 420, compression: 0.70) ?? data
+        await MainActor.run {
+            onLoaded(processed)
         }
     }
 }
