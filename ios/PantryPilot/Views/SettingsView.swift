@@ -233,6 +233,8 @@ enum L {
         "Recipe Library": "食谱库",
         "Central Recipes": "中心食谱",
         "My Recipes": "我的食谱",
+        "New Category": "新建分类",
+        "Rename": "重命名",
         "New Folder": "新建文件夹",
         "Folder name": "文件夹名称",
         "No recipes here": "这里还没有食谱",

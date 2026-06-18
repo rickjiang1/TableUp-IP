@@ -17,6 +17,7 @@ struct RecipesView: View {
     @State private var isSyncing = false
     @State private var recipeAlert: RecipeAlertMessage?
     @State private var showingUnmatchedIngredients = false
+    @State private var folderToRename: RecipeFolder?
 
     private var currentFolderId: String {
         folderPath.last?.id ?? ""
@@ -65,15 +66,15 @@ struct RecipesView: View {
                         )
                         .ignoresSafeArea()
 
-                    VStack(spacing: 12) {
+                    VStack(spacing: 0) {
                         recipeTopControls
                             .padding(.horizontal, 18)
                             .padding(.top, 54)
 
-                        Spacer()
-
                         recipeBookShelf(width: width, height: height)
-                            .padding(.bottom, 28)
+                            .padding(.top, rootShelfTopPadding(height: height))
+
+                        Spacer(minLength: 0)
                     }
                 }
                 .frame(width: width, height: height)
@@ -109,6 +110,14 @@ struct RecipesView: View {
                     saveFolder(name: name, coverImageData: coverImageData)
                 }
             }
+            .sheet(item: $folderToRename) { folder in
+                RenameRecipeFolderView(
+                    language: appLanguage,
+                    initialName: folder.name
+                ) { name in
+                    renameFolder(folder, to: name)
+                }
+            }
             .alert(item: $recipeAlert) { alert in
                 Alert(
                     title: Text(L.text(alert.title, language: appLanguage)),
@@ -121,28 +130,14 @@ struct RecipesView: View {
 
     private var recipeTopControls: some View {
         HStack(alignment: .center, spacing: 10) {
-            Picker(L.text("Recipe Library", language: appLanguage), selection: $selectedSource) {
-                ForEach(RecipeSource.allCases) { source in
-                    Text(source.displayName(language: appLanguage)).tag(source)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 210)
-            .onChange(of: selectedSource) { _, _ in
-                folderPath = []
-            }
+            sourceToggle
 
             Spacer()
 
             Button {
                 showingUnmatchedIngredients = true
             } label: {
-                Image(systemName: "exclamationmark.magnifyingglass")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
-                    .frame(width: 36, height: 36)
-                    .background(Color.white.opacity(0.42))
-                    .clipShape(Circle())
+                lightToolbarIcon("magnifyingglass")
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L.text("Unmatched ingredients", language: appLanguage))
@@ -150,12 +145,7 @@ struct RecipesView: View {
             Button {
                 Task { await syncRecipes() }
             } label: {
-                Image(systemName: isSyncing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.22, green: 0.14, blue: 0.08))
-                    .frame(width: 36, height: 36)
-                    .background(Color.white.opacity(0.42))
-                    .clipShape(Circle())
+                lightToolbarIcon(isSyncing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath")
             }
             .buttonStyle(.plain)
             .disabled(isSyncing)
@@ -165,7 +155,7 @@ struct RecipesView: View {
                 Button {
                     showingAddFolder = true
                 } label: {
-                    Label(L.text("New Folder", language: appLanguage), systemImage: "folder.badge.plus")
+                    Label(L.text("New Category", language: appLanguage), systemImage: "plus.circle")
                 }
 
                 Button {
@@ -180,9 +170,55 @@ struct RecipesView: View {
                     .frame(width: 36, height: 36)
                     .background(TableUpTheme.orange)
                     .clipShape(Circle())
-                    .shadow(color: TableUpTheme.orange.opacity(0.34), radius: 12, y: 6)
+                    .shadow(color: TableUpTheme.orange.opacity(0.24), radius: 12, y: 6)
             }
         }
+    }
+
+    private var sourceToggle: some View {
+        HStack(spacing: 2) {
+            ForEach(RecipeSource.allCases) { source in
+                Button {
+                    selectedSource = source
+                    folderPath = []
+                } label: {
+                    Text(source.displayName(language: appLanguage))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(selectedSource == source ? .white : Color(red: 0.30, green: 0.22, blue: 0.16).opacity(0.74))
+                        .padding(.horizontal, 13)
+                        .frame(height: 30)
+                        .background(
+                            Capsule()
+                                .fill(selectedSource == source ? Color.white.opacity(0.28) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(.ultraThinMaterial.opacity(0.54))
+        .background(Color.white.opacity(0.18))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.38), lineWidth: 1))
+        .shadow(color: Color(red: 0.34, green: 0.22, blue: 0.12).opacity(0.08), radius: 12, y: 6)
+    }
+
+    private func lightToolbarIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color(red: 0.25, green: 0.17, blue: 0.11).opacity(0.82))
+            .frame(width: 32, height: 32)
+            .background(.ultraThinMaterial.opacity(0.50))
+            .background(Color.white.opacity(0.18))
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.white.opacity(0.38), lineWidth: 1))
+    }
+
+    private func rootShelfTopPadding(height: CGFloat) -> CGFloat {
+        if !folderPath.isEmpty || visibleFolders.isEmpty {
+            return max(150, height * 0.20)
+        }
+        return max(212, height * 0.29)
     }
 
     @ViewBuilder
@@ -204,17 +240,13 @@ struct RecipesView: View {
         } else if !folderPath.isEmpty || visibleFolders.isEmpty {
             folderContentPanel(width: width)
         } else {
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(folderPages.indices, id: \.self) { pageIndex in
-                        folderHotspotPage(folderPages[pageIndex], width: width)
-                            .containerRelativeFrame(.horizontal)
-                    }
+            TabView {
+                ForEach(Array(folderPages.enumerated()), id: \.offset) { _, pageFolders in
+                    folderGlassPage(pageFolders, width: width)
                 }
             }
-            .scrollTargetBehavior(.paging)
-            .scrollIndicators(.hidden)
-            .frame(height: min(560, height * 0.60))
+            .tabViewStyle(.page(indexDisplayMode: folderPages.count > 1 ? .automatic : .never))
+            .frame(height: min(552, height * 0.60))
         }
     }
 
@@ -222,6 +254,43 @@ struct RecipesView: View {
         stride(from: 0, to: visibleFolders.count, by: 3).map {
             Array(visibleFolders[$0..<min($0 + 3, visibleFolders.count)])
         }
+    }
+
+    private func folderGlassPage(_ pageFolders: [RecipeFolder], width: CGFloat) -> some View {
+        VStack(spacing: 3) {
+            ForEach(pageFolders) { folder in
+                Button {
+                    folderPath.append(folder)
+                } label: {
+                    RecipeFolderGlassCard(
+                        title: folder.name,
+                        recipeCount: recipeCount(in: folder),
+                        imageData: folder.coverImageData ?? firstRecipeImageData(in: folder),
+                        fallbackIcon: iconName(forFolderAt: visibleFolders.firstIndex(where: { $0.id == folder.id }) ?? 0),
+                        language: appLanguage
+                    )
+                    .frame(width: min(width * 0.74, 316), height: 130)
+                }
+                .buttonStyle(.plain)
+                .contextMenu {
+                    Button {
+                        folderToRename = folder
+                    } label: {
+                        Label(L.text("Rename", language: appLanguage), systemImage: "pencil")
+                    }
+
+                    Button(role: .destructive) {
+                        deleteFolderTree(folder)
+                        try? modelContext.save()
+                    } label: {
+                        Label(L.text("Delete", language: appLanguage), systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .frame(width: width)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .padding(.top, 4)
     }
 
     private func folderHotspotPage(_ pageFolders: [RecipeFolder], width: CGFloat) -> some View {
@@ -252,6 +321,11 @@ struct RecipesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 34)
         .padding(.bottom, 6)
+    }
+
+    private func iconName(forFolderAt index: Int) -> String {
+        let icons = ["fork.knife.circle.fill", "takeoutbag.and.cup.and.straw.fill", "leaf.circle.fill", "flame.circle.fill", "cup.and.saucer.fill"]
+        return icons[index % icons.count]
     }
 
     private func folderContentPanel(width: CGFloat) -> some View {
@@ -472,6 +546,17 @@ struct RecipesView: View {
         return "\(childFolders) \(L.text("folders", language: appLanguage)) - \(childRecipes) \(L.text("recipes", language: appLanguage))"
     }
 
+    private func recipeCount(in folder: RecipeFolder) -> Int {
+        recipes.filter { $0.folderId == folder.id }.count
+    }
+
+    private func firstRecipeImageData(in folder: RecipeFolder) -> Data? {
+        guard let recipe = recipes.first(where: { $0.folderId == folder.id && ($0.imageThumbnailData != nil || $0.imageData != nil) }) else {
+            return nil
+        }
+        return recipe.imageThumbnailData ?? recipe.imageData
+    }
+
     private func folderPathTitle(for folder: RecipeFolder) -> String {
         var names = [folder.name]
         var parentId = folder.parentId
@@ -510,6 +595,18 @@ struct RecipesView: View {
                 coverImageData: coverImageData
             )
         )
+        do {
+            try modelContext.save()
+            recipeAlert = RecipeAlertMessage(title: "Saved", message: trimmedName)
+        } catch {
+            recipeAlert = RecipeAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+    }
+
+    private func renameFolder(_ folder: RecipeFolder, to name: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+        folder.name = trimmedName
         do {
             try modelContext.save()
             recipeAlert = RecipeAlertMessage(title: "Saved", message: trimmedName)
@@ -647,6 +744,140 @@ private struct AddRecipeFolderView: View {
                 }
             }
         }
+    }
+}
+
+private struct RenameRecipeFolderView: View {
+    @Environment(\.dismiss) private var dismiss
+    let language: String
+    let initialName: String
+    let onSave: (String) -> Void
+
+    @State private var name: String
+
+    init(language: String, initialName: String, onSave: @escaping (String) -> Void) {
+        self.language = language
+        self.initialName = initialName
+        self.onSave = onSave
+        _name = State(initialValue: initialName)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(L.text("Folder name", language: language), text: $name)
+                }
+            }
+            .navigationTitle(L.text("Rename", language: language))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L.text("Cancel", language: language)) {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L.text("Save", language: language)) {
+                        onSave(name)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct RecipeFolderGlassCard: View {
+    let title: String
+    let recipeCount: Int
+    let imageData: Data?
+    let fallbackIcon: String
+    let language: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            folderVisual
+                .frame(width: 90, height: 90)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold, design: .serif))
+                    .foregroundStyle(Color(red: 0.25, green: 0.17, blue: 0.11))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+
+                Text(recipeCountText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(red: 0.42, green: 0.28, blue: 0.18).opacity(0.58))
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color(red: 0.36, green: 0.25, blue: 0.16).opacity(0.40))
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.ultraThinMaterial.opacity(0.52))
+        .background(Color.white.opacity(0.24))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.46),
+                            Color.white.opacity(0.12)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
+        .shadow(color: Color(red: 0.34, green: 0.22, blue: 0.12).opacity(0.08), radius: 16, y: 9)
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var folderVisual: some View {
+        if let imageData, let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.32), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.10), radius: 8, y: 5)
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.30))
+                    .background(.ultraThinMaterial.opacity(0.46), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.white.opacity(0.34), lineWidth: 1)
+                    )
+
+                Image(systemName: fallbackIcon)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(TableUpTheme.orange.opacity(0.72))
+            }
+        }
+    }
+
+    private var recipeCountText: String {
+        if language == AppLanguage.chinese.rawValue {
+            return "\(recipeCount) 道食谱"
+        }
+        return "\(recipeCount) recipe\(recipeCount == 1 ? "" : "s")"
     }
 }
 
