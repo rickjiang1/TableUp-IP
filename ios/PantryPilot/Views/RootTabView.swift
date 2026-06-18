@@ -37,7 +37,8 @@ struct RootTabView: View {
     private func handleTabSwipe(_ value: DragGesture.Value) {
         let horizontal = value.translation.width
         let vertical = value.translation.height
-        guard abs(horizontal) > abs(vertical) * 1.4, abs(horizontal) > 70 else { return }
+        guard value.startLocation.y < 260 else { return }
+        guard abs(horizontal) > abs(vertical) * 1.6, abs(horizontal) > 110, abs(vertical) < 70 else { return }
 
         if horizontal < 0, selectedTab == .pantry {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {

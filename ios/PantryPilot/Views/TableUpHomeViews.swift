@@ -21,7 +21,7 @@ struct YouliaoView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
-    @State private var showingAddFood = false
+    @State private var activeFoodEntryMode: FoodEntryMode?
     @State private var showingBasketMenu = false
     @State private var showingIngredientMatcher = false
     @State private var showingClearConfirmation = false
@@ -29,19 +29,19 @@ struct YouliaoView: View {
     @State private var locationFilter: YouliaoLocationFilter = .all
     
     private var expiringSoonCount: Int {
-        ingredients.filter { ingredient in
-            let days = Calendar.current.dateComponents(
-                [.day],
-                from: Calendar.current.startOfDay(for: .now),
-                to: Calendar.current.startOfDay(for: ingredient.expireDate)
-            ).day ?? 0
-            return days >= 0 && days <= expirationReminderDays
-        }.count
+        ingredients.filter(isExpiringSoon).count
     }
     
     private var filteredIngredients: [StoredIngredient] {
         ingredients
-            .filter { locationFilter.includes($0.location) }
+            .filter { ingredient in
+                switch locationFilter {
+                case .expiringSoon:
+                    return isExpiringSoon(ingredient)
+                default:
+                    return locationFilter.includes(ingredient.location)
+                }
+            }
             .sorted(by: pantrySort)
     }
 
@@ -124,6 +124,20 @@ struct YouliaoView: View {
                     .position(x: width * 0.45, y: height * 0.70)
                     .zIndex(2)
                     .accessibilityLabel("查看库存")
+
+                    if !cabinetOpen && !showingBasketMenu {
+                        Text("\(ingredients.count) 种 · 即将过期 \(expiringSoonCount)")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(TableUpTheme.mutedText)
+                            .frame(width: 176, alignment: .leading)
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 8)
+                            .background(Color.black.opacity(0.68))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .position(x: width * 0.78, y: height * 0.782)
+                        .zIndex(1.5)
+                        .allowsHitTesting(false)
+                    }
                     
                     if cabinetOpen {
                         VStack(alignment: .leading, spacing: 14) {
@@ -174,8 +188,17 @@ struct YouliaoView: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .toolbarBackground(.hidden, for: .navigationBar)
                 .navigationBarHidden(true)
-                .sheet(isPresented: $showingAddFood) {
-                    ScanView()
+                .sheet(item: $activeFoodEntryMode) { mode in
+                    switch mode {
+                    case .camera:
+                        ScanView(launchMode: .camera)
+                    case .photoLibrary:
+                        ScanView(launchMode: .photoLibrary)
+                    case .manual:
+                        ManualIngredientEntrySheet()
+                    case .voice:
+                        VoiceIngredientEntrySheet()
+                    }
                 }
                 .sheet(isPresented: $showingIngredientMatcher) {
                     StorageView(initialTab: .unmatched, showsTabPicker: false)
@@ -272,10 +295,10 @@ struct YouliaoView: View {
             .padding(.bottom, 18)
             
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                basketMenuButton(title: "拍照识别", subtitle: "拍照识别食材", icon: "camera.fill")
-                basketMenuButton(title: "相册自选", subtitle: "从照片选择", icon: "photo.on.rectangle")
-                basketMenuButton(title: "手动录入", subtitle: "手动添加食材", icon: "pencil")
-                basketMenuButton(title: "语音输入", subtitle: "语音识别食材", icon: "mic.fill")
+                basketMenuButton(title: "拍照识别", subtitle: "打开相机识别", icon: "camera.fill", mode: .camera)
+                basketMenuButton(title: "相册自选", subtitle: "从照片选择", icon: "photo.on.rectangle", mode: .photoLibrary)
+                basketMenuButton(title: "手动录入", subtitle: "直接填写保存", icon: "pencil", mode: .manual)
+                basketMenuButton(title: "语音输入", subtitle: "听写食材名称", icon: "mic.fill", mode: .voice)
             }
         }
         .padding(18)
@@ -288,12 +311,12 @@ struct YouliaoView: View {
         .shadow(color: .black.opacity(0.34), radius: 22, y: 14)
     }
     
-    private func basketMenuButton(title: String, subtitle: String, icon: String) -> some View {
+    private func basketMenuButton(title: String, subtitle: String, icon: String, mode: FoodEntryMode) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) {
                 showingBasketMenu = false
             }
-            showingAddFood = true
+            activeFoodEntryMode = mode
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
@@ -423,7 +446,7 @@ struct YouliaoView: View {
                 Spacer()
                 
                 Button {
-                    showingAddFood = true
+                    activeFoodEntryMode = .camera
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "plus")
@@ -837,6 +860,192 @@ private struct SpotlightShape: Shape {
             try? modelContext.save()
         }
     }
+
+    private func isExpiringSoon(_ ingredient: StoredIngredient) -> Bool {
+        let days = Calendar.current.dateComponents(
+            [.day],
+            from: Calendar.current.startOfDay(for: .now),
+            to: Calendar.current.startOfDay(for: ingredient.expireDate)
+        ).day ?? 0
+        return days >= 0 && days <= expirationReminderDays
+    }
+}
+
+private enum FoodEntryMode: String, Identifiable {
+    case camera
+    case photoLibrary
+    case manual
+    case voice
+
+    var id: String { rawValue }
+}
+
+private struct ManualIngredientEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @State private var alert: ScanAlertMessage?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                ManualIngredientForm { input in
+                    await save(input)
+                }
+                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
+            .navigationTitle("手动录入")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L.text("Cancel", language: appLanguage)) {
+                        dismiss()
+                    }
+                }
+            }
+            .alert(item: $alert) { alert in
+                Alert(
+                    title: Text(L.text(alert.title, language: appLanguage)),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage))) {
+                        if alert.title == "Saved" {
+                            dismiss()
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private func save(_ input: IngredientInput) async -> Bool {
+        do {
+            let result = try await InventoryStore.save([input], sourceContext: modelContext)
+            alert = ScanAlertMessage(
+                title: "Saved",
+                message: SaveConfirmation(
+                    items: result.savedNames,
+                    inventoryCount: result.inventoryCount,
+                    language: appLanguage
+                ).message
+            )
+            return true
+        } catch {
+            alert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+            return false
+        }
+    }
+}
+
+private struct VoiceIngredientEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @FocusState private var isInputFocused: Bool
+    @State private var transcript = ""
+    @State private var isSaving = false
+    @State private var alert: ScanAlertMessage?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("说出食材")
+                        .font(.title3.weight(.semibold))
+                    Text("可以用逗号、顿号或换行分开多个食材。也可以点击键盘上的麦克风听写。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                TextEditor(text: $transcript)
+                    .focused($isInputFocused)
+                    .frame(minHeight: 180)
+                    .padding(10)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+                    )
+
+                Button {
+                    Task { await saveTranscript() }
+                } label: {
+                    Label(isSaving ? L.text("Saving...", language: appLanguage) : L.text("Save item", language: appLanguage), systemImage: "mic.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .disabled(isSaving || parsedIngredientNames.isEmpty)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("语音输入")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L.text("Cancel", language: appLanguage)) {
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    isInputFocused = true
+                }
+            }
+            .alert(item: $alert) { alert in
+                Alert(
+                    title: Text(L.text(alert.title, language: appLanguage)),
+                    message: Text(alert.message),
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage))) {
+                        if alert.title == "Saved" {
+                            dismiss()
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private var parsedIngredientNames: [String] {
+        transcript
+            .components(separatedBy: CharacterSet(charactersIn: ",，、\n"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func saveTranscript() async {
+        let inputs = parsedIngredientNames.map {
+            IngredientInput(
+                name: $0,
+                quantity: 1,
+                unit: "piece",
+                category: .other,
+                location: .fridge
+            )
+        }
+        guard !inputs.isEmpty else { return }
+
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            let result = try await InventoryStore.save(inputs, sourceContext: modelContext)
+            alert = ScanAlertMessage(
+                title: "Saved",
+                message: SaveConfirmation(
+                    items: result.savedNames,
+                    inventoryCount: result.inventoryCount,
+                    language: appLanguage
+                ).message
+            )
+        } catch {
+            alert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+    }
 }
 
 private struct YouliaoIngredientRow: View {
@@ -1079,6 +1288,7 @@ private struct CabinetDoor: Shape {
 
 private enum YouliaoLocationFilter: String, CaseIterable, Identifiable {
     case all
+    case expiringSoon
     case fridge
     case freezer
     case room
@@ -1088,6 +1298,7 @@ private enum YouliaoLocationFilter: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .all: return "square.grid.2x2"
+        case .expiringSoon: return "clock.badge.exclamationmark"
         case .fridge: return "refrigerator"
         case .freezer: return "snowflake"
         case .room: return "cabinet"
@@ -1097,6 +1308,8 @@ private enum YouliaoLocationFilter: String, CaseIterable, Identifiable {
     func includes(_ location: StorageLocation) -> Bool {
         switch self {
         case .all:
+            return true
+        case .expiringSoon:
             return true
         case .fridge:
             return location == .fridge
@@ -1110,6 +1323,7 @@ private enum YouliaoLocationFilter: String, CaseIterable, Identifiable {
     func title(language: String) -> String {
         switch self {
         case .all: return "全部"
+        case .expiringSoon: return "快过期"
         case .fridge: return "冷藏"
         case .freezer: return "冷冻"
         case .room: return "常温"

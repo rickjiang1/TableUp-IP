@@ -3,22 +3,35 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+enum ScanLaunchMode: Hashable {
+    case standard
+    case camera
+    case photoLibrary
+}
+
 struct ScanView: View {
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query private var inventory: [StoredIngredient]
+    let launchMode: ScanLaunchMode
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImageDataList: [Data] = []
     @State private var capturedImageData: Data?
     @State private var detectedItems: [DetectedIngredient] = []
     @State private var showingManualAdd = false
     @State private var showingCamera = false
+    @State private var showingPhotoLibrary = false
     @State private var showingDetectedItems = false
     @State private var scanAlert: ScanAlertMessage?
     @State private var scanMessage = "Take a grocery photo to start."
     @State private var isExtracting = false
     @State private var photoLoadTask: Task<Void, Never>?
     @State private var extractionTask: Task<Void, Never>?
+    @State private var didHandleLaunchMode = false
+
+    init(launchMode: ScanLaunchMode = .standard) {
+        self.launchMode = launchMode
+    }
 
     var body: some View {
         NavigationStack {
@@ -113,6 +126,10 @@ struct ScanView: View {
                 ImagePicker(sourceType: .camera, imageData: $capturedImageData)
                     .ignoresSafeArea()
             }
+            .sheet(isPresented: $showingPhotoLibrary) {
+                ImagePicker(sourceType: .photoLibrary, imageData: $capturedImageData)
+                    .ignoresSafeArea()
+            }
             .sheet(isPresented: $showingDetectedItems) {
                 DetectedItemsReviewView(items: $detectedItems) {
                     let result = await saveDetectedItems()
@@ -141,6 +158,29 @@ struct ScanView: View {
                     detectedItems = []
                     startExtractionTask()
                 }
+            }
+            .onAppear {
+                triggerLaunchModeIfNeeded()
+            }
+        }
+    }
+
+    private func triggerLaunchModeIfNeeded() {
+        guard !didHandleLaunchMode else { return }
+        didHandleLaunchMode = true
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            switch launchMode {
+            case .standard:
+                break
+            case .camera:
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    showingCamera = true
+                } else {
+                    showingPhotoLibrary = true
+                }
+            case .photoLibrary:
+                showingPhotoLibrary = true
             }
         }
     }
