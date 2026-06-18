@@ -1,3 +1,5 @@
+import AVFoundation
+import Speech
 import SwiftData
 import SwiftUI
 import UIKit
@@ -21,12 +23,17 @@ struct YouliaoView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
+    @Binding private var isFloatingPanelOpen: Bool
     @State private var activeFoodEntryMode: FoodEntryMode?
     @State private var showingBasketMenu = false
     @State private var showingIngredientMatcher = false
     @State private var showingClearConfirmation = false
     @State private var cabinetOpen = false
     @State private var locationFilter: YouliaoLocationFilter = .all
+
+    init(isFloatingPanelOpen: Binding<Bool> = .constant(false)) {
+        _isFloatingPanelOpen = isFloatingPanelOpen
+    }
     
     private var expiringSoonCount: Int {
         ingredients.filter(isExpiringSoon).count
@@ -208,6 +215,18 @@ struct YouliaoView: View {
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
             .ignoresSafeArea()
+            .onAppear {
+                syncFloatingPanelState()
+            }
+            .onDisappear {
+                isFloatingPanelOpen = false
+            }
+            .onChange(of: cabinetOpen) { _, _ in
+                syncFloatingPanelState()
+            }
+            .onChange(of: showingBasketMenu) { _, _ in
+                syncFloatingPanelState()
+            }
         }
     }
     
@@ -216,6 +235,10 @@ struct YouliaoView: View {
             showingBasketMenu = false
             cabinetOpen = false
         }
+    }
+
+    private func syncFloatingPanelState() {
+        isFloatingPanelOpen = cabinetOpen || showingBasketMenu
     }
 
     private var matchBellButton: some View {
@@ -1065,6 +1088,7 @@ private struct VoiceIngredientEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    @StateObject private var speechRecognizer = VoiceIngredientRecognizer()
     @FocusState private var isInputFocused: Bool
     @State private var transcript = ""
     @State private var isSaving = false
@@ -1076,8 +1100,27 @@ private struct VoiceIngredientEntrySheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("说出食材")
                         .font(.title3.weight(.semibold))
-                    Text("可以用逗号、顿号或换行分开多个食材。也可以点击键盘上的麦克风听写。")
+                    Text("点击录音后说出食材，可以用逗号、顿号或停顿分开多个食材。")
                         .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button {
+                    toggleRecording()
+                } label: {
+                    Label(
+                        speechRecognizer.isRecording ? "停止录音" : "开始录音",
+                        systemImage: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.circle.fill"
+                    )
+                    .font(.headline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(speechRecognizer.isRecording ? .red : .orange)
+
+                if !speechRecognizer.statusMessage.isEmpty {
+                    Text(speechRecognizer.statusMessage)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
@@ -1119,17 +1162,29 @@ private struct VoiceIngredientEntrySheet: View {
                     isInputFocused = true
                 }
             }
+            .onDisappear {
+                speechRecognizer.stopRecording()
+            }
+            .onChange(of: speechRecognizer.transcript) { _, newValue in
+                guard !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                transcript = newValue
+            }
             .alert(item: $alert) { alert in
                 Alert(
                     title: Text(L.text(alert.title, language: appLanguage)),
                     message: Text(alert.message),
-                    dismissButton: .default(Text(L.text("OK", language: appLanguage))) {
-                        if alert.title == "Saved" {
-                            dismiss()
-                        }
-                    }
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
+        }
+    }
+
+    private func toggleRecording() {
+        if speechRecognizer.isRecording {
+            speechRecognizer.stopRecording()
+        } else {
+            isInputFocused = false
+            speechRecognizer.startRecording(language: appLanguage)
         }
     }
 
@@ -1157,6 +1212,8 @@ private struct VoiceIngredientEntrySheet: View {
 
         do {
             let result = try await InventoryStore.save(inputs, sourceContext: modelContext)
+            transcript = ""
+            speechRecognizer.transcript = ""
             alert = ScanAlertMessage(
                 title: "Saved",
                 message: SaveConfirmation(
@@ -1167,6 +1224,112 @@ private struct VoiceIngredientEntrySheet: View {
             )
         } catch {
             alert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+    }
+}
+
+final class VoiceIngredientRecognizer: NSObject, ObservableObject {
+    @Published var transcript = ""
+    @Published var isRecording = false
+    @Published var statusMessage = ""
+
+    private let audioEngine = AVAudioEngine()
+    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private var recognitionTask: SFSpeechRecognitionTask?
+    private var speechRecognizer: SFSpeechRecognizer?
+
+    func startRecording(language: String) {
+        if isRecording {
+            stopRecording()
+            return
+        }
+
+        let localeIdentifier = language == AppLanguage.chinese.rawValue ? "zh-CN" : "en-US"
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            statusMessage = "语音识别暂时不可用"
+            return
+        }
+
+        SFSpeechRecognizer.requestAuthorization { [weak self] speechStatus in
+            let handleMicrophonePermission: (Bool) -> Void = { microphoneAllowed in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    guard speechStatus == .authorized, microphoneAllowed else {
+                        self.statusMessage = "请在系统设置里允许语音识别和麦克风权限"
+                        return
+                    }
+                    self.beginRecognition(with: speechRecognizer)
+                }
+            }
+
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission(completionHandler: handleMicrophonePermission)
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission(handleMicrophonePermission)
+            }
+        }
+    }
+
+    func stopRecording() {
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        isRecording = false
+        statusMessage = transcript.isEmpty ? "" : "识别完成，可编辑后保存"
+    }
+
+    private func beginRecognition(with speechRecognizer: SFSpeechRecognizer) {
+        recognitionTask?.cancel()
+        recognitionTask = nil
+
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            statusMessage = "无法启动麦克风：\(error.localizedDescription)"
+            return
+        }
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
+        let inputNode = audioEngine.inputNode
+        inputNode.removeTap(onBus: 0)
+
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let result {
+                    self.transcript = result.bestTranscription.formattedString
+                    self.statusMessage = result.isFinal ? "识别完成，可编辑后保存" : "正在识别..."
+                }
+
+                if let error {
+                    self.statusMessage = "识别停止：\(error.localizedDescription)"
+                    self.stopRecording()
+                }
+            }
+        }
+
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+            request.append(buffer)
+        }
+
+        do {
+            audioEngine.prepare()
+            try audioEngine.start()
+            isRecording = true
+            statusMessage = "正在听..."
+        } catch {
+            statusMessage = "录音启动失败：\(error.localizedDescription)"
+            stopRecording()
         }
     }
 }

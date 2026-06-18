@@ -2,13 +2,14 @@ import SwiftUI
 
 struct RootTabView: View {
     @State private var selectedTab: TableUpRootTab = .pantry
+    @State private var pantryFloatingPanelOpen = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
             Group {
                 switch selectedTab {
                 case .pantry:
-                    YouliaoView()
+                    YouliaoView(isFloatingPanelOpen: $pantryFloatingPanelOpen)
                 case .meal:
                     KaifanView()
                 case .settings:
@@ -37,8 +38,11 @@ struct RootTabView: View {
     private func handleTabSwipe(_ value: DragGesture.Value) {
         let horizontal = value.translation.width
         let vertical = value.translation.height
-        guard value.startLocation.y < 260 else { return }
-        guard abs(horizontal) > abs(vertical) * 1.6, abs(horizontal) > 110, abs(vertical) < 70 else { return }
+        if selectedTab == .pantry, pantryFloatingPanelOpen, value.startLocation.y > 260 {
+            return
+        }
+        guard value.startLocation.y < UIScreen.main.bounds.height - 130 else { return }
+        guard abs(horizontal) > abs(vertical) * 1.45, abs(horizontal) > 90, abs(vertical) < 90 else { return }
 
         if horizontal < 0, selectedTab == .pantry {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {

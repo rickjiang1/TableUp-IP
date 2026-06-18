@@ -39,6 +39,10 @@
 	<string>TableUp uses selected grocery photos to extract ingredients.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>TableUp connects to the TableUp backend to extract grocery items.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TableUp uses the microphone to add ingredients by voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>TableUp uses speech recognition to turn spoken ingredient names into text.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
