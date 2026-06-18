@@ -241,6 +241,8 @@ enum L {
         "Rename": "重命名",
         "New Folder": "新建文件夹",
         "Folder name": "文件夹名称",
+        "Cover": "封面",
+        "Remove Cover": "移除封面",
         "No recipes here": "这里还没有食谱",
         "Create a folder or add a recipe.": "创建文件夹或添加食谱。",
         "folders": "个文件夹",

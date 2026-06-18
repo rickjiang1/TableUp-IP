@@ -16,6 +16,13 @@ struct RootTabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 44)
+                    .onEnded { value in
+                        handleTabSwipe(value)
+                    }
+            )
             
             TableUpBottomNavigation(selectedTab: $selectedTab)
                 .padding(.horizontal, 26)
@@ -25,6 +32,22 @@ struct RootTabView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .bottom)
         .statusBarHidden(selectedTab == .pantry)
+    }
+
+    private func handleTabSwipe(_ value: DragGesture.Value) {
+        let horizontal = value.translation.width
+        let vertical = value.translation.height
+        guard abs(horizontal) > abs(vertical) * 1.4, abs(horizontal) > 70 else { return }
+
+        if horizontal < 0, selectedTab == .pantry {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                selectedTab = .meal
+            }
+        } else if horizontal > 0, selectedTab == .meal {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                selectedTab = .pantry
+            }
+        }
     }
 }
 

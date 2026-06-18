@@ -18,7 +18,7 @@ struct RecipesView: View {
     @State private var isSyncing = false
     @State private var recipeAlert: RecipeAlertMessage?
     @State private var showingUnmatchedIngredients = false
-    @State private var folderToRename: RecipeFolder?
+    @State private var folderToEdit: RecipeFolder?
     @State private var folderPendingDelete: RecipeFolder?
 
     private var currentFolderId: String {
@@ -68,7 +68,7 @@ struct RecipesView: View {
                         )
                         .ignoresSafeArea()
                         .onTapGesture {
-                            dismiss()
+                            closeRecipeFolderLayer()
                         }
 
                     VStack(spacing: 0) {
@@ -115,12 +115,13 @@ struct RecipesView: View {
                     saveFolder(name: name, coverImageData: coverImageData)
                 }
             }
-            .sheet(item: $folderToRename) { folder in
-                RenameRecipeFolderView(
+            .sheet(item: $folderToEdit) { folder in
+                EditRecipeFolderView(
                     language: appLanguage,
-                    initialName: folder.name
-                ) { name in
-                    renameFolder(folder, to: name)
+                    initialName: folder.name,
+                    initialCoverImageData: folder.coverImageData
+                ) { name, coverImageData in
+                    updateFolder(folder, name: name, coverImageData: coverImageData)
                 }
             }
             .confirmationDialog(
@@ -351,9 +352,9 @@ struct RecipesView: View {
     @ViewBuilder
     private func folderMenuItems(_ folder: RecipeFolder) -> some View {
         Button {
-            folderToRename = folder
+            folderToEdit = folder
         } label: {
-            Label(L.text("Rename", language: appLanguage), systemImage: "pencil")
+            Label(L.text("Edit", language: appLanguage), systemImage: "pencil")
         }
 
         Button(role: .destructive) {
@@ -674,14 +675,27 @@ struct RecipesView: View {
     }
 
     private func renameFolder(_ folder: RecipeFolder, to name: String) {
+        updateFolder(folder, name: name, coverImageData: folder.coverImageData)
+    }
+
+    private func updateFolder(_ folder: RecipeFolder, name: String, coverImageData: Data?) {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
         folder.name = trimmedName
+        folder.coverImageData = coverImageData
         do {
             try modelContext.save()
             recipeAlert = RecipeAlertMessage(title: "Saved", message: trimmedName)
         } catch {
             recipeAlert = RecipeAlertMessage(title: "Save failed", message: error.localizedDescription)
+        }
+    }
+
+    private func closeRecipeFolderLayer() {
+        if !folderPath.isEmpty {
+            _ = folderPath.popLast()
+        } else {
+            dismiss()
         }
     }
 
@@ -799,6 +813,8 @@ private struct AddRecipeFolderView: View {
     let onSave: (String, Data?) -> Void
 
     @State private var name = ""
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var selectedCoverImageData: Data?
 
     var body: some View {
         NavigationStack {
@@ -806,9 +822,19 @@ private struct AddRecipeFolderView: View {
                 Section {
                     TextField(L.text("Folder name", language: language), text: $name)
                 }
+
+                folderCoverSection(
+                    language: language,
+                    imageData: selectedCoverImageData,
+                    selectedPhoto: $selectedPhoto,
+                    onRemove: { selectedCoverImageData = nil }
+                )
             }
             .navigationTitle(L.text("New Folder", language: language))
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: selectedPhoto) { _, newValue in
+                loadFolderCover(from: newValue)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L.text("Cancel", language: language)) {
@@ -818,29 +844,45 @@ private struct AddRecipeFolderView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Save", language: language)) {
-                        onSave(name, nil)
+                        onSave(name, selectedCoverImageData)
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+        }
+    }
+
+    private func loadFolderCover(from item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            let processed = RecipeImageProcessor.jpegData(from: data, maxDimension: 420, compression: 0.70) ?? data
+            await MainActor.run {
+                selectedCoverImageData = processed
             }
         }
     }
 }
 
-private struct RenameRecipeFolderView: View {
+private struct EditRecipeFolderView: View {
     @Environment(\.dismiss) private var dismiss
     let language: String
     let initialName: String
-    let onSave: (String) -> Void
+    let initialCoverImageData: Data?
+    let onSave: (String, Data?) -> Void
 
     @State private var name: String
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var selectedCoverImageData: Data?
 
-    init(language: String, initialName: String, onSave: @escaping (String) -> Void) {
+    init(language: String, initialName: String, initialCoverImageData: Data?, onSave: @escaping (String, Data?) -> Void) {
         self.language = language
         self.initialName = initialName
+        self.initialCoverImageData = initialCoverImageData
         self.onSave = onSave
         _name = State(initialValue: initialName)
+        _selectedCoverImageData = State(initialValue: initialCoverImageData)
     }
 
     var body: some View {
@@ -849,9 +891,19 @@ private struct RenameRecipeFolderView: View {
                 Section {
                     TextField(L.text("Folder name", language: language), text: $name)
                 }
+
+                folderCoverSection(
+                    language: language,
+                    imageData: selectedCoverImageData,
+                    selectedPhoto: $selectedPhoto,
+                    onRemove: { selectedCoverImageData = nil }
+                )
             }
-            .navigationTitle(L.text("Rename", language: language))
+            .navigationTitle(L.text("Edit", language: language))
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: selectedPhoto) { _, newValue in
+                loadFolderCover(from: newValue)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L.text("Cancel", language: language)) {
@@ -861,13 +913,65 @@ private struct RenameRecipeFolderView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L.text("Save", language: language)) {
-                        onSave(name)
+                        onSave(name, selectedCoverImageData)
                         dismiss()
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+    }
+
+    private func loadFolderCover(from item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            let processed = RecipeImageProcessor.jpegData(from: data, maxDimension: 420, compression: 0.70) ?? data
+            await MainActor.run {
+                selectedCoverImageData = processed
+            }
+        }
+    }
+}
+
+@ViewBuilder
+private func folderCoverSection(
+    language: String,
+    imageData: Data?,
+    selectedPhoto: Binding<PhotosPickerItem?>,
+    onRemove: @escaping () -> Void
+) -> some View {
+    Section(L.text("Cover", language: language)) {
+        HStack(spacing: 14) {
+            if let imageData, let image = UIImage(data: imageData) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 72, height: 72)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                PhotosPicker(selection: selectedPhoto, matching: .images) {
+                    Label(L.text(imageData == nil ? "Choose Photo" : "Change Photo", language: language), systemImage: "photo")
+                }
+
+                if imageData != nil {
+                    Button(role: .destructive, action: onRemove) {
+                        Label(L.text("Remove Cover", language: language), systemImage: "xmark.circle")
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
