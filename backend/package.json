@@ -14,6 +14,7 @@
     "enrich:ingredient-taxonomy": "node src/enrich-ingredient-taxonomy.js",
     "enrich:substitution-rules": "node src/enrich-substitution-rules.js",
     "enrich:public-sources": "node src/enrich-ingredients-public-sources.js",
+    "enrich:sayweee-zh": "node src/enrich-sayweee-zh-ingredients.js",
     "seed:food-bible-aliases": "node src/seed-food-bible-aliases.js",
     "drop:legacy-substitutions": "node src/apply-drop-legacy-substitution-tables.js",
     "drop:ingredients-default-unit": "node src/apply-drop-ingredients-default-unit.js",

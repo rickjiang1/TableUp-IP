@@ -1,0 +1,160 @@
+ingredient_slug	canonical_name	category	aliases	source_url	evidence_terms	notes
+persian_cucumber	Persian cucumber	vegetable	波斯黄瓜;小黄瓜;Persian cucumber	https://www.sayweee.com/zh/category/vegetables	波斯黄瓜	Chinese marketplace alias for cucumber variety.
+taiwan_cabbage	Taiwan cabbage	vegetable	台湾卷心菜;台湾高丽菜;高丽菜;Taiwan cabbage	https://www.sayweee.com/zh/category/vegetables	台湾卷心菜	Cabbage variety common in Chinese grocery.
+cauliflower	Cauliflower	vegetable	花椰菜;菜花;白花菜;cauliflower	https://www.sayweee.com/zh/category/vegetables	花椰菜	Common Chinese aliases.
+bell_pepper	Bell pepper	vegetable	甜椒;彩椒;灯笼椒;bell pepper	https://www.sayweee.com/zh/category/vegetables	甜椒	Common Chinese aliases.
+zucchini	Zucchini	vegetable	西葫芦;意大利瓜;zucchini	https://www.sayweee.com/zh/category/vegetables	西葫芦	Common Chinese aliases.
+green_papaya	Green papaya	fruit	青木瓜;绿木瓜;green papaya	https://www.sayweee.com/zh/category/vegetables	青木瓜	Often sold and cooked as vegetable in Asian grocery.
+japanese_sweet_potato	Japanese sweet potato	vegetable	日本红薯;日本地瓜;日式甜薯;Japanese sweet potato	https://www.sayweee.com/zh/category/vegetables	日本红薯	Common Chinese aliases.
+baby_bok_choy	Baby bok choy	vegetable	小白菜;小青菜;奶白菜;baby bok choy	https://www.sayweee.com/zh/category/vegetables	小白菜	Common Chinese aliases.
+shanghai_bok_choy	Shanghai bok choy	vegetable	上海青;上海白菜;青江菜;Shanghai bok choy	https://www.sayweee.com/zh/category/vegetables	上海青	Common Chinese aliases.
+water_spinach	Water spinach	vegetable	空心菜;通菜;蕹菜;water spinach	https://www.sayweee.com/zh/category/vegetables	空心菜	Common Chinese aliases.
+chrysanthemum_greens	Chrysanthemum greens	vegetable	茼蒿;皇帝菜;菊花菜;chrysanthemum greens	https://www.sayweee.com/zh/category/vegetables	茼蒿	Common Chinese aliases.
+yu_choy	Yu choy	vegetable	油菜;油菜心;菜心;yu choy	https://www.sayweee.com/zh/category/vegetables	油菜	Common Chinese aliases.
+pea_shoots	Pea shoots	vegetable	豆苗;豌豆苗;pea shoots	https://www.sayweee.com/zh/category/vegetables	豆苗	Common Chinese aliases.
+garland_chrysanthemum	Garland chrysanthemum	vegetable	茼蒿;蒿子杆;garland chrysanthemum	https://www.sayweee.com/zh/category/vegetables	茼蒿	Alias overlaps chrysanthemum greens; keep as related ingredient evidence.
+tindora	Tindora	vegetable	小苦瓜;印度小瓜;tindora;ivy gourd	https://www.sayweee.com/zh/category/vegetables	tindora	Asian vegetable.
+bottle_gourd	Bottle gourd	vegetable	葫芦瓜;瓠瓜;蒲瓜;lauki;bottle gourd	https://www.sayweee.com/zh/category/vegetables	lauki	Common Asian gourd aliases.
+calabaza_squash	Calabaza squash	vegetable	南瓜;中国南瓜;calabaza squash;kalabasa	https://www.sayweee.com/zh/category/vegetables	kalabasa	Common Asian squash aliases.
+bitter_melon	Bitter melon	vegetable	苦瓜;凉瓜;bitter melon	https://www.sayweee.com/zh/category/vegetables	苦瓜	Common Chinese aliases.
+winter_melon	Winter melon	vegetable	冬瓜;白瓜;wax gourd;winter melon	https://www.sayweee.com/zh/category/vegetables	冬瓜	Common Chinese aliases.
+loofah	Luffa	vegetable	丝瓜;胜瓜;loofah;luffa	https://www.sayweee.com/zh/category/vegetables	丝瓜	Common Chinese aliases.
+chayote	Chayote	vegetable	佛手瓜;合掌瓜;chayote	https://www.sayweee.com/zh/category/vegetables	佛手瓜	Common Chinese aliases.
+lotus_root	Lotus root	vegetable	莲藕;藕;lotus root	https://www.sayweee.com/zh/category/vegetables	莲藕	Common Chinese aliases.
+taro	Taro	vegetable	芋头;芋艿;taro	https://www.sayweee.com/zh/category/vegetables	芋头	Common Chinese aliases.
+chinese_yam	Chinese yam	vegetable	山药;淮山;山藥;Chinese yam	https://www.sayweee.com/zh/category/vegetables	山药	Common Chinese aliases.
+bamboo_shoots	Bamboo shoots	vegetable	竹笋;笋;bamboo shoots	https://www.sayweee.com/zh/category/vegetables	竹笋	Common Chinese aliases.
+water_chestnut	Water chestnut	vegetable	荸荠;马蹄;water chestnut	https://www.sayweee.com/zh/category/vegetables	荸荠	Common Chinese aliases.
+wood_ear_mushroom	Wood ear mushroom	vegetable	木耳;黑木耳;云耳;wood ear mushroom	https://www.sayweee.com/zh/category/vegetables	木耳	Common Chinese aliases.
+enoki_mushroom	Enoki mushroom	vegetable	金针菇;金菇;enoki mushroom	https://www.sayweee.com/zh/category/vegetables	金针菇	Common Chinese aliases.
+king_oyster_mushroom	King oyster mushroom	vegetable	杏鲍菇;鸡腿菇;king oyster mushroom	https://www.sayweee.com/zh/category/vegetables	杏鲍菇	Common Chinese aliases.
+shiitake_mushroom	Shiitake mushroom	vegetable	香菇;冬菇;shiitake mushroom	https://www.sayweee.com/zh/category/vegetables	香菇	Common Chinese aliases.
+bean_sprouts	Bean sprouts	vegetable	豆芽;芽菜;bean sprouts	https://www.sayweee.com/zh/category/vegetables	豆芽	Common Chinese aliases.
+chinese_chives	Chinese chives	vegetable	韭菜;韭黃;Chinese chives;garlic chives	https://www.sayweee.com/zh/category/vegetables	韭菜	Common Chinese aliases.
+garlic_scapes	Garlic scapes	vegetable	蒜苔;蒜薹;garlic scapes	https://www.sayweee.com/zh/category/vegetables	蒜苔	Common Chinese aliases.
+thai_basil	Thai basil	herb	九层塔;泰国罗勒;Thai basil	https://www.sayweee.com/zh/category/vegetables	九层塔	Common Asian herb aliases.
+shiso	Shiso	herb	紫苏;大叶;shiso	https://www.sayweee.com/zh/category/vegetables	紫苏	Common Asian herb aliases.
+lemongrass	Lemongrass	herb	香茅;柠檬草;lemongrass	https://www.sayweee.com/zh/category/vegetables	香茅	Common Asian herb aliases.
+kaffir_lime_leaves	Kaffir lime leaves	herb	泰国柠檬叶;卡菲尔青柠叶;kaffir lime leaves	https://www.sayweee.com/zh/category/vegetables	kaffir lime leaves	Common Asian herb aliases.
+pandan_leaves	Pandan leaves	herb	斑斓叶;香兰叶;pandan leaves	https://www.sayweee.com/zh/category/vegetables	pandan leaves	Common Asian herb aliases.
+dragon_fruit	Dragon fruit	fruit	火龙果;红心火龙果;白心火龙果;dragon fruit	https://www.sayweee.com/zh/category/fruits	火龙果	Common Chinese fruit aliases.
+lychee	Lychee	fruit	荔枝;妃子笑荔枝;lychee	https://www.sayweee.com/zh/category/fruits	广东妃子笑荔枝	Chinese marketplace fruit alias.
+longan	Longan	fruit	龙眼;桂圆;longan	https://www.sayweee.com/zh/category/fruits	越南龙眼	Common Chinese aliases.
+asian_pear	Asian pear	fruit	水晶梨;新高梨;韩国梨;亚洲梨;Asian pear	https://www.sayweee.com/zh/category/fruits	水晶梨;韩国新高梨	Common Chinese aliases.
+fuji_apple	Fuji apple	fruit	富士苹果;华盛顿富士苹果;Fuji apple	https://www.sayweee.com/zh/category/fruits	华盛顿富士苹果	Common Chinese aliases.
+white_peach	White peach	fruit	白桃;水蜜桃;white peach	https://www.sayweee.com/zh/category/fruits	优质白桃	Common Chinese aliases.
+donut_peach	Donut peach	fruit	蟠桃;扁桃;donut peach	https://www.sayweee.com/zh/category/fruits	蟠桃礼盒	Common Chinese aliases.
+yellow_mango	Yellow mango	fruit	黄芒果;香槟芒果;yellow mango	https://www.sayweee.com/zh/category/fruits	黄芒果;香槟芒果	Common Chinese aliases.
+korean_melon	Korean melon	fruit	韩国香瓜;香瓜;Korean melon	https://www.sayweee.com/zh/category/fruits	韩国香瓜	Common Chinese aliases.
+pomegranate	Pomegranate	fruit	石榴;红石榴;pomegranate	https://www.sayweee.com/zh/category/fruits	红石榴	Common Chinese aliases.
+jujube	Jujube	fruit	枣;红枣;鸡心枣;jujube	https://www.sayweee.com/zh/category/fruits	鸡心枣	Common Chinese aliases.
+mamey_sapote	Mamey sapote	fruit	马米果;mamey sapote	https://www.sayweee.com/zh/category/fruits	马米果	Asian/Latin fruit sold in marketplace.
+beef_short_plate	Beef short plate	protein	牛五花;肥牛;肥牛卷;牛肉卷;beef short plate	https://www.sayweee.com/zh/category/meat	火锅肥牛卷（牛五花）	Chinese hot pot cut aliases.
+beef_shank	Beef shank	protein	牛腱;金钱腱;牛腱心;beef shank	https://www.sayweee.com/zh/category/meat	牛腱心 金钱腱	Common Chinese beef cut aliases.
+beef_tripe	Beef tripe	protein	牛百叶;牛肚;毛肚;beef tripe	https://www.sayweee.com/zh/category/meat	精选鲜冻原切整块牛百叶	Common Chinese beef offal aliases.
+beef_tendon	Beef tendon	protein	牛筋;beef tendon	https://www.sayweee.com/zh/category/meat	牛筋	Common Chinese beef cut.
+beef_oxtail	Oxtail	protein	牛尾;牛尾巴;oxtail	https://www.sayweee.com/zh/category/meat	牛尾	Common Chinese aliases.
+pork_spare_ribs	Pork spare ribs	protein	猪小排;排骨;排骨条;金沙排骨条;pork spare ribs	https://www.sayweee.com/zh/category/meat	金沙排骨条 猪小排	Common Chinese pork cut aliases.
+pork_neck_bones	Pork neck bones	protein	猪颈骨;汤骨;pork neck bones	https://www.sayweee.com/zh/category/meat	黑豚猪颈骨 汤骨	Common Chinese pork cut aliases.
+pork_lard	Pork lard	protein	猪板油;猪油;板油;pork lard	https://www.sayweee.com/zh/category/meat	黑猪板油 猪油	Common Chinese aliases.
+pork_jowl	Pork jowl	protein	猪脸肉;猪颊肉;pork jowl	https://www.sayweee.com/zh/category/meat	韩式精切猪脸肉	Common Chinese pork cut aliases.
+pork_hock	Pork hock	protein	猪蹄;猪手;蹄膀;pork hock	https://www.sayweee.com/zh/category/meat	猪蹄	Common Chinese aliases.
+chicken_feet	Chicken feet	protein	鸡爪;凤爪;chicken feet	https://www.sayweee.com/zh/category/meat	鸡爪	Common Chinese aliases.
+chicken_mid_wings	Chicken mid wings	protein	鸡中翅;鸡翅中;chicken mid wings	https://www.sayweee.com/zh/category/meat	鸡中翅	Common Chinese aliases.
+chicken_cartilage	Chicken cartilage	protein	鸡脆骨;chicken cartilage	https://www.sayweee.com/zh/category/meat	鸡脆骨	Common Chinese aliases.
+chicken_liver	Chicken liver	protein	鸡肝;chicken liver	https://www.sayweee.com/zh/category/meat	鸡肝	Common Chinese aliases.
+boneless_chicken_thigh	Boneless chicken thigh	protein	无骨去皮鸡腿肉;去骨鸡腿肉;boneless chicken thigh	https://www.sayweee.com/zh/category/meat	无骨去皮鸡腿肉	Common Chinese aliases.
+duck_breast	Duck breast	protein	鸭胸肉;鸭胸;duck breast	https://www.sayweee.com/zh/category/meat	冷冻生鸭胸肉	Common Chinese aliases.
+whole_duck	Whole duck	protein	整鸭;冻整鸭;whole duck	https://www.sayweee.com/zh/category/meat	冷冻整鸭	Common Chinese aliases.
+half_duck	Half duck	protein	半鸭;切块半鸭;half duck	https://www.sayweee.com/zh/category/meat	切块半鸭	Common Chinese aliases.
+stewing_hen	Stewing hen	protein	老母鸡;炖汤鸡;stewing hen	https://www.sayweee.com/zh/category/meat	炖汤小老母鸡	Common Chinese aliases.
+lamb_shoulder_slice	Lamb shoulder slices	protein	羊肉卷;羊肩肉卷;lamb shoulder slices	https://www.sayweee.com/zh/category/meat	火锅羊肉卷 （羊肩）	Common Chinese hot pot cut aliases.
+golden_pompano	Golden pompano	seafood	金鲳鱼;鲳鱼;golden pompano	https://www.sayweee.com/zh/category/seafood	金鲳鱼 去鳃去内脏	Common Chinese seafood aliases.
+yellow_croaker	Yellow croaker	seafood	黄鱼;黄花鱼;yellow croaker	https://www.sayweee.com/zh/category/seafood	东海黄鱼	Common Chinese seafood aliases.
+snakehead_fish	Snakehead fish	seafood	黑鱼;黑鱼片;snakehead fish	https://www.sayweee.com/zh/category/seafood	黑鱼片	Common Chinese seafood aliases.
+halibut	Halibut	seafood	比目鱼;格陵兰比目鱼;halibut	https://www.sayweee.com/zh/category/seafood	格陵兰比目鱼排	Common Chinese seafood aliases.
+barramundi	Barramundi	seafood	金目鲈鱼;盲曹;barramundi	https://www.sayweee.com/zh/category/seafood	金目鲈鱼	Common Chinese seafood aliases.
+eel	Eel	seafood	鳗鱼;蒲烧鳗鱼;eel	https://www.sayweee.com/zh/category/seafood	鳗鱼蒲烧	Common Chinese seafood aliases.
+arctic_shrimp	Arctic shrimp	seafood	北极甜虾;北极虾;arctic shrimp	https://www.sayweee.com/zh/category/seafood	北极甜虾	Common Chinese seafood aliases.
+shrimp_paste_for_hotpot	Shrimp paste for hotpot	seafood	虾滑;鲜虾滑;shrimp paste	https://www.sayweee.com/zh/category/seafood	虾滑;鲜虾滑	Common Chinese hot pot seafood ingredient.
+dried_shrimp_skin	Dried shrimp skin	seafood	虾皮;海米皮;dried shrimp skin	https://www.sayweee.com/zh/category/seafood	顶级虾皮	Common Chinese seafood aliases.
+abalone	Abalone	seafood	鲍鱼;青边鲍鱼;abalone	https://www.sayweee.com/zh/category/seafood	澳洲青边鲍鱼	Common Chinese seafood aliases.
+surf_clam	Surf clam	seafood	北极贝;surf clam	https://www.sayweee.com/zh/category/seafood	北极贝	Common Chinese seafood aliases.
+squid_tentacles	Squid tentacles	seafood	鱿鱼须;鱿鱼触手;squid tentacles	https://www.sayweee.com/zh/category/seafood	鱿鱼触手	Common Chinese seafood aliases.
+fish_head	Fish head	seafood	鱼头;剁椒鱼头;fish head	https://www.sayweee.com/zh/category/seafood	剁椒鱼头	Base ingredient only; prepared sauce phrase kept as evidence, not alias.
+tofu	Tofu	protein	豆腐;老豆腐;嫩豆腐;tofu	https://www.sayweee.com/zh/category/tofu	豆腐	Common Chinese aliases.
+firm_tofu	Firm tofu	protein	老豆腐;北豆腐;firm tofu	https://www.sayweee.com/zh/category/tofu	豆腐	Tofu texture variety.
+soft_tofu	Soft tofu	protein	嫩豆腐;滑豆腐;soft tofu	https://www.sayweee.com/zh/category/tofu	豆腐	Tofu texture variety.
+dried_tofu	Dried tofu	protein	豆干;香干;dried tofu	https://www.sayweee.com/zh/category/tofu	豆干	Common Chinese aliases.
+tofu_skin	Tofu skin	protein	腐皮;豆腐皮;油豆皮;tofu skin	https://www.sayweee.com/zh/category/tofu	豆腐皮	Common Chinese aliases.
+fried_tofu_puffs	Fried tofu puffs	protein	油豆腐;豆腐泡;fried tofu puffs	https://www.sayweee.com/zh/category/tofu	油豆腐	Common Chinese aliases.
+wuchang_rice	Wuchang rice	grain	五常大米;东北大米;Wuchang rice	https://www.sayweee.com/zh/category/rice-noodles	五常大米	Common Chinese rice variety.
+rice_noodles	Rice noodles	grain	米粉;米线;rice noodles	https://www.sayweee.com/zh/category/rice-noodles	米粉;米线	Common Chinese aliases.
+glass_noodles	Glass noodles	grain	粉丝;冬粉;glass noodles	https://www.sayweee.com/zh/category/rice-noodles	粉丝	Common Chinese aliases.
+liangpi_noodles	Liangpi noodles	grain	凉皮;凉皮面;liangpi	https://www.sayweee.com/zh/category/rice-noodles	凉皮	Chinese wheat/rice noodle product as ingredient.
+beef_tendon_noodles	Beef tendon noodles	grain	牛筋面;beef tendon noodles	https://www.sayweee.com/zh/category/rice-noodles	牛筋面	Chinese noodle ingredient, not beef tendon.
+wide_rice_noodles	Wide rice noodles	grain	河粉;粿条;wide rice noodles	https://www.sayweee.com/zh/category/rice-noodles	河粉	Common Chinese aliases.
+shahe_fen	Shahe fen	grain	沙河粉;河粉;shahe fen	https://www.sayweee.com/zh/category/rice-noodles	沙河粉	Common Chinese aliases.
+chinkiang_vinegar	Chinkiang vinegar	pantry	镇江香醋;香醋;Chinkiang vinegar	https://www.sayweee.com/zh/category/seasoning	醋	Common Chinese vinegar aliases.
+light_soy_sauce	Light soy sauce	pantry	生抽;酱油;light soy sauce	https://www.sayweee.com/zh/category/seasoning	酱油	Common Chinese seasoning aliases.
+dark_soy_sauce	Dark soy sauce	pantry	老抽;dark soy sauce	https://www.sayweee.com/zh/category/seasoning	酱油	Common Chinese seasoning aliases.
+oyster_sauce	Oyster sauce	pantry	蚝油;耗油;oyster sauce	https://www.sayweee.com/zh/category/seasoning	蚝油	Common Chinese seasoning aliases.
+chili_crisp	Chili crisp	pantry	油辣子;辣椒油;香辣脆油;chili crisp	https://www.sayweee.com/zh/category/seasoning	辣酱	Common Chinese seasoning aliases.
+doubanjiang	Doubanjiang	pantry	豆瓣酱;郫县豆瓣;doubanjiang	https://www.sayweee.com/zh/category/seasoning	辣酱	Common Chinese seasoning aliases.
+shaoxing_wine	Shaoxing wine	pantry	绍兴酒;料酒;黄酒;shaoxing wine	https://www.sayweee.com/zh/category/seasoning	料酒	Common Chinese cooking wine aliases.
+chicken_powder	Chicken powder	pantry	鸡粉;鸡精;chicken powder	https://www.sayweee.com/zh/category/seasoning	调料	Common Chinese seasoning aliases.
+dashi_powder	Dashi powder	pantry	柴鱼粉;出汁粉;dashi powder	https://www.sayweee.com/zh/category/seasoning	调料	Common Asian seasoning aliases.
+dried_yellow_gardenia	Dried yellow gardenia	pantry	黄栀子;栀子;yellow gardenia	https://www.sayweee.com/zh/category/dried-goods	黄栀子	Common Chinese dry spice/coloring ingredient.
+ground_dried_fish	Ground dried fish	seafood	大地鱼粉;鱼粉;ground dried fish	https://www.sayweee.com/zh/category/dried-goods	大地鱼粉	Chinese dried seafood seasoning ingredient.
+plum_powder	Plum powder	pantry	甘梅粉;梅粉;plum powder	https://www.sayweee.com/zh/category/dried-goods	甘梅粉	Common Asian seasoning powder.
+dried_scallop	Dried scallop	seafood	干贝;瑶柱;dried scallop	https://www.sayweee.com/zh/category/dried-goods	干货	Common Chinese dried seafood aliases.
+dried_shiitake_mushroom	Dried shiitake mushroom	vegetable	干香菇;冬菇;dried shiitake mushroom	https://www.sayweee.com/zh/category/dried-goods	干货	Common Chinese dry mushroom aliases.
+dried_wood_ear_mushroom	Dried wood ear mushroom	vegetable	干木耳;黑木耳;dried wood ear mushroom	https://www.sayweee.com/zh/category/dried-goods	干货	Common Chinese dry mushroom aliases.
+hot_pot_beef_rolls	Hot pot beef rolls	protein	肥牛卷;牛肉卷;火锅肥牛卷;beef rolls for hot pot	https://www.sayweee.com/zh/category/meat	火锅肥牛卷	Hot pot sliced beef ingredient.
+hot_pot_lamb_rolls	Hot pot lamb rolls	protein	羊肉卷;火锅羊肉卷;涮羊肉片;lamb rolls for hot pot	https://www.sayweee.com/zh/category/meat	火锅羊肉卷	Hot pot sliced lamb ingredient.
+hot_pot_pork_slices	Hot pot pork slices	protein	猪肉片;火锅猪肉片;梅花肉片;pork slices for hot pot	https://www.sayweee.com/zh/category/meat	猪肉片	Hot pot sliced pork ingredient.
+wagyu_beef_slices	Wagyu beef slices	protein	和牛片;和牛卷;和牛火锅片;wagyu beef slices	https://www.sayweee.com/zh/category/meat	烧烤和牛拼盘	Hot pot/grill sliced beef ingredient.
+beef_omental_tripe	Beef omasum tripe	protein	牛百叶;牛肚;黑毛肚;beef omasum tripe	https://www.sayweee.com/zh/category/meat	牛百叶	Hot pot beef tripe ingredient.
+beef_honeycomb_tripe	Beef honeycomb tripe	protein	蜂窝牛肚;金钱肚;牛肚;honeycomb tripe	https://www.sayweee.com/zh/category/meat	牛肚	Hot pot beef offal ingredient.
+beef_aorta	Beef aorta	protein	黄喉;牛黄喉;beef aorta	https://www.sayweee.com/zh/category/meat	黄喉	Hot pot offal ingredient.
+duck_blood	Duck blood	protein	鸭血;血豆腐;duck blood	https://www.sayweee.com/zh/category/meat	鸭血	Hot pot ingredient.
+pork_blood	Pork blood	protein	猪血;血豆腐;pork blood	https://www.sayweee.com/zh/category/meat	猪血	Hot pot ingredient.
+pork_kidney	Pork kidney	protein	猪腰;腰花;pork kidney	https://www.sayweee.com/zh/category/meat	猪腰	Hot pot/sichuan ingredient.
+pork_intestine	Pork intestine	protein	肥肠;猪大肠;pork intestine	https://www.sayweee.com/zh/category/meat	肥肠	Hot pot/offal ingredient.
+beef_meatballs	Beef meatballs	protein	牛肉丸;牛丸;beef meatballs	https://www.sayweee.com/zh/category/meat	肉丸	Hot pot meatball ingredient.
+pork_meatballs	Pork meatballs	protein	猪肉丸;贡丸;pork meatballs	https://www.sayweee.com/zh/category/meat	贡丸	Hot pot meatball ingredient.
+fish_balls	Fish balls	seafood	鱼丸;鱼蛋;fish balls	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood ball ingredient.
+fish_tofu	Fish tofu	seafood	鱼豆腐;fish tofu	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood tofu ingredient.
+fish_cake	Fish cake	seafood	鱼糕;鱼板;fish cake	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood cake ingredient.
+lobster_balls	Lobster balls	seafood	龙虾丸;lobster balls	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood ball ingredient.
+cuttlefish_balls	Cuttlefish balls	seafood	墨鱼丸;cuttlefish balls	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood ball ingredient.
+shrimp_balls	Shrimp balls	seafood	虾丸;shrimp balls	https://www.sayweee.com/zh/category/seafood	鱼丸/海鲜	Hot pot seafood ball ingredient.
+shrimp_paste_for_hotpot	Shrimp paste for hotpot	seafood	虾滑;鲜虾滑;手打虾滑;shrimp paste	https://www.sayweee.com/zh/category/seafood	虾滑 冷冻	Hot pot shrimp paste ingredient.
+fish_paste_for_hotpot	Fish paste for hotpot	seafood	鱼滑;鱼浆;fish paste	https://www.sayweee.com/zh/category/seafood	鱼滑	Hot pot fish paste ingredient.
+beef_paste_for_hotpot	Beef paste for hotpot	protein	牛肉滑;牛滑;beef paste	https://www.sayweee.com/zh/category/meat	牛肉滑	Hot pot beef paste ingredient.
+frozen_tofu	Frozen tofu	protein	冻豆腐;冰豆腐;frozen tofu	https://www.sayweee.com/zh/category/tofu	豆腐	Hot pot tofu ingredient.
+tofu_puffs	Tofu puffs	protein	豆腐泡;油豆腐;tofu puffs	https://www.sayweee.com/zh/category/tofu	豆腐泡	Hot pot tofu ingredient.
+fried_bean_curd_rolls	Fried bean curd rolls	protein	响铃卷;腐皮卷;炸腐竹卷;fried bean curd rolls	https://www.sayweee.com/zh/category/tofu	豆制品	Hot pot tofu skin ingredient.
+bean_curd_sticks	Bean curd sticks	protein	腐竹;豆腐竹;bean curd sticks	https://www.sayweee.com/zh/category/tofu	豆制品	Hot pot bean curd ingredient.
+fresh_tofu_skin	Fresh tofu skin	protein	鲜腐皮;鲜豆皮;fresh tofu skin	https://www.sayweee.com/zh/category/tofu	豆制品	Hot pot tofu skin ingredient.
+konjac_knots	Konjac knots	vegetable	魔芋结;蒟蒻结;konjac knots	https://www.sayweee.com/zh/category/vegetables	魔芋	Hot pot konjac ingredient.
+konjac_noodles	Konjac noodles	vegetable	魔芋丝;蒟蒻丝;konjac noodles	https://www.sayweee.com/zh/category/vegetables	魔芋	Hot pot konjac ingredient.
+lotus_root_slices	Lotus root slices	vegetable	藕片;莲藕片;lotus root slices	https://www.sayweee.com/zh/category/vegetables	莲藕	Hot pot vegetable ingredient.
+potato_slices	Potato slices	vegetable	土豆片;马铃薯片;potato slices	https://www.sayweee.com/zh/category/vegetables	土豆	Hot pot vegetable ingredient.
+daikon_slices	Daikon slices	vegetable	白萝卜片;萝卜片;daikon slices	https://www.sayweee.com/zh/category/vegetables	白萝卜	Hot pot vegetable ingredient.
+napa_cabbage	Napa cabbage	vegetable	大白菜;白菜;napa cabbage	https://www.sayweee.com/zh/category/vegetables	白菜	Hot pot leafy vegetable.
+tong_ho	Chrysanthemum greens	vegetable	茼蒿;皇帝菜;tong ho	https://www.sayweee.com/zh/category/vegetables	茼蒿	Hot pot leafy vegetable.
+watercress	Watercress	vegetable	西洋菜;豆瓣菜;watercress	https://www.sayweee.com/zh/category/vegetables	西洋菜	Hot pot leafy vegetable.
+enoki_mushroom	Enoki mushroom	vegetable	金针菇;金菇;enoki mushroom	https://www.sayweee.com/zh/category/vegetables	金针菇	Hot pot mushroom ingredient.
+seafood_mushroom	Seafood mushroom	vegetable	海鲜菇;蟹味菇;seafood mushroom	https://www.sayweee.com/zh/category/vegetables	海鲜菇	Hot pot mushroom ingredient.
+brown_beech_mushroom	Brown beech mushroom	vegetable	蟹味菇;鸿喜菇;brown beech mushroom	https://www.sayweee.com/zh/category/vegetables	蟹味菇	Hot pot mushroom ingredient.
+oyster_mushroom	Oyster mushroom	vegetable	平菇;蚝菇;oyster mushroom	https://www.sayweee.com/zh/category/vegetables	平菇	Hot pot mushroom ingredient.
+sweet_potato_glass_noodles	Sweet potato glass noodles	grain	红薯粉;宽粉;火锅粉;sweet potato glass noodles	https://www.sayweee.com/zh/category/rice-noodles	粉丝	Hot pot noodle ingredient.
+wide_glass_noodles	Wide glass noodles	grain	宽粉;宽粉条;wide glass noodles	https://www.sayweee.com/zh/category/rice-noodles	宽粉	Hot pot noodle ingredient.
+vermicelli	Vermicelli	grain	粉丝;细粉丝;vermicelli	https://www.sayweee.com/zh/category/rice-noodles	粉丝	Hot pot noodle ingredient.
+udon_noodles	Udon noodles	grain	乌冬面;udon noodles	https://www.sayweee.com/zh/category/rice-noodles	乌冬面	Hot pot noodle ingredient.
+hot_pot_soup_base	Hot pot soup base	pantry	火锅底料;火锅汤底;hot pot soup base	https://www.sayweee.com/zh/category/seasoning	火锅	Hot pot pantry ingredient; brand names excluded.
+sesame_paste	Sesame paste	pantry	芝麻酱;麻酱;sesame paste	https://www.sayweee.com/zh/category/seasoning	蘸酱	Hot pot dipping sauce ingredient.
+shacha_sauce	Shacha sauce	pantry	沙茶酱;沙爹酱;shacha sauce	https://www.sayweee.com/zh/category/seasoning	蘸酱	Hot pot dipping sauce ingredient.
+fermented_bean_curd	Fermented bean curd	pantry	腐乳;豆腐乳;fermented bean curd	https://www.sayweee.com/zh/category/seasoning	蘸酱	Hot pot dipping sauce ingredient.
+garlic_chili_sauce	Garlic chili sauce	pantry	蒜蓉辣酱;蒜辣酱;garlic chili sauce	https://www.sayweee.com/zh/category/seasoning	辣酱	Hot pot dipping sauce ingredient.
