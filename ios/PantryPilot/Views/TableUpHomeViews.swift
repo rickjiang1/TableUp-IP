@@ -1243,8 +1243,10 @@ struct KaifanView: View {
                     RecipesView()
                 }
                 .sheet(isPresented: $showingCookPanel) {
-                    GeometryReader { sheetProxy in
-                        cookRecommendationsOverlay(width: sheetProxy.size.width, height: sheetProxy.size.height)
+                    NavigationStack {
+                        GeometryReader { sheetProxy in
+                            cookRecommendationsOverlay(width: sheetProxy.size.width, height: sheetProxy.size.height)
+                        }
                     }
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
@@ -1266,8 +1268,8 @@ struct KaifanView: View {
             Image("TableUpCanCookSceneBackground")
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: height * 1.12)
-                .offset(y: 18)
+                .frame(width: width, height: height + 96, alignment: .top)
+                .offset(y: -48)
                 .clipped()
                 .overlay(
                     LinearGradient(
@@ -1323,7 +1325,7 @@ struct KaifanView: View {
 
     private var cookFilterShelf: some View {
         HStack(spacing: 0) {
-            cookFilterButton(.ready, icon: "pot.fill", value: readyCount)
+            cookFilterButton(.ready, icon: "checkmark.circle.fill", value: readyCount)
             Divider()
                 .frame(height: 54)
                 .overlay(Color.black.opacity(0.08))
@@ -1500,15 +1502,20 @@ struct KaifanView: View {
                 }
                 .buttonStyle(.plain)
             } else {
-                recommendationRow(
-                    title: match.recipeName,
-                    imageData: nil,
-                    matchPercent: Int(match.matchScorePercent.rounded()),
-                    time: nil,
-                    missing: match.missingRequiredIngredients.map(\.recipeIngredient),
-                    isReady: match.matchRatio >= threshold,
-                    ingredientNames: match.matchedIngredients.map(\.recipeIngredient)
-                )
+                NavigationLink {
+                    CloudOnlyRecipeMatchDetailView(match: match)
+                } label: {
+                    recommendationRow(
+                        title: match.recipeName,
+                        imageData: nil,
+                        matchPercent: Int(match.matchScorePercent.rounded()),
+                        time: nil,
+                        missing: match.missingRequiredIngredients.map(\.recipeIngredient),
+                        isReady: match.matchRatio >= threshold,
+                        ingredientNames: match.matchedIngredients.map(\.recipeIngredient)
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -1555,6 +1562,13 @@ struct KaifanView: View {
             } else if let recipe = item.recipe, let assessment = item.assessment {
                 NavigationLink {
                     RecipeDetailView(recipe: recipe, assessment: assessment)
+                } label: {
+                    featuredRecommendationContent(item)
+                }
+                .buttonStyle(.plain)
+            } else if let cloudMatch = item.cloudMatch {
+                NavigationLink {
+                    CloudOnlyRecipeMatchDetailView(match: cloudMatch)
                 } label: {
                     featuredRecommendationContent(item)
                 }
@@ -2146,6 +2160,132 @@ private struct KaifanRecommendationItem {
     let recipe: Recipe?
     var assessment: CookAssessment?
     var cloudMatch: CloudRecipeMatch?
+}
+
+private struct CloudOnlyRecipeMatchDetailView: View {
+    let match: CloudRecipeMatch
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.chinese.rawValue
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(match.recipeName)
+                        .font(.largeTitle.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.20, green: 0.13, blue: 0.08))
+
+                    Text("\(Int(match.matchScorePercent.rounded()))%")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(TableUpTheme.orange)
+                        .clipShape(Capsule())
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 4)
+
+                cloudMatchSection(
+                    title: text("已匹配", "Matched"),
+                    items: match.matchedIngredients,
+                    icon: "checkmark.circle.fill",
+                    color: Color(red: 0.32, green: 0.55, blue: 0.16)
+                )
+
+                if !match.substitutedIngredients.isEmpty {
+                    cloudMatchSection(
+                        title: text("替代食材", "Substitutes"),
+                        items: match.substitutedIngredients,
+                        icon: "arrow.triangle.2.circlepath",
+                        color: TableUpTheme.orange,
+                        showsInventoryName: true
+                    )
+                }
+
+                if !match.missingRequiredIngredients.isEmpty {
+                    cloudMatchSection(
+                        title: text("缺少主要食材", "Missing required"),
+                        items: match.missingRequiredIngredients,
+                        icon: "exclamationmark.circle.fill",
+                        color: Color(red: 0.72, green: 0.16, blue: 0.12)
+                    )
+                }
+
+                if !match.missingOptionalIngredients.isEmpty {
+                    cloudMatchSection(
+                        title: text("缺少次要食材", "Missing optional"),
+                        items: match.missingOptionalIngredients,
+                        icon: "minus.circle.fill",
+                        color: Color.black.opacity(0.42)
+                    )
+                }
+
+                if !match.pantryMissing.isEmpty {
+                    cloudMatchSection(
+                        title: text("缺少调料", "Missing pantry"),
+                        items: match.pantryMissing,
+                        icon: "leaf.circle.fill",
+                        color: Color.black.opacity(0.36)
+                    )
+                }
+            }
+            .padding(22)
+        }
+        .background(Color(red: 0.98, green: 0.93, blue: 0.84))
+        .navigationTitle(text("匹配详情", "Match detail"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func cloudMatchSection(
+        title: String,
+        items: [CloudRecipeMatchIngredient],
+        icon: String,
+        color: Color,
+        showsInventoryName: Bool = false
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color(red: 0.20, green: 0.13, blue: 0.08))
+
+            ForEach(items) { item in
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: icon)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(color)
+                        .frame(width: 22)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.recipeIngredient)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.22, green: 0.15, blue: 0.10))
+
+                        if showsInventoryName, !item.userInventoryIngredient.isEmpty {
+                            Text("\(text("使用", "Use")) \(item.userInventoryIngredient)")
+                                .font(.caption)
+                                .foregroundStyle(Color.black.opacity(0.52))
+                        }
+
+                        if item.matchType == "substitute" {
+                            Text("\(text("替代分数", "Substitute score")) \(Int((item.matchScore * 100).rounded()))%")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(TableUpTheme.orange)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.42))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.30))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func text(_ zh: String, _ en: String) -> String {
+        appLanguage == AppLanguage.chinese.rawValue ? zh : en
+    }
 }
 
 private struct KaifanPageBackground: View {
