@@ -5,6 +5,7 @@ const automaticSubstitutionCapsBySubcategory = new Map([
   ["allium", 0.69],
   ["rhizome_aromatic", 0.69]
 ]);
+const ruleIndexCache = new WeakMap();
 
 export function getSubstituteCandidates({
   ingredientId,
@@ -20,16 +21,17 @@ export function getSubstituteCandidates({
   }
 
   const normalizedContext = normalizeContext(context);
-  const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const ruleIndex = getRuleIndex(rules);
+  const ingredientsById = ruleIndex.ingredientsById;
   const source = ingredientsById.get(sourceId);
   if (!source) {
     return [];
   }
 
   const allowedCandidateIds = normalizeCandidateIngredientIds(candidateIngredientIds);
-  const verified = verifiedSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, allowedCandidateIds });
+  const verified = verifiedSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, ruleIndex, allowedCandidateIds });
   const verifiedTargetIds = new Set(verified.map((candidate) => candidate.substituteIngredientId).filter(Boolean));
-  const dynamic = dynamicSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, allowedCandidateIds })
+  const dynamic = dynamicSubstituteCandidates({ source, context: normalizedContext, rules, ingredientsById, ruleIndex, allowedCandidateIds })
     .filter((candidate) => !verifiedTargetIds.has(candidate.substituteIngredientId));
 
   return [...verified, ...dynamic]
@@ -47,15 +49,16 @@ export function scoreDynamicSubstitute({ source, candidate, context = "general",
   }
 
   const normalizedContext = normalizeContext(context);
-  const categoryScore = scoreCategorySimilarity(source, candidate, rules.categories || []);
+  const ruleIndex = getRuleIndex(rules || {});
+  const categoryScore = scoreCategorySimilarity(source, candidate, ruleIndex);
   if (categoryScore <= 0) {
     return null;
   }
 
-  const tagSimilarityScore = scoreTagSimilarity(source.ingredient_id, candidate.ingredient_id, rules.functionalProfiles || []);
-  const contextScore = scoreContext(source, candidate, normalizedContext, rules.substitutionRules || []);
+  const tagSimilarityScore = scoreTagSimilarity(source.ingredient_id, candidate.ingredient_id, ruleIndex);
+  const contextScore = scoreContext(source, candidate, normalizedContext, ruleIndex);
   const rawScore = categoryScore * categoryWeight + tagSimilarityScore * tagWeight + contextScore * contextWeight;
-  const score = capRiskyDynamicSubstitutionScore(rawScore, source, candidate, rules.categories || []);
+  const score = capRiskyDynamicSubstitutionScore(rawScore, source, candidate, ruleIndex);
 
   return {
     score: roundScore(score),
@@ -67,9 +70,9 @@ export function scoreDynamicSubstitute({ source, candidate, context = "general",
   };
 }
 
-function capRiskyDynamicSubstitutionScore(score, source, candidate, categories) {
-  const sourceSubcategory = categorySlug(source.subcategory_id, categories);
-  const candidateSubcategory = categorySlug(candidate.subcategory_id, categories);
+function capRiskyDynamicSubstitutionScore(score, source, candidate, ruleIndex) {
+  const sourceSubcategory = categorySlug(source.subcategory_id, ruleIndex);
+  const candidateSubcategory = categorySlug(candidate.subcategory_id, ruleIndex);
   if (!sourceSubcategory || sourceSubcategory !== candidateSubcategory) {
     return clampScore(score);
   }
@@ -78,9 +81,8 @@ function capRiskyDynamicSubstitutionScore(score, source, candidate, categories) 
   return clampScore(cap === undefined ? score : Math.min(score, cap));
 }
 
-function verifiedSubstituteCandidates({ source, context, rules, ingredientsById, allowedCandidateIds }) {
-  return (rules.verifiedSubstitutions || [])
-    .filter((row) => String(row.ingredient_id || "") === source.ingredient_id)
+function verifiedSubstituteCandidates({ source, context, ingredientsById, ruleIndex, allowedCandidateIds }) {
+  return (ruleIndex.verifiedByIngredient.get(source.ingredient_id) || [])
     .filter((row) => contextMatches(row.context, context))
     .filter((row) => !allowedCandidateIds || allowedCandidateIds.has(String(row.substitute_ingredient_id || "")))
     .map((row) => {
@@ -106,7 +108,7 @@ function verifiedSubstituteCandidates({ source, context, rules, ingredientsById,
     });
 }
 
-function dynamicSubstituteCandidates({ source, context, rules, ingredientsById, allowedCandidateIds }) {
+function dynamicSubstituteCandidates({ source, context, rules, ingredientsById, ruleIndex, allowedCandidateIds }) {
   const candidates = [];
   const candidatePool = allowedCandidateIds
     ? [...allowedCandidateIds].map((id) => ingredientsById.get(id)).filter(Boolean)
@@ -116,7 +118,7 @@ function dynamicSubstituteCandidates({ source, context, rules, ingredientsById, 
     if (candidate.ingredient_id === source.ingredient_id) {
       continue;
     }
-    const scored = scoreDynamicSubstitute({ source, candidate, context, rules });
+    const scored = scoreDynamicSubstituteWithIndex({ source, candidate, context, ruleIndex });
     if (!scored) {
       continue;
     }
@@ -141,6 +143,32 @@ function dynamicSubstituteCandidates({ source, context, rules, ingredientsById, 
   return candidates;
 }
 
+function scoreDynamicSubstituteWithIndex({ source, candidate, context = "general", ruleIndex }) {
+  if (!source || !candidate) {
+    return null;
+  }
+
+  const normalizedContext = normalizeContext(context);
+  const categoryScore = scoreCategorySimilarity(source, candidate, ruleIndex);
+  if (categoryScore <= 0) {
+    return null;
+  }
+
+  const tagSimilarityScore = scoreTagSimilarity(source.ingredient_id, candidate.ingredient_id, ruleIndex);
+  const contextScore = scoreContext(source, candidate, normalizedContext, ruleIndex);
+  const rawScore = categoryScore * categoryWeight + tagSimilarityScore * tagWeight + contextScore * contextWeight;
+  const score = capRiskyDynamicSubstitutionScore(rawScore, source, candidate, ruleIndex);
+
+  return {
+    score: roundScore(score),
+    categoryScore: roundScore(categoryScore),
+    tagSimilarityScore: roundScore(tagSimilarityScore),
+    contextScore: roundScore(contextScore),
+    source: "dynamic_rule",
+    context: normalizedContext
+  };
+}
+
 function normalizeCandidateIngredientIds(candidateIngredientIds) {
   if (!candidateIngredientIds) {
     return null;
@@ -156,7 +184,7 @@ function normalizeCandidateIngredientIds(candidateIngredientIds) {
   return normalized.length > 0 ? new Set(normalized) : null;
 }
 
-function scoreCategorySimilarity(source, candidate, categories) {
+function scoreCategorySimilarity(source, candidate, ruleIndex) {
   const sourceSubcategoryId = String(source.subcategory_id || "");
   const candidateSubcategoryId = String(candidate.subcategory_id || "");
   const sourceCategoryId = String(source.category_id || "");
@@ -169,9 +197,8 @@ function scoreCategorySimilarity(source, candidate, categories) {
     return 0.78;
   }
 
-  const categoriesById = new Map(categories.map((category) => [category.id, category]));
-  const sourceParentId = categoriesById.get(sourceSubcategoryId)?.parent_category_id || "";
-  const candidateParentId = categoriesById.get(candidateSubcategoryId)?.parent_category_id || "";
+  const sourceParentId = ruleIndex.categoriesById.get(sourceSubcategoryId)?.parent_category_id || "";
+  const candidateParentId = ruleIndex.categoriesById.get(candidateSubcategoryId)?.parent_category_id || "";
   if (sourceParentId && sourceParentId === candidateParentId) {
     return 0.72;
   }
@@ -179,24 +206,18 @@ function scoreCategorySimilarity(source, candidate, categories) {
   return 0;
 }
 
-function categorySlug(categoryId, categories) {
-  const category = categories.find((item) => item.id === categoryId);
+function categorySlug(categoryId, ruleIndex) {
+  const category = ruleIndex.categoriesById.get(categoryId);
   return category?.slug || "";
 }
 
-function scoreTagSimilarity(sourceIngredientId, candidateIngredientId, profiles) {
-  const sourceProfiles = profiles
-    .filter((profile) => profile.ingredient_id === sourceIngredientId)
-    .map((profile) => ({ tagId: profile.tag_id, weight: Number(profile.weight || 1) }));
+function scoreTagSimilarity(sourceIngredientId, candidateIngredientId, ruleIndex) {
+  const sourceProfiles = ruleIndex.profilesByIngredient.get(sourceIngredientId) || [];
   if (sourceProfiles.length === 0) {
     return 0;
   }
 
-  const candidateByTag = new Map(
-    profiles
-      .filter((profile) => profile.ingredient_id === candidateIngredientId)
-      .map((profile) => [profile.tag_id, Number(profile.weight || 1)])
-  );
+  const candidateByTag = ruleIndex.profileWeightByIngredientAndTag.get(candidateIngredientId) || new Map();
 
   const sourceWeight = sourceProfiles.reduce((sum, profile) => sum + profile.weight, 0);
   const overlapWeight = sourceProfiles.reduce((sum, profile) => {
@@ -207,23 +228,87 @@ function scoreTagSimilarity(sourceIngredientId, candidateIngredientId, profiles)
   return sourceWeight > 0 ? clampScore(overlapWeight / sourceWeight) : 0;
 }
 
-function scoreContext(source, candidate, context, substitutionRules) {
+function scoreContext(source, candidate, context, ruleIndex) {
   const sourceCategoryIds = [source.subcategory_id, source.category_id].filter(Boolean);
   const candidateCategoryIds = [candidate.subcategory_id, candidate.category_id].filter(Boolean);
 
   let best = 0;
-  for (const rule of substitutionRules) {
+  for (const rule of ruleIndex.substitutionRulesByContext.get("general") || []) {
     const sourceMatches = sourceCategoryIds.includes(rule.source_category_id);
     const targetMatches = candidateCategoryIds.includes(rule.target_category_id);
-    if (!sourceMatches || !targetMatches) {
-      continue;
-    }
-    if (normalizeContext(rule.context) === context || normalizeContext(rule.context) === "general") {
+    if (sourceMatches && targetMatches) {
       best = Math.max(best, Number(rule.base_score || 0));
+    }
+  }
+  if (context !== "general") {
+    for (const rule of ruleIndex.substitutionRulesByContext.get(context) || []) {
+      const sourceMatches = sourceCategoryIds.includes(rule.source_category_id);
+      const targetMatches = candidateCategoryIds.includes(rule.target_category_id);
+      if (sourceMatches && targetMatches) {
+        best = Math.max(best, Number(rule.base_score || 0));
+      }
     }
   }
 
   return clampScore(best);
+}
+
+function getRuleIndex(rules) {
+  const cached = ruleIndexCache.get(rules);
+  if (cached) {
+    return cached;
+  }
+
+  const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const categoriesById = new Map((rules.categories || []).map((category) => [category.id, category]));
+  const profilesByIngredient = new Map();
+  const profileWeightByIngredientAndTag = new Map();
+  const substitutionRulesByContext = new Map();
+  const verifiedByIngredient = new Map();
+
+  for (const profile of rules.functionalProfiles || []) {
+    const ingredientId = profile.ingredient_id;
+    if (!profilesByIngredient.has(ingredientId)) {
+      profilesByIngredient.set(ingredientId, []);
+    }
+    const normalizedProfile = {
+      tagId: profile.tag_id,
+      weight: Number(profile.weight || 1)
+    };
+    profilesByIngredient.get(ingredientId).push(normalizedProfile);
+
+    if (!profileWeightByIngredientAndTag.has(ingredientId)) {
+      profileWeightByIngredientAndTag.set(ingredientId, new Map());
+    }
+    profileWeightByIngredientAndTag.get(ingredientId).set(normalizedProfile.tagId, normalizedProfile.weight);
+  }
+
+  for (const rule of rules.substitutionRules || []) {
+    const context = normalizeContext(rule.context);
+    if (!substitutionRulesByContext.has(context)) {
+      substitutionRulesByContext.set(context, []);
+    }
+    substitutionRulesByContext.get(context).push(rule);
+  }
+
+  for (const row of rules.verifiedSubstitutions || []) {
+    const ingredientId = String(row.ingredient_id || "");
+    if (!verifiedByIngredient.has(ingredientId)) {
+      verifiedByIngredient.set(ingredientId, []);
+    }
+    verifiedByIngredient.get(ingredientId).push(row);
+  }
+
+  const index = {
+    ingredientsById,
+    categoriesById,
+    profilesByIngredient,
+    profileWeightByIngredientAndTag,
+    substitutionRulesByContext,
+    verifiedByIngredient
+  };
+  ruleIndexCache.set(rules, index);
+  return index;
 }
 
 function contextMatches(rowContext, requestedContext) {

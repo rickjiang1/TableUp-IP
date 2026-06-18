@@ -7,10 +7,10 @@ const pantryWeight = 0.1;
 const mainSubstitutionMinimumScore = 0.90;
 const secondarySubstitutionMinimumScore = 0.80;
 
-export async function matchRecipesForInventory(inventoryInput) {
+export async function matchRecipesForInventory(inventoryInput, options = {}) {
   const [recipes, rules] = await Promise.all([
-    fetchCloudRecipes(),
-    fetchMatchingRules()
+    options.recipes ? Promise.resolve(options.recipes) : fetchCloudRecipes(),
+    options.rules ? Promise.resolve(options.rules) : fetchMatchingRules()
   ]);
 
   const resolver = buildIngredientResolver(rules);
@@ -30,15 +30,16 @@ export async function matchRecipesForInventory(inventoryInput) {
 
 function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
   const inventoryIngredientIds = new Set(inventory.map((item) => item.ingredientId).filter(Boolean));
+  const inventoryByIngredientId = buildInventoryIndex(inventory);
   const details = recipe.ingredients.map((ingredient) => {
     const recipeIngredientId = resolveRecipeIngredientId(ingredient, resolver);
-    const exactItem = inventory.find((item) => !item.aliasMatched && item.ingredientId === recipeIngredientId);
+    const exactItem = inventoryByIngredientId.exact.get(recipeIngredientId);
 
     if (exactItem) {
       return ingredientMatch(ingredient, exactItem, "exact", 1);
     }
 
-    const aliasItem = inventory.find((item) => item.aliasMatched && item.ingredientId === recipeIngredientId);
+    const aliasItem = inventoryByIngredientId.alias.get(recipeIngredientId);
     if (aliasItem) {
       return ingredientMatch(ingredient, aliasItem, "alias", 1);
     }
@@ -52,7 +53,7 @@ function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
       if (!substitutionScoreAllowed(candidate.score, substitutionMinimumScore, ingredient)) {
         continue;
       }
-      const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
+      const substituteItem = inventoryByIngredientId.any.get(candidate.substituteIngredientId);
       if (substituteItem) {
         if (!bestSubstitute || candidate.score > bestSubstitute.score) {
           bestSubstitute = {
@@ -126,6 +127,32 @@ function ingredientMatch(ingredient, inventoryItem, matchType, score, extra = {}
     weight: ingredientWeight(ingredient),
     ...extra
   };
+}
+
+function buildInventoryIndex(inventory) {
+  const exact = new Map();
+  const alias = new Map();
+  const any = new Map();
+
+  for (const item of inventory) {
+    if (!item.ingredientId) {
+      continue;
+    }
+    setIfMissing(any, item.ingredientId, item);
+    if (item.aliasMatched) {
+      setIfMissing(alias, item.ingredientId, item);
+    } else {
+      setIfMissing(exact, item.ingredientId, item);
+    }
+  }
+
+  return { exact, alias, any };
+}
+
+function setIfMissing(map, key, value) {
+  if (!map.has(key)) {
+    map.set(key, value);
+  }
 }
 
 function normalizeInventory(input, resolver) {

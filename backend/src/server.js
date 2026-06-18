@@ -27,9 +27,11 @@ const port = Number(process.env.PORT || 8787);
 const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
 const appEnv = process.env.APP_ENV || "dev";
 const matchingRulesCacheTtlMs = Number(process.env.MATCHING_RULES_CACHE_TTL_MS || 60_000);
+const cloudRecipesCacheTtlMs = Number(process.env.CLOUD_RECIPES_CACHE_TTL_MS || 15_000);
 const ingredientDictionaryCacheTtlMs = Number(process.env.INGREDIENT_DICTIONARY_CACHE_TTL_MS || 60_000);
 const openAIExtractionMaxOutputTokens = Number(process.env.OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS || 2500);
 let matchingRulesCache = { expiresAt: 0, value: null, promise: null };
+let cloudRecipesCache = { expiresAt: 0, value: null, promise: null };
 const ingredientDictionaryCache = new Map();
 
 const server = createServer(async (request, response) => {
@@ -50,7 +52,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/recipes") {
-      const recipes = await fetchCloudRecipes();
+      const recipes = await getCachedCloudRecipes();
       sendJson(response, 200, { recipes });
       return;
     }
@@ -102,7 +104,11 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/recipe-matches") {
       const body = await readJsonRequest(request, 1024 * 1024);
-      const matches = await matchRecipesForInventory(body.inventory);
+      const [recipes, rules] = await Promise.all([
+        getCachedCloudRecipes(),
+        getCachedMatchingRules()
+      ]);
+      const matches = await matchRecipesForInventory(body.inventory, { recipes, rules });
       sendJson(response, 200, { matches });
       return;
     }
@@ -118,6 +124,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/ingredient-aliases") {
       const body = await readJsonRequest(request, 1024 * 1024);
       await upsertIngredientAliasSuggestion(body);
+      invalidateMatchingCaches();
       sendJson(response, 201, { ok: true });
       return;
     }
@@ -125,6 +132,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/unknown-ingredients/resolve") {
       const body = await readJsonRequest(request, 1024 * 1024);
       await markUnknownIngredientResolved(body);
+      invalidateMatchingCaches();
       sendJson(response, 200, { ok: true });
       return;
     }
@@ -161,6 +169,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/recipes") {
       const recipe = await readJsonRequest(request, 1024 * 1024);
       const savedRecipe = await upsertCloudRecipe(recipe);
+      invalidateRecipeCaches();
       sendJson(response, 201, { recipe: savedRecipe });
       return;
     }
@@ -169,12 +178,14 @@ const server = createServer(async (request, response) => {
     if (recipeMatch && request.method === "PUT") {
       const recipe = await readJsonRequest(request, 1024 * 1024);
       const savedRecipe = await upsertCloudRecipe(recipe, decodeURIComponent(recipeMatch[1]));
+      invalidateRecipeCaches();
       sendJson(response, 200, { recipe: savedRecipe });
       return;
     }
 
     if (recipeMatch && request.method === "DELETE") {
       await deleteCloudRecipe(decodeURIComponent(recipeMatch[1]));
+      invalidateRecipeCaches();
       sendJson(response, 200, { ok: true });
       return;
     }
@@ -344,6 +355,41 @@ async function getCachedMatchingRules() {
     });
 
   return matchingRulesCache.promise;
+}
+
+async function getCachedCloudRecipes() {
+  const now = Date.now();
+  if (cloudRecipesCache.value && cloudRecipesCache.expiresAt > now) {
+    return cloudRecipesCache.value;
+  }
+  if (cloudRecipesCache.promise) {
+    return cloudRecipesCache.promise;
+  }
+
+  cloudRecipesCache.promise = fetchCloudRecipes()
+    .then((recipes) => {
+      cloudRecipesCache = {
+        value: recipes,
+        expiresAt: Date.now() + cloudRecipesCacheTtlMs,
+        promise: null
+      };
+      return recipes;
+    })
+    .catch((error) => {
+      cloudRecipesCache.promise = null;
+      throw error;
+    });
+
+  return cloudRecipesCache.promise;
+}
+
+function invalidateMatchingCaches() {
+  matchingRulesCache = { expiresAt: 0, value: null, promise: null };
+  ingredientDictionaryCache.clear();
+}
+
+function invalidateRecipeCaches() {
+  cloudRecipesCache = { expiresAt: 0, value: null, promise: null };
 }
 
 async function getCachedIngredientDictionary(language = "en") {
