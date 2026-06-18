@@ -12,6 +12,7 @@
     "audit:unit-conversions": "node src/audit-unit-conversions.js",
     "seed:dynamic-substitutions": "node src/seed-dynamic-substitutions.js",
     "enrich:ingredient-taxonomy": "node src/enrich-ingredient-taxonomy.js",
+    "enrich:ingredient-nutrition": "node src/enrich-ingredient-nutrition.js",
     "enrich:substitution-rules": "node src/enrich-substitution-rules.js",
     "enrich:public-sources": "node src/enrich-ingredients-public-sources.js",
     "enrich:sayweee-zh": "node src/enrich-sayweee-zh-ingredients.js",
