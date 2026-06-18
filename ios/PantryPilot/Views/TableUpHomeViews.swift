@@ -125,20 +125,6 @@ struct YouliaoView: View {
                     .zIndex(2)
                     .accessibilityLabel("查看库存")
 
-                    if !cabinetOpen && !showingBasketMenu {
-                        Text("\(ingredients.count) 种 · 即将过期 \(expiringSoonCount)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(TableUpTheme.mutedText)
-                            .frame(width: 176, alignment: .leading)
-                            .padding(.vertical, 5)
-                            .padding(.horizontal, 8)
-                            .background(Color.black.opacity(0.68))
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .position(x: width * 0.78, y: height * 0.782)
-                        .zIndex(1.5)
-                        .allowsHitTesting(false)
-                    }
-                    
                     if cabinetOpen {
                         VStack(alignment: .leading, spacing: 14) {
                             overview
@@ -191,13 +177,17 @@ struct YouliaoView: View {
                 .sheet(item: $activeFoodEntryMode) { mode in
                     switch mode {
                     case .camera:
-                        ScanView(launchMode: .camera)
+                        PhotoIngredientCaptureSheet(launchMode: .camera)
                     case .photoLibrary:
-                        ScanView(launchMode: .photoLibrary)
+                        PhotoIngredientCaptureSheet(launchMode: .photoLibrary)
                     case .manual:
                         ManualIngredientEntrySheet()
+                            .presentationDetents([.medium, .large])
+                            .presentationDragIndicator(.visible)
                     case .voice:
                         VoiceIngredientEntrySheet()
+                            .presentationDetents([.medium, .large])
+                            .presentationDragIndicator(.visible)
                     }
                 }
                 .sheet(isPresented: $showingIngredientMatcher) {
@@ -880,6 +870,143 @@ private enum FoodEntryMode: String, Identifiable {
     var id: String { rawValue }
 }
 
+private struct PhotoIngredientCaptureSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
+    let launchMode: ScanLaunchMode
+    @State private var capturedImageData: Data?
+    @State private var detectedItems: [DetectedIngredient] = []
+    @State private var showingCamera = false
+    @State private var showingPhotoLibrary = false
+    @State private var showingDetectedItems = false
+    @State private var isExtracting = false
+    @State private var didLaunchPicker = false
+    @State private var alert: ScanAlertMessage?
+
+    var body: some View {
+        ZStack {
+            TableUpTheme.background.ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(TableUpTheme.softOrange)
+                Text(isExtracting ? "正在识别食材" : "正在打开")
+                    .font(.headline)
+                    .foregroundStyle(TableUpTheme.inkText)
+                Text(launchMode == .camera ? "相机" : "相册")
+                    .font(.footnote)
+                    .foregroundStyle(TableUpTheme.mutedText)
+            }
+        }
+        .onAppear {
+            launchPickerIfNeeded()
+        }
+        .sheet(isPresented: $showingCamera, onDismiss: handlePickerDismiss) {
+            ImagePicker(sourceType: .camera, imageData: $capturedImageData)
+                .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showingPhotoLibrary, onDismiss: handlePickerDismiss) {
+            ImagePicker(sourceType: .photoLibrary, imageData: $capturedImageData)
+                .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showingDetectedItems) {
+            DetectedItemsReviewView(items: $detectedItems) {
+                let result = await saveDetectedItems()
+                if result.didSave {
+                    showingDetectedItems = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        alert = result.alert
+                    }
+                } else {
+                    alert = result.alert
+                }
+            }
+        }
+        .alert(item: $alert) { alert in
+            Alert(
+                title: Text(L.text(alert.title, language: appLanguage)),
+                message: Text(alert.message),
+                dismissButton: .default(Text(L.text("OK", language: appLanguage))) {
+                    if alert.title == "Saved" {
+                        dismiss()
+                    }
+                }
+            )
+        }
+        .onChange(of: capturedImageData) { _, newValue in
+            guard let newValue else { return }
+            Task {
+                await extract(imageData: newValue)
+            }
+        }
+    }
+
+    private func launchPickerIfNeeded() {
+        guard !didLaunchPicker else { return }
+        didLaunchPicker = true
+        DispatchQueue.main.async {
+            switch launchMode {
+            case .standard:
+                showingPhotoLibrary = true
+            case .camera:
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    showingCamera = true
+                } else {
+                    showingPhotoLibrary = true
+                }
+            case .photoLibrary:
+                showingPhotoLibrary = true
+            }
+        }
+    }
+
+    private func handlePickerDismiss() {
+        guard capturedImageData == nil, !isExtracting, detectedItems.isEmpty else { return }
+        dismiss()
+    }
+
+    private func extract(imageData: Data) async {
+        isExtracting = true
+        do {
+            let response = try await GroceryPhotoExtractor().extract(from: [imageData], language: appLanguage)
+            detectedItems = response.items.map(\.detectedIngredient)
+            if detectedItems.isEmpty {
+                alert = ScanAlertMessage(title: "Extraction failed", message: "No ingredients found. Try another photo.")
+            } else {
+                showingDetectedItems = true
+            }
+        } catch {
+            alert = ScanAlertMessage(title: "Extraction failed", message: error.localizedDescription)
+        }
+        isExtracting = false
+    }
+
+    private func saveDetectedItems() async -> ReviewSaveResult {
+        do {
+            let result = try await InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
+            detectedItems = []
+            capturedImageData = nil
+            return ReviewSaveResult(
+                didSave: true,
+                alert: ScanAlertMessage(
+                    title: "Saved",
+                    message: SaveConfirmation(
+                        items: result.savedNames,
+                        inventoryCount: result.inventoryCount,
+                        language: appLanguage
+                    ).message
+                )
+            )
+        } catch {
+            return ReviewSaveResult(
+                didSave: false,
+                alert: ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+            )
+        }
+    }
+}
+
 private struct ManualIngredientEntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -909,11 +1036,7 @@ private struct ManualIngredientEntrySheet: View {
                 Alert(
                     title: Text(L.text(alert.title, language: appLanguage)),
                     message: Text(alert.message),
-                    dismissButton: .default(Text(L.text("OK", language: appLanguage))) {
-                        if alert.title == "Saved" {
-                            dismiss()
-                        }
-                    }
+                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
                 )
             }
         }
