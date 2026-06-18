@@ -28,7 +28,7 @@ assertTargetEnvironment(args.environment);
 
 const before = await hasDefaultUnitColumn();
 if (!args.dryRun) {
-  await query(readFileSync("backend/migrations/20260618_drop_ingredients_default_unit.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260618_drop_ingredients_default_unit.sql", import.meta.url), "utf8"));
 }
 const after = await hasDefaultUnitColumn();
 

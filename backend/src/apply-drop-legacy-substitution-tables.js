@@ -28,7 +28,7 @@ assertTargetEnvironment(args.environment);
 
 const before = await tableStatuses();
 if (!args.dryRun) {
-  await query(readFileSync("backend/migrations/20260618_drop_legacy_substitution_tables.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260618_drop_legacy_substitution_tables.sql", import.meta.url), "utf8"));
 }
 const after = await tableStatuses();
 

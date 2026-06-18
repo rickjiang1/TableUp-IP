@@ -27,8 +27,8 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 assertTargetEnvironment(args.environment);
 
 if (!args.dryRun) {
-  await query(readFileSync("backend/migrations/20260618_dynamic_substitution_engine.sql", "utf8"));
-  await query(readFileSync("backend/seeds/dynamic_substitution_seed.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260618_dynamic_substitution_engine.sql", import.meta.url), "utf8"));
+  await query(readFileSync(new URL("../seeds/dynamic_substitution_seed.sql", import.meta.url), "utf8"));
 }
 
 const [categories, tags, profiles, rules, verified] = await Promise.all([

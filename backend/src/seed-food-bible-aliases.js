@@ -138,12 +138,12 @@ async function bootstrapAliasSchema() {
 }
 
 async function applyAliasSeed() {
-  await query(readFileSync("backend/seeds/ingredient_aliases_food_bible_auto.sql", "utf8"));
+  await query(readFileSync(new URL("../seeds/ingredient_aliases_food_bible_auto.sql", import.meta.url), "utf8"));
 }
 
 async function applyIngredientUuidMigration() {
-  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
-  await query(readFileSync("backend/migrations/20260617_promote_ingredient_id_to_uuid.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260617_ingredient_uuid_relationships.sql", import.meta.url), "utf8"));
+  await query(readFileSync(new URL("../migrations/20260617_promote_ingredient_id_to_uuid.sql", import.meta.url), "utf8"));
 }
 
 async function countFoodBibleAliases() {

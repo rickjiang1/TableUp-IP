@@ -26,8 +26,8 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 }
 assertTargetEnvironment(args.environment);
 
-await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
-await query(readFileSync("backend/migrations/20260617_promote_ingredient_id_to_uuid.sql", "utf8"));
+await query(readFileSync(new URL("../migrations/20260617_ingredient_uuid_relationships.sql", import.meta.url), "utf8"));
+await query(readFileSync(new URL("../migrations/20260617_promote_ingredient_id_to_uuid.sql", import.meta.url), "utf8"));
 
 const [ingredients, aliases, conversions, storageRules, recipeIngredients, unknowns] = await Promise.all([
   countRows("ingredients", "ingredient_id is not null"),

@@ -256,7 +256,7 @@ async function applyIngredientUuidMigration() {
   if (await ingredientsUseUuidIds()) {
     return;
   }
-  await query(readFileSync("backend/migrations/20260617_ingredient_uuid_relationships.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260617_ingredient_uuid_relationships.sql", import.meta.url), "utf8"));
 }
 
 async function ingredientsUseUuidIds() {

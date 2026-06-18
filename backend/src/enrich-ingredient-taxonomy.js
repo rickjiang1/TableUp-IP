@@ -28,7 +28,7 @@ if (args.environment === "prod" && !args.allowProdWrite) {
 assertTargetEnvironment(args.environment);
 
 async function main() {
-  await query(readFileSync("backend/migrations/20260618_dynamic_substitution_engine.sql", "utf8"));
+  await query(readFileSync(new URL("../migrations/20260618_dynamic_substitution_engine.sql", import.meta.url), "utf8"));
   await upsertCategories();
   await upsertTags();
 
