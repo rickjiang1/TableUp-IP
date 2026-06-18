@@ -2192,10 +2192,10 @@ private struct CloudOnlyRecipeMatchDetailView: View {
                     color: Color(red: 0.32, green: 0.55, blue: 0.16)
                 )
 
-                if !match.substitutedIngredients.isEmpty {
+                if !match.highConfidenceSubstitutedIngredients.isEmpty {
                     cloudMatchSection(
                         title: text("替代食材", "Substitutes"),
-                        items: match.substitutedIngredients,
+                        items: match.highConfidenceSubstitutedIngredients,
                         icon: "arrow.triangle.2.circlepath",
                         color: TableUpTheme.orange,
                         showsInventoryName: true

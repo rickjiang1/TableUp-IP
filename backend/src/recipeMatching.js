@@ -4,6 +4,8 @@ import { getSubstituteCandidates } from "./dynamicSubstitutions.js";
 const requiredWeight = 1.0;
 const optionalWeight = 0.3;
 const pantryWeight = 0.1;
+const mainSubstitutionMinimumScore = 0.90;
+const secondarySubstitutionMinimumScore = 0.80;
 
 export async function matchRecipesForInventory(inventoryInput) {
   const [recipes, rules] = await Promise.all([
@@ -41,11 +43,15 @@ function matchRecipe(recipe, inventory, resolver, substitutionProvider) {
       return ingredientMatch(ingredient, aliasItem, "alias", 1);
     }
 
-    const candidates = inventoryIngredientIds.size > 0
-      ? substitutionProvider.getCandidates(recipeIngredientId, recipe.primaryCookingMethod, inventoryIngredientIds)
+    const substitutionMinimumScore = ingredientSubstitutionMinimumScore(ingredient);
+    const candidates = inventoryIngredientIds.size > 0 && Number.isFinite(substitutionMinimumScore)
+      ? substitutionProvider.getCandidates(recipeIngredientId, recipe.primaryCookingMethod, inventoryIngredientIds, substitutionMinimumScore)
       : [];
     let bestSubstitute = null;
     for (const candidate of candidates) {
+      if (!substitutionScoreAllowed(candidate.score, substitutionMinimumScore, ingredient)) {
+        continue;
+      }
       const substituteItem = inventory.find((item) => item.ingredientId === candidate.substituteIngredientId);
       if (substituteItem) {
         if (!bestSubstitute || candidate.score > bestSubstitute.score) {
@@ -278,17 +284,17 @@ function dedupeUnknowns(items) {
 function buildSubstitutionProvider(rules) {
   const cache = new Map();
   return {
-    getCandidates(ingredientId, context, candidateIngredientIds = new Set()) {
+    getCandidates(ingredientId, context, candidateIngredientIds = new Set(), minimumScore = secondarySubstitutionMinimumScore) {
       const normalizedContext = normalizeCookingMethods(context)[0] || "general";
       const candidateKey = [...candidateIngredientIds].sort().join(",");
-      const key = `${ingredientId}:${normalizedContext}:${candidateKey}`;
+      const key = `${ingredientId}:${normalizedContext}:${minimumScore}:${candidateKey}`;
       if (!cache.has(key)) {
         cache.set(key, getSubstituteCandidates({
           ingredientId,
           context: normalizedContext,
           rules,
           limit: 25,
-          minimumScore: 0.70,
+          minimumScore,
           candidateIngredientIds
         }).filter((candidate) => candidate.substituteIngredientId));
       }
@@ -323,6 +329,26 @@ function ingredientWeight(ingredient) {
     return optionalWeight;
   }
   return requiredWeight;
+}
+
+function ingredientSubstitutionMinimumScore(ingredient) {
+  if (ingredient.pantryFlag || ingredient.role === "seasoning") {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (ingredient.optionalFlag || ingredient.role === "secondary") {
+    return secondarySubstitutionMinimumScore;
+  }
+  return mainSubstitutionMinimumScore;
+}
+
+function substitutionScoreAllowed(score, minimumScore, ingredient) {
+  if (!Number.isFinite(minimumScore)) {
+    return false;
+  }
+  if (ingredient.optionalFlag || ingredient.role === "secondary") {
+    return score >= minimumScore;
+  }
+  return score > minimumScore;
 }
 
 function requiredIngredientByName(recipe, ingredientName) {

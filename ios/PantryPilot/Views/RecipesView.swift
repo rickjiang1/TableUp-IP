@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 struct RecipesView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @Query(sort: \RecipeFolder.createdAt, order: .forward) private var folders: [RecipeFolder]
@@ -18,6 +19,7 @@ struct RecipesView: View {
     @State private var recipeAlert: RecipeAlertMessage?
     @State private var showingUnmatchedIngredients = false
     @State private var folderToRename: RecipeFolder?
+    @State private var folderPendingDelete: RecipeFolder?
 
     private var currentFolderId: String {
         folderPath.last?.id ?? ""
@@ -65,6 +67,9 @@ struct RecipesView: View {
                             )
                         )
                         .ignoresSafeArea()
+                        .onTapGesture {
+                            dismiss()
+                        }
 
                     VStack(spacing: 0) {
                         recipeTopControls
@@ -118,6 +123,20 @@ struct RecipesView: View {
                     renameFolder(folder, to: name)
                 }
             }
+            .confirmationDialog(
+                L.text("Delete folder?", language: appLanguage),
+                isPresented: deleteFolderConfirmationBinding,
+                titleVisibility: .visible
+            ) {
+                Button(L.text("Delete", language: appLanguage), role: .destructive) {
+                    if let folderPendingDelete {
+                        deleteFolderWithFeedback(folderPendingDelete)
+                    }
+                }
+                Button(L.text("Cancel", language: appLanguage), role: .cancel) {}
+            } message: {
+                Text(folderPendingDelete?.name ?? "")
+            }
             .alert(item: $recipeAlert) { alert in
                 Alert(
                     title: Text(L.text(alert.title, language: appLanguage)),
@@ -137,7 +156,7 @@ struct RecipesView: View {
             Button {
                 showingUnmatchedIngredients = true
             } label: {
-                lightToolbarIcon("magnifyingglass")
+                unmatchedToolbarIcon
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L.text("Unmatched ingredients", language: appLanguage))
@@ -214,6 +233,32 @@ struct RecipesView: View {
             .overlay(Circle().stroke(Color.white.opacity(0.38), lineWidth: 1))
     }
 
+    private var unmatchedToolbarIcon: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.96, green: 0.88, blue: 0.73).opacity(0.42))
+                .background(.ultraThinMaterial.opacity(0.48), in: Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.42), lineWidth: 1))
+
+            Text(appLanguage == AppLanguage.chinese.rawValue ? "未" : "?")
+                .font(.system(size: 15, weight: .semibold, design: .serif))
+                .foregroundStyle(Color(red: 0.54, green: 0.18, blue: 0.10).opacity(0.90))
+        }
+        .frame(width: 32, height: 32)
+        .shadow(color: Color(red: 0.34, green: 0.22, blue: 0.12).opacity(0.08), radius: 12, y: 6)
+    }
+
+    private var deleteFolderConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { folderPendingDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    folderPendingDelete = nil
+                }
+            }
+        )
+    }
+
     private func rootShelfTopPadding(height: CGFloat) -> CGFloat {
         if !folderPath.isEmpty || visibleFolders.isEmpty {
             return max(150, height * 0.20)
@@ -259,38 +304,63 @@ struct RecipesView: View {
     private func folderGlassPage(_ pageFolders: [RecipeFolder], width: CGFloat) -> some View {
         VStack(spacing: 3) {
             ForEach(pageFolders) { folder in
-                Button {
-                    folderPath.append(folder)
-                } label: {
-                    RecipeFolderGlassCard(
-                        title: folder.name,
-                        recipeCount: recipeCount(in: folder),
-                        imageData: folder.coverImageData ?? firstRecipeImageData(in: folder),
-                        fallbackIcon: iconName(forFolderAt: visibleFolders.firstIndex(where: { $0.id == folder.id }) ?? 0),
-                        language: appLanguage
-                    )
-                    .frame(width: min(width * 0.74, 316), height: 130)
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
+                let cardWidth = min(width * 0.74, 316)
+                ZStack(alignment: .trailing) {
                     Button {
-                        folderToRename = folder
+                        folderPath.append(folder)
                     } label: {
-                        Label(L.text("Rename", language: appLanguage), systemImage: "pencil")
+                        RecipeFolderGlassCard(
+                            title: folder.name,
+                            recipeCount: recipeCount(in: folder),
+                            imageData: folder.coverImageData ?? firstRecipeImageData(in: folder),
+                            fallbackIcon: iconName(forFolderAt: visibleFolders.firstIndex(where: { $0.id == folder.id }) ?? 0),
+                            language: appLanguage
+                        )
                     }
+                    .buttonStyle(.plain)
 
-                    Button(role: .destructive) {
-                        deleteFolderTree(folder)
-                        try? modelContext.save()
-                    } label: {
-                        Label(L.text("Delete", language: appLanguage), systemImage: "trash")
-                    }
+                    folderActionMenu(folder)
+                        .padding(.trailing, 12)
+                }
+                .frame(width: cardWidth, height: 130)
+                .contextMenu {
+                    folderMenuItems(folder)
                 }
             }
         }
         .frame(width: width)
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.top, 4)
+    }
+
+    private func folderActionMenu(_ folder: RecipeFolder) -> some View {
+        Menu {
+            folderMenuItems(folder)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(Color(red: 0.36, green: 0.25, blue: 0.16).opacity(0.62))
+                .frame(width: 28, height: 28)
+                .background(Color.white.opacity(0.24))
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.28), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func folderMenuItems(_ folder: RecipeFolder) -> some View {
+        Button {
+            folderToRename = folder
+        } label: {
+            Label(L.text("Rename", language: appLanguage), systemImage: "pencil")
+        }
+
+        Button(role: .destructive) {
+            folderPendingDelete = folder
+        } label: {
+            Label(L.text("Delete", language: appLanguage), systemImage: "trash")
+        }
     }
 
     private func folderHotspotPage(_ pageFolders: [RecipeFolder], width: CGFloat) -> some View {
@@ -621,6 +691,17 @@ struct RecipesView: View {
             deleteFolderTree(folder)
         }
         try? modelContext.save()
+    }
+
+    private func deleteFolderWithFeedback(_ folder: RecipeFolder) {
+        let folderName = folder.name
+        deleteFolderTree(folder)
+        do {
+            try modelContext.save()
+            recipeAlert = RecipeAlertMessage(title: "Deleted", message: folderName)
+        } catch {
+            recipeAlert = RecipeAlertMessage(title: "Delete failed", message: error.localizedDescription)
+        }
     }
 
     private func deleteFolderTree(_ folder: RecipeFolder) {
@@ -2265,13 +2346,13 @@ struct CloudMatchDetailSection: View {
                 )
             }
 
-            if !match.substitutedIngredients.isEmpty {
+            if !displayableSubstitutedIngredients.isEmpty {
                 Label(L.text("Orange means substitute ingredient", language: appLanguage), systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
 
-            ForEach(match.substitutedIngredients) { item in
+            ForEach(displayableSubstitutedIngredients) { item in
                 matchRow(
                     title: "\(item.recipeIngredient) -> \(item.userInventoryIngredient)",
                     item: item,
@@ -2299,6 +2380,10 @@ struct CloudMatchDetailSection: View {
             }
 
         }
+    }
+
+    private var displayableSubstitutedIngredients: [CloudRecipeMatchIngredient] {
+        match.displayableSubstitutedIngredients(for: recipe)
     }
 
     private func matchRow(title: String, item: CloudRecipeMatchIngredient, systemImage: String, color: Color) -> some View {
@@ -2696,7 +2781,9 @@ struct RecipeIngredientMatchRow: View {
     }
 
     private var substituteMatch: CloudRecipeMatchIngredient? {
-        cloudMatch?.substitutedIngredients.first { isMatch($0, for: ingredient) }
+        cloudMatch?.substitutedIngredients.first {
+            isMatch($0, for: ingredient) && ingredient.allowsSubstituteDisplay(score: $0.matchScore)
+        }
     }
 
     private var inventoryText: String? {

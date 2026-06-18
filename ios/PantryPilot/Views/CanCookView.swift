@@ -396,7 +396,7 @@ struct CloudCookAssessmentRow: View {
                     }
                 }
 
-                ForEach(match.substitutedIngredients.prefix(3), id: \.id) { item in
+                ForEach(match.displayableSubstitutedIngredients(for: recipe).prefix(3), id: \.id) { item in
                     Text("\(item.recipeIngredient) -> \(item.userInventoryIngredient)")
                         .font(.footnote)
                         .foregroundStyle(.orange)
@@ -516,6 +516,21 @@ struct CloudRecipeMatch: Decodable {
 
     var matchRatio: Double { matchScorePercent / 100 }
     var canCook: Bool { missingRequiredIngredients.isEmpty }
+    var highConfidenceSubstitutedIngredients: [CloudRecipeMatchIngredient] {
+        substitutedIngredients.filter { $0.matchScore > 0.90 }
+    }
+
+    func displayableSubstitutedIngredients(for recipe: Recipe?) -> [CloudRecipeMatchIngredient] {
+        guard let recipe else {
+            return highConfidenceSubstitutedIngredients
+        }
+        return substitutedIngredients.filter { item in
+            guard let ingredient = recipe.ingredient(matching: item) else {
+                return item.matchScore > 0.90
+            }
+            return ingredient.allowsSubstituteDisplay(score: item.matchScore)
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case recipeID = "recipe_id"
@@ -526,6 +541,32 @@ struct CloudRecipeMatch: Decodable {
         case missingOptionalIngredients = "missing_optional_ingredients"
         case substitutedIngredients = "substituted_ingredients"
         case pantryMissing = "pantry_missing"
+    }
+}
+
+extension Recipe {
+    func ingredient(matching item: CloudRecipeMatchIngredient) -> RecipeIngredient? {
+        let itemId = item.recipeIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !itemId.isEmpty,
+           let ingredient = ingredients.first(where: { $0.canonicalIngredientId == itemId }) {
+            return ingredient
+        }
+
+        let normalizedName = IngredientNormalizer.normalizeName(item.recipeIngredient)
+        return ingredients.first { $0.normalizedName == normalizedName }
+    }
+}
+
+extension RecipeIngredient {
+    func allowsSubstituteDisplay(score: Double) -> Bool {
+        switch role {
+        case .main:
+            return score > 0.90
+        case .secondary:
+            return score >= 0.80
+        case .seasoning:
+            return false
+        }
     }
 }
 

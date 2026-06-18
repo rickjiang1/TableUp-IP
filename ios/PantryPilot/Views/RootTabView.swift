@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct RootTabView: View {
-    @State private var selectedTab: TableUpRootTab = .meal
+    @State private var selectedTab: TableUpRootTab = .pantry
 
     var body: some View {
         ZStack(alignment: .bottom) {
