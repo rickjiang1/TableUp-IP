@@ -376,6 +376,30 @@ struct StorageView: View {
         let client = UnknownIngredientClient()
         var matchedCount = 0
         var skippedCount = 0
+        let candidateResults: [IngredientCandidateBatchResult]
+
+        do {
+            let queries = unmatchedIngredients.map { unknown in
+                unknown.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? unknown.normalizedName
+                    : unknown.rawName
+            }
+            candidateResults = try await client.fetchIngredientCandidateBatch(
+                queries: queries,
+                language: appLanguage,
+                limit: 1
+            )
+        } catch {
+            storageAlert = StorageAlertMessage(title: "Save failed", message: error.localizedDescription)
+            return
+        }
+
+        var candidatesByQuery: [String: IngredientCandidate] = [:]
+        for result in candidateResults {
+            if let candidate = result.candidates.first {
+                candidatesByQuery[normalizedUnknownKey(result.query)] = candidate
+            }
+        }
 
         for unknown in unmatchedIngredients {
             let query = unknown.rawName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -383,11 +407,8 @@ struct StorageView: View {
                 : unknown.rawName
 
             do {
-                guard let candidate = try await client.fetchIngredientCandidates(
-                    query: query,
-                    language: appLanguage,
-                    limit: 1
-                ).first, candidate.score >= 0.6 else {
+                guard let candidate = candidatesByQuery[normalizedUnknownKey(query)],
+                      candidate.score >= 0.6 else {
                     skippedCount += 1
                     continue
                 }
@@ -985,6 +1006,27 @@ struct UnknownIngredientClient {
         return try JSONDecoder().decode(IngredientCandidateResponse.self, from: data).candidates
     }
 
+    func fetchIngredientCandidateBatch(queries: [String], language: String, limit: Int = 1) async throws -> [IngredientCandidateBatchResult] {
+        let endpoint = baseURL.appending(path: "api/ingredient-candidates/batch")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(IngredientCandidateBatchRequest(
+            queries: queries,
+            language: language,
+            limit: limit
+        ))
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200..<300 ~= httpResponse.statusCode else {
+            throw UnknownIngredientClientError.badResponse
+        }
+
+        return try JSONDecoder().decode(IngredientCandidateBatchResponse.self, from: data).results
+    }
+
     func fetchIngredientUnitConversions(ingredientId: String, language: String) async throws -> [IngredientUnitConversionRule] {
         let endpoint = baseURL
             .appending(path: "api/ingredient-unit-conversions")
@@ -1127,6 +1169,21 @@ struct CloudIngredientResponse: Decodable {
 }
 
 struct IngredientCandidateResponse: Decodable {
+    let candidates: [IngredientCandidate]
+}
+
+struct IngredientCandidateBatchRequest: Encodable {
+    let queries: [String]
+    let language: String
+    let limit: Int
+}
+
+struct IngredientCandidateBatchResponse: Decodable {
+    let results: [IngredientCandidateBatchResult]
+}
+
+struct IngredientCandidateBatchResult: Decodable {
+    let query: String
     let candidates: [IngredientCandidate]
 }
 

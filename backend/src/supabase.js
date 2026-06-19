@@ -221,13 +221,13 @@ async function fetchIngredientAliasesForMatching() {
   try {
     return await restSelectAll(
       "ingredient_aliases",
-      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score,active&active=eq.true&order=alias_name.asc"
+      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score,active,review_status&active=eq.true&review_status=eq.accepted&order=alias_name.asc"
     );
   } catch (error) {
-    console.warn(`Unable to fetch active ingredient aliases, falling back to legacy alias query: ${error.message}`);
+    console.warn(`Unable to fetch accepted active ingredient aliases, falling back to active alias query: ${error.message}`);
     return await restSelectAll(
       "ingredient_aliases",
-      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score&order=alias_name.asc"
+      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score,active&active=eq.true&order=alias_name.asc"
     );
   }
 }

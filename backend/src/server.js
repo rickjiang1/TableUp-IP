@@ -83,6 +83,17 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/api/ingredient-candidates/batch") {
+      const body = await readJsonRequest(request, 512 * 1024);
+      const result = await findIngredientCandidatesBatch({
+        queries: body.queries,
+        language: body.language || "en",
+        limit: Number(body.limit || 1)
+      });
+      sendJson(response, 200, { results: result });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/ingredient-unit-conversions") {
       const conversions = await ingredientUnitConversionsForDisplay({
         ingredientId: url.searchParams.get("ingredientId") || "",
@@ -710,6 +721,44 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
         reason: candidate.reason
       };
     })
+}
+
+async function findIngredientCandidatesBatch({ queries, language = "en", limit = 1 }) {
+  const normalizedQueries = (Array.isArray(queries) ? queries : [])
+    .map((query) => String(query || "").trim())
+    .filter(Boolean)
+    .slice(0, 200);
+  if (normalizedQueries.length === 0) {
+    return [];
+  }
+
+  const resultLimit = Math.min(Math.max(Number(limit) || 1, 1), 10);
+  const [rules, dictionary] = await Promise.all([
+    getCachedMatchingRules(),
+    getCachedIngredientDictionary(language)
+  ]);
+  const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
+  const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
+
+  return normalizedQueries.map((query) => ({
+    query,
+    candidates: rankRuleIngredientCandidatesFromRules({ query, rules, limit: resultLimit })
+      .map((candidate) => {
+        const localized = dictionaryById.get(candidate.ingredientId);
+        const ingredient = ingredientsById.get(candidate.ingredientId);
+        const canonicalName = ingredient?.canonical_name || localized?.canonical_name || candidate.ingredientId;
+        return {
+          ingredient_id: candidate.ingredientId,
+          canonical_name: canonicalName,
+          display_name: localized?.display_name || canonicalName,
+          category: localized?.category || ingredient?.category || "other",
+          canonical_unit: localized?.canonical_unit || ingredient?.canonical_unit || "",
+          matched_alias: candidate.matchedAlias,
+          score: Number(candidate.matchScore.toFixed(3)),
+          reason: candidate.reason
+        };
+      })
+  }));
 }
 
 async function normalizeMatchedIngredientQuantity(body) {

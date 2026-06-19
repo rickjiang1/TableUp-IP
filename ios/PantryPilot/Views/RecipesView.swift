@@ -2445,46 +2445,46 @@ struct CloudMatchDetailSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(match.matchedIngredients) { item in
-                matchRow(
-                    title: "\(item.recipeIngredient) - \(item.userInventoryIngredient)",
-                    item: item,
-                    systemImage: "checkmark.circle.fill",
-                    color: .green
-                )
-            }
-
             if !displayableSubstitutedIngredients.isEmpty {
                 Label(L.text("Orange means substitute ingredient", language: appLanguage), systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
 
-            ForEach(displayableSubstitutedIngredients) { item in
-                matchRow(
-                    title: "\(item.recipeIngredient) -> \(item.userInventoryIngredient)",
-                    item: item,
-                    systemImage: "arrow.triangle.2.circlepath",
-                    color: .orange
-                )
-            }
-
-            ForEach(match.missingRequiredIngredients) { item in
-                matchRow(
-                    title: item.recipeIngredient,
-                    item: item,
-                    systemImage: "exclamationmark.circle.fill",
-                    color: .red
-                )
-            }
-
-            ForEach(match.missingOptionalIngredients) { item in
-                matchRow(
-                    title: item.recipeIngredient,
-                    item: item,
-                    systemImage: "minus.circle",
-                    color: .secondary
-                )
+            ForEach(sortedIngredients) { ingredient in
+                if ingredient.role == .seasoning {
+                    seasoningRow(ingredient)
+                } else if let item = substitutedItem(for: ingredient) {
+                    matchRow(
+                        title: "\(item.recipeIngredient) -> \(item.userInventoryIngredient)",
+                        item: item,
+                        systemImage: "arrow.triangle.2.circlepath",
+                        color: .orange
+                    )
+                } else if let item = matchedItem(for: ingredient) {
+                    matchRow(
+                        title: item.recipeIngredient,
+                        item: item,
+                        systemImage: "checkmark.circle.fill",
+                        color: .green
+                    )
+                } else if let item = missingRequiredItem(for: ingredient) {
+                    matchRow(
+                        title: item.recipeIngredient,
+                        item: item,
+                        systemImage: "exclamationmark.circle.fill",
+                        color: .red
+                    )
+                } else if let item = missingOptionalItem(for: ingredient) {
+                    matchRow(
+                        title: item.recipeIngredient,
+                        item: item,
+                        systemImage: "minus.circle",
+                        color: .secondary
+                    )
+                } else {
+                    ingredientOnlyRow(ingredient)
+                }
             }
 
         }
@@ -2492,6 +2492,28 @@ struct CloudMatchDetailSection: View {
 
     private var displayableSubstitutedIngredients: [CloudRecipeMatchIngredient] {
         match.displayableSubstitutedIngredients(for: recipe)
+    }
+
+    private var sortedIngredients: [RecipeIngredient] {
+        RecipeIngredientRole.allCases.flatMap { role in
+            recipe.ingredients.filter { $0.role == role }
+        }
+    }
+
+    private func matchedItem(for ingredient: RecipeIngredient) -> CloudRecipeMatchIngredient? {
+        match.matchedIngredients.first { isMatch($0, for: ingredient) }
+    }
+
+    private func substitutedItem(for ingredient: RecipeIngredient) -> CloudRecipeMatchIngredient? {
+        displayableSubstitutedIngredients.first { isMatch($0, for: ingredient) }
+    }
+
+    private func missingRequiredItem(for ingredient: RecipeIngredient) -> CloudRecipeMatchIngredient? {
+        match.missingRequiredIngredients.first { isMatch($0, for: ingredient) }
+    }
+
+    private func missingOptionalItem(for ingredient: RecipeIngredient) -> CloudRecipeMatchIngredient? {
+        match.missingOptionalIngredients.first { isMatch($0, for: ingredient) }
     }
 
     private func matchRow(title: String, item: CloudRecipeMatchIngredient, systemImage: String, color: Color) -> some View {
@@ -2512,6 +2534,18 @@ struct CloudMatchDetailSection: View {
                     .padding(.leading, 28)
             }
         }
+    }
+
+    private func seasoningRow(_ ingredient: RecipeIngredient) -> some View {
+        Label(ingredient.name, systemImage: "leaf")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+    }
+
+    private func ingredientOnlyRow(_ ingredient: RecipeIngredient) -> some View {
+        Label(ingredient.name, systemImage: "circle")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
     }
 
     private func quantityText(for item: CloudRecipeMatchIngredient) -> String? {
@@ -2537,6 +2571,15 @@ struct CloudMatchDetailSection: View {
 
         let normalizedName = IngredientNormalizer.normalizeName(item.recipeIngredient)
         return recipe.ingredients.first { $0.normalizedName == normalizedName }
+    }
+
+    private func isMatch(_ item: CloudRecipeMatchIngredient, for ingredient: RecipeIngredient) -> Bool {
+        let itemId = item.recipeIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ingredientId = ingredient.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !itemId.isEmpty, !ingredientId.isEmpty {
+            return itemId == ingredientId
+        }
+        return IngredientNormalizer.normalizeName(item.recipeIngredient) == ingredient.normalizedName
     }
 
     private func inventoryAmountText(for item: CloudRecipeMatchIngredient, recipeIngredient: RecipeIngredient) -> String {
@@ -2610,7 +2653,17 @@ struct LocalMatchDetailSection: View {
                     }
                 }
             }
+
+            ForEach(seasonings) { seasoning in
+                Label(seasoning.name, systemImage: "leaf")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
+    }
+
+    private var seasonings: [RecipeIngredient] {
+        assessment.recipe.ingredients.filter { $0.role == .seasoning }
     }
 
     private func inventoryText(for item: IngredientUsagePreview) -> String {
@@ -2645,8 +2698,6 @@ struct RecipeDetailView: View {
     @State private var recipeAlert: RecipeAlertMessage?
     @State private var isMatchDetailsExpanded = true
     @State private var isIngredientsExpanded = true
-    @State private var expandedIngredientRoles: Set<RecipeIngredientRole> = Set(RecipeIngredientRole.allCases)
-    @State private var isStepsExpanded = true
     @State private var isVideoExpanded = false
 
     init(recipe: Recipe, cloudMatch: CloudRecipeMatch? = nil, assessment: CookAssessment? = nil) {
@@ -2689,44 +2740,18 @@ struct RecipeDetailView: View {
                 }
             }
 
-            Section {
-                DisclosureGroup(
-                    L.text("Ingredients", language: appLanguage),
-                    isExpanded: ingredientsExpandedBinding
-                ) {
-                    ForEach(RecipeIngredientRole.allCases) { role in
-                        let ingredients = recipe.ingredients.filter { $0.role == role }
-                        if !ingredients.isEmpty {
-                            DisclosureGroup(
-                                role.displayName(language: appLanguage),
-                                isExpanded: binding(for: role)
-                            ) {
-                                ForEach(ingredients) { ingredient in
-                                    RecipeIngredientMatchRow(
-                                        ingredient: ingredient,
-                                        inventory: inventory,
-                                        cloudMatch: cloudMatch
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Section {
-                DisclosureGroup(
-                    L.text("Steps", language: appLanguage),
-                    isExpanded: $isStepsExpanded
-                ) {
-                    ForEach(RecipeStepPhase.allCases) { phase in
-                        let steps = recipe.workflowSteps.filter { $0.phase == phase }
-                        if !steps.isEmpty {
-                            DisclosureGroup(phase.displayName(language: appLanguage)) {
-                                ForEach(Array(steps.enumerated()), id: \.element.id) { index, step in
-                                    RecipeWorkflowStepRow(step: step, index: index + 1)
-                                }
-                            }
+            if !isMatchDetailContext {
+                Section {
+                    DisclosureGroup(
+                        L.text("Ingredients", language: appLanguage),
+                        isExpanded: $isIngredientsExpanded
+                    ) {
+                        ForEach(sortedIngredients) { ingredient in
+                            RecipeIngredientMatchRow(
+                                ingredient: ingredient,
+                                inventory: inventory,
+                                cloudMatch: cloudMatch
+                            )
                         }
                     }
                 }
@@ -2793,29 +2818,14 @@ struct RecipeDetailView: View {
         }
     }
 
-    private var ingredientsExpandedBinding: Binding<Bool> {
-        Binding(
-            get: { isIngredientsExpanded },
-            set: { isExpanded in
-                isIngredientsExpanded = isExpanded
-                if isExpanded {
-                    expandedIngredientRoles = Set(RecipeIngredientRole.allCases)
-                }
-            }
-        )
+    private var isMatchDetailContext: Bool {
+        cloudMatch != nil || assessment != nil
     }
 
-    private func binding(for role: RecipeIngredientRole) -> Binding<Bool> {
-        Binding(
-            get: { expandedIngredientRoles.contains(role) },
-            set: { isExpanded in
-                if isExpanded {
-                    expandedIngredientRoles.insert(role)
-                } else {
-                    expandedIngredientRoles.remove(role)
-                }
-            }
-        )
+    private var sortedIngredients: [RecipeIngredient] {
+        RecipeIngredientRole.allCases.flatMap { role in
+            recipe.ingredients.filter { $0.role == role }
+        }
     }
 }
 
