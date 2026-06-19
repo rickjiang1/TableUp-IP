@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
 import { query, sqlBoolean, sqlNumber, sqlString } from "./postgres.js";
 
@@ -9,7 +9,9 @@ const environmentTargets = {
 
 const nutritionFields = {
   calories_kcal: [
-    { nutrientId: 1008, name: "Energy", units: ["KCAL"] }
+    { nutrientId: 1008, name: "Energy", units: ["KCAL"] },
+    { nutrientId: 2047, name: "Energy (Atwater General Factors)", units: ["KCAL"] },
+    { nutrientId: 2048, name: "Energy (Atwater Specific Factors)", units: ["KCAL"] }
   ],
   protein_g: [
     { nutrientId: 1003, name: "Protein", units: ["G"] }
@@ -43,6 +45,8 @@ const nutritionFields = {
     { nutrientId: 1092, name: "Potassium, K", units: ["MG"] }
   ]
 };
+
+let localUsdaFoodsPromise = null;
 
 const args = parseArgs(process.argv.slice(2));
 loadEnv(args.environment);
@@ -84,6 +88,8 @@ async function main() {
     missingWikidata: [],
     samples: []
   };
+  const pendingExternalIds = [];
+  const pendingNutritionProfiles = [];
 
   for (const [index, ingredient] of targets.entries()) {
     const aliases = ingredient.aliases.slice(0, 10);
@@ -98,7 +104,7 @@ async function main() {
       if (wikidata) {
         result.wikidata = summarizeExternal(wikidata);
         report.wikidataIds += 1;
-        if (!args.dryRun) await upsertExternalId(wikidata);
+        pendingExternalIds.push(wikidata);
       } else {
         report.missingWikidata.push(sampleIngredient(ingredient));
       }
@@ -111,10 +117,8 @@ async function main() {
         result.usda = summarizeNutrition(usda);
         report.usdaProfiles += 1;
         if (usda.confidence_score < 0.82) report.lowConfidenceUsda.push(result.usda);
-        if (!args.dryRun) {
-          await upsertExternalId(usda.externalId);
-          await upsertNutritionProfile(usda);
-        }
+        pendingExternalIds.push(usda.externalId);
+        pendingNutritionProfiles.push(usda);
       } else {
         report.missingUsda.push(sampleIngredient(ingredient));
       }
@@ -130,6 +134,11 @@ async function main() {
   report.lowConfidenceUsda = report.lowConfidenceUsda.slice(0, 80);
   report.missingUsda = report.missingUsda.slice(0, 120);
   report.missingWikidata = report.missingWikidata.slice(0, 120);
+
+  if (!args.dryRun) {
+    await upsertExternalIds(pendingExternalIds);
+    await upsertNutritionProfiles(pendingNutritionProfiles);
+  }
 
   if (args.reportPath) writeFileSync(args.reportPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
@@ -159,7 +168,7 @@ async function fetchIngredients() {
 }
 
 async function findWikidataEntity(ingredient, aliases) {
-  const terms = searchTerms(ingredient, aliases, 4);
+  const terms = searchTerms(ingredient, aliases, 2);
   let best = null;
   for (const term of terms) {
     const url = new URL("https://www.wikidata.org/w/api.php");
@@ -170,7 +179,13 @@ async function findWikidataEntity(ingredient, aliases) {
     url.searchParams.set("type", "item");
     url.searchParams.set("limit", "5");
     url.searchParams.set("search", term);
-    const data = await fetchJson(url);
+    let data;
+    try {
+      data = await fetchJson(url);
+    } catch (error) {
+      console.warn(`Wikidata search skipped for "${term}": ${error.message}`);
+      continue;
+    }
     for (const item of data.search || []) {
       const score = scoreWikidataCandidate(ingredient, term, item);
       if (!best || score > best.confidence_score) {
@@ -197,15 +212,83 @@ async function findWikidataEntity(ingredient, aliases) {
 }
 
 async function findUsdaNutritionProfile(ingredient, aliases) {
-  const terms = searchTerms(ingredient, aliases, 5);
+  const localFoods = await localUsdaFoods();
+  if (localFoods.length > 0) {
+    return findUsdaNutritionProfileFromLocalCsv(ingredient, aliases, localFoods);
+  }
+  return findUsdaNutritionProfileFromApi(ingredient, aliases);
+}
+
+function findUsdaNutritionProfileFromLocalCsv(ingredient, aliases, localFoods) {
+  const terms = searchTerms(ingredient, aliases, 3, { asciiOnly: true, maxAliasTerms: 1 });
+  let best = null;
+  const candidates = candidateLocalUsdaFoods(terms, localFoods);
+  for (const term of terms) {
+    for (const food of candidates) {
+      const score = scoreUsdaCandidate(ingredient, term, food);
+      if (score < args.usdaMinConfidence) continue;
+      if (!hasUsefulNutrition(food.nutrients)) continue;
+      const preparationState = inferPreparationState(food.description || "");
+      const profile = {
+        ingredient_id: ingredient.ingredient_id,
+        source_name: "USDA FoodData Central",
+        source_food_id: String(food.fdcId),
+        source_url: `https://fdc.nal.usda.gov/fdc-app.html#/food-details/${food.fdcId}/nutrients`,
+        food_description: food.description || "",
+        data_type: food.dataType || "",
+        preparation_state: preparationState,
+        serving_basis: "per_100g",
+        confidence_score: score,
+        match_method: `local_csv:${food.dataset}:${term}`,
+        raw_payload: compactUsdaPayload(food),
+        externalId: {
+          ingredient_id: ingredient.ingredient_id,
+          source_name: "USDA FoodData Central",
+          external_id: String(food.fdcId),
+          external_url: `https://fdc.nal.usda.gov/fdc-app.html#/food-details/${food.fdcId}/nutrients`,
+          match_name: food.description || "",
+          match_method: `local_csv:${food.dataset}:${term}`,
+          confidence_score: score,
+          raw_payload: compactUsdaPayload(food)
+        },
+        ...food.nutrients
+      };
+      if (!best || profile.confidence_score > best.confidence_score) best = profile;
+    }
+  }
+  return best;
+}
+
+function candidateLocalUsdaFoods(terms, localFoods) {
+  const index = localFoods.tokenIndex;
+  if (!index) return localFoods;
+  const candidates = new Set();
+  for (const term of terms) {
+    for (const token of tokens(term)) {
+      const matches = index.get(token);
+      if (!matches) continue;
+      for (const food of matches) candidates.add(food);
+    }
+  }
+  return candidates.size > 0 ? [...candidates] : localFoods;
+}
+
+async function findUsdaNutritionProfileFromApi(ingredient, aliases) {
+  const terms = searchTerms(ingredient, aliases, 3, { asciiOnly: true, maxAliasTerms: 1 });
   let best = null;
   for (const term of terms) {
     const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
     url.searchParams.set("api_key", args.usdaApiKey || process.env.USDA_FDC_API_KEY || "DEMO_KEY");
     url.searchParams.set("query", term);
     url.searchParams.set("pageSize", String(args.usdaPageSize));
-    url.searchParams.set("dataType", "Foundation,SR Legacy,Survey (FNDDS)");
-    const data = await fetchJson(url);
+    url.searchParams.set("dataType", "Foundation,SR Legacy");
+    let data;
+    try {
+      data = await fetchJson(url);
+    } catch (error) {
+      console.warn(`USDA search skipped for "${term}": ${error.message}`);
+      continue;
+    }
     for (const food of data.foods || []) {
       const score = scoreUsdaCandidate(ingredient, term, food);
       const nutrients = extractNutrients(food.foodNutrients || []);
@@ -264,6 +347,7 @@ function scoreUsdaCandidate(ingredient, term, food) {
   if (food.dataType === "Foundation") score += 0.08;
   if (food.dataType === "SR Legacy") score += 0.06;
   if (food.dataType === "Survey (FNDDS)") score += 0.02;
+  if (food.priority) score += Number(food.priority) * 0.01;
   if (/\braw\b|uncooked|fresh/.test(description)) score += 0.05;
   if (/babyfood|formula|restaurant|fast food|branded|upc|prepared meal|school lunch/.test(description)) score -= 0.20;
   if (/without salt|with salt|canned|frozen|boiled|cooked|roasted|fried|drained/.test(description)) score -= 0.03;
@@ -277,6 +361,98 @@ function extractNutrients(foodNutrients) {
     output[field] = match ? Number(match.value ?? match.amount) : null;
   }
   return output;
+}
+
+async function localUsdaFoods() {
+  if (!localUsdaFoodsPromise) {
+    localUsdaFoodsPromise = Promise.resolve(loadLocalUsdaFoods());
+  }
+  return await localUsdaFoodsPromise;
+}
+
+function loadLocalUsdaFoods() {
+  const datasets = [
+    { dataset: "foundation", root: args.usdaFoundationDir, priority: 2 },
+    { dataset: "sr_legacy", root: args.usdaSrLegacyDir, priority: 1 }
+  ].filter((item) => item.root && existsSync(item.root));
+
+  const foods = [];
+  for (const dataset of datasets) {
+    const dir = findCsvDatasetDir(dataset.root);
+    if (!dir) {
+      console.warn(`USDA local dataset skipped; CSV files not found under ${dataset.root}`);
+      continue;
+    }
+    foods.push(...loadLocalUsdaDataset({ ...dataset, dir }));
+  }
+  if (foods.length > 0) {
+    const tokenIndex = new Map();
+    for (const food of foods) {
+      for (const token of new Set(tokens(food.description))) {
+        if (!tokenIndex.has(token)) tokenIndex.set(token, []);
+        tokenIndex.get(token).push(food);
+      }
+    }
+    foods.tokenIndex = tokenIndex;
+    console.error(`Loaded ${foods.length} USDA local food records from ${datasets.map((item) => item.dataset).join(", ")}.`);
+  }
+  return foods;
+}
+
+function findCsvDatasetDir(root) {
+  const directFood = `${root}/food.csv`;
+  if (existsSync(directFood) && existsSync(`${root}/food_nutrient.csv`)) return root;
+  for (const name of readdirSync(root, { withFileTypes: true })) {
+    if (!name.isDirectory()) continue;
+    const candidate = `${root}/${name.name}`;
+    if (existsSync(`${candidate}/food.csv`) && existsSync(`${candidate}/food_nutrient.csv`)) return candidate;
+  }
+  return "";
+}
+
+function loadLocalUsdaDataset({ dataset, dir, priority }) {
+  const foodRows = parseCsv(readFileSync(`${dir}/food.csv`, "utf8"));
+  const nutrientRows = parseCsv(readFileSync(`${dir}/food_nutrient.csv`, "utf8"));
+  const nutrientMap = new Map();
+  for (const row of nutrientRows) {
+    const nutrientId = Number(row.nutrient_id);
+    if (!isTrackedNutrientId(nutrientId)) continue;
+    const fdcId = String(row.fdc_id || "");
+    if (!fdcId) continue;
+    const current = nutrientMap.get(fdcId) || {};
+    for (const [field, candidates] of Object.entries(nutritionFields)) {
+      if (candidates.some((candidate) => candidate.nutrientId === nutrientId)) {
+        const value = Number(row.amount);
+        if (Number.isFinite(value) && current[field] == null) current[field] = value;
+      }
+    }
+    nutrientMap.set(fdcId, current);
+  }
+
+  return foodRows
+    .map((food) => {
+      const fdcId = String(food.fdc_id || "");
+      const nutrients = nutrientMap.get(fdcId) || {};
+      if (!hasUsefulNutrition(nutrients)) return null;
+      const dataType = dataset === "foundation" ? "Foundation" : "SR Legacy";
+      return {
+        fdcId,
+        description: food.description || "",
+        dataType,
+        foodCategory: food.food_category_id || "",
+        publishedDate: food.publication_date || "",
+        dataset,
+        priority,
+        nutrients
+      };
+    })
+    .filter(Boolean);
+}
+
+function isTrackedNutrientId(nutrientId) {
+  return Object.values(nutritionFields)
+    .flat()
+    .some((candidate) => candidate.nutrientId === nutrientId);
 }
 
 function nutrientMatches(nutrient, candidates) {
@@ -299,13 +475,15 @@ function hasUsefulNutrition(nutrients) {
       || Number.isFinite(Number(nutrients.carbs_g)));
 }
 
-async function upsertExternalId(row) {
-  await query(`
+async function upsertExternalIds(rows) {
+  for (const chunk of chunks(rows, 250)) {
+    if (chunk.length === 0) continue;
+    await query(`
     insert into ingredient_external_ids (
       ingredient_id, source_name, external_id, external_url, match_name, match_method,
       confidence_score, raw_payload, updated_at
     )
-    values (
+    values ${chunk.map((row) => `(
       ${sqlString(row.ingredient_id)}::uuid,
       ${sqlString(row.source_name)},
       ${sqlString(row.external_id)},
@@ -315,7 +493,7 @@ async function upsertExternalId(row) {
       ${sqlNumber(row.confidence_score, 0)},
       ${sqlJson(row.raw_payload)},
       now()
-    )
+    )`).join(",\n")}
     on conflict (ingredient_id, source_name, external_id) do update set
       external_url = excluded.external_url,
       match_name = excluded.match_name,
@@ -324,17 +502,20 @@ async function upsertExternalId(row) {
       raw_payload = excluded.raw_payload,
       updated_at = now();
   `);
+  }
 }
 
-async function upsertNutritionProfile(row) {
-  await query(`
+async function upsertNutritionProfiles(rows) {
+  for (const chunk of chunks(rows, 150)) {
+    if (chunk.length === 0) continue;
+    await query(`
     insert into ingredient_nutrition_profiles (
       ingredient_id, source_name, source_food_id, source_url, food_description,
       data_type, preparation_state, serving_basis, calories_kcal, protein_g, fat_g,
       carbs_g, fiber_g, sugar_g, sodium_mg, calcium_mg, iron_mg, potassium_mg,
       confidence_score, match_method, raw_payload, active, updated_at
     )
-    values (
+    values ${chunk.map((row) => `(
       ${sqlString(row.ingredient_id)}::uuid,
       ${sqlString(row.source_name)},
       ${sqlString(row.source_food_id)},
@@ -358,7 +539,7 @@ async function upsertNutritionProfile(row) {
       ${sqlJson(row.raw_payload)},
       true,
       now()
-    )
+    )`).join(",\n")}
     on conflict (ingredient_id, source_name, source_food_id, preparation_state, serving_basis) do update set
       source_url = excluded.source_url,
       food_description = excluded.food_description,
@@ -379,13 +560,17 @@ async function upsertNutritionProfile(row) {
       active = true,
       updated_at = now();
   `);
+  }
 }
 
-function searchTerms(ingredient, aliases, maxTerms) {
+function searchTerms(ingredient, aliases, maxTerms, options = {}) {
+  const aliasTerms = aliases
+    .filter((alias) => !options.asciiOnly || /^[\x00-\x7F]+$/.test(alias))
+    .slice(0, options.maxAliasTerms ?? aliases.length);
   const terms = [
     ingredient.canonical_name,
     ingredient.ingredient_slug?.replaceAll("_", " "),
-    ...aliases
+    ...aliasTerms
   ].map(cleanSearchTerm).filter(Boolean);
   const unique = [];
   const seen = new Set();
@@ -476,10 +661,12 @@ function parseArgs(argv) {
     offset: 0,
     reportPath: "",
     usdaApiKey: "",
+    usdaFoundationDir: "/private/tmp/tableup-fdc/foundation",
+    usdaSrLegacyDir: "/private/tmp/tableup-fdc/sr_legacy",
     usdaPageSize: 8,
     usdaDelayMs: 120,
-    wikidataDelayMs: 80,
-    usdaMinConfidence: 0.72,
+    wikidataDelayMs: 1200,
+    usdaMinConfidence: 0.88,
     wikidataMinConfidence: 0.62
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -494,10 +681,12 @@ function parseArgs(argv) {
     else if (value === "--offset") parsed.offset = Number(argv[++index] || 0);
     else if (value === "--report") parsed.reportPath = String(argv[++index] || "");
     else if (value === "--usda-api-key") parsed.usdaApiKey = String(argv[++index] || "");
+    else if (value === "--usda-foundation-dir") parsed.usdaFoundationDir = String(argv[++index] || "");
+    else if (value === "--usda-sr-legacy-dir") parsed.usdaSrLegacyDir = String(argv[++index] || "");
     else if (value === "--usda-page-size") parsed.usdaPageSize = Number(argv[++index] || 8);
     else if (value === "--usda-delay-ms") parsed.usdaDelayMs = Number(argv[++index] || 120);
     else if (value === "--wikidata-delay-ms") parsed.wikidataDelayMs = Number(argv[++index] || 80);
-    else if (value === "--usda-min-confidence") parsed.usdaMinConfidence = Number(argv[++index] || 0.72);
+    else if (value === "--usda-min-confidence") parsed.usdaMinConfidence = Number(argv[++index] || 0.88);
     else if (value === "--wikidata-min-confidence") parsed.wikidataMinConfidence = Number(argv[++index] || 0.62);
   }
   return parsed;
@@ -553,7 +742,15 @@ function tokens(value) {
   return normalizeName(value)
     .split(/\s+/)
     .map((token) => token.trim())
+    .map(singularToken)
     .filter((token) => token && !["fresh", "raw", "whole", "food", "ingredient", "chinese", "american"].includes(token));
+}
+
+function singularToken(token) {
+  if (token.length > 4 && token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (token.length > 3 && token.endsWith("es")) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
+  return token;
 }
 
 function normalizeName(value) {
@@ -570,6 +767,8 @@ function cleanSearchTerm(value) {
   return String(value || "")
     .normalize("NFKC")
     .replace(/\([^)]*\)/g, " ")
+    .replace(/["']/g, "")
+    .replace(/\b(genuine|unopened|opened|glass|plastic|from france|from usa|fresh)\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -588,12 +787,54 @@ function parseJsonArray(value) {
   }
 }
 
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      field += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  const [header, ...body] = rows.filter((item) => item.some((value) => value !== ""));
+  return body.map((values) => Object.fromEntries(header.map((name, index) => [name, values[index] ?? ""])));
+}
+
 function sqlNullableNumber(value) {
   return Number.isFinite(Number(value)) ? String(Number(value)) : "null";
 }
 
 function sqlJson(value) {
   return `${sqlString(JSON.stringify(value || {}))}::jsonb`;
+}
+
+function chunks(values, size) {
+  const output = [];
+  for (let index = 0; index < values.length; index += size) {
+    output.push(values.slice(index, index + size));
+  }
+  return output;
 }
 
 function clamp(value, min, max) {
