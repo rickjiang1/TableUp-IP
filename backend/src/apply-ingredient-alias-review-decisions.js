@@ -63,7 +63,7 @@ function readDecisionCsv(path) {
   return lines.map((line, index) => {
     const values = parseCsvLine(line);
     const row = Object.fromEntries(headers.map((header, columnIndex) => [header, values[columnIndex] ?? ""]));
-    const action = String(row.recommended_action || "").trim().toUpperCase();
+    const action = String(row.final_decision || row.recommended_action || "").trim().toUpperCase();
     if (!["DELETE", "KEEP", "MODIFY", "REVIEW"].includes(action)) {
       throw new Error(`Unsupported recommended_action on CSV row ${index + 2}: ${row.recommended_action}`);
     }
@@ -72,12 +72,12 @@ function readDecisionCsv(path) {
       ingredientId: String(row.ingredient_id || "").trim(),
       ingredientSlug: String(row.ingredient_slug || "").trim(),
       action,
-      reasonCn: String(row.reason_cn || "").trim(),
+      reasonCn: String(row.final_reason_cn || row.reason_cn || "").trim(),
       issueTypes: String(row.issue_types || "").trim(),
-      suggestedIngredientSlug: String(row.suggested_ingredient_slug || "").trim(),
-      suggestedAliasName: String(row.suggested_alias_name || "").trim(),
-      suggestedAliasType: String(row.suggested_alias_type || "").trim(),
-      decisionConfidence: Number(row.decision_confidence || 0)
+      suggestedIngredientSlug: String(row.final_suggested_ingredient_slug || row.suggested_ingredient_slug || "").trim(),
+      suggestedAliasName: String(row.final_suggested_alias_name || row.suggested_alias_name || "").trim(),
+      suggestedAliasType: String(row.final_suggested_alias_type || row.suggested_alias_type || "").trim(),
+      decisionConfidence: Number(row.final_confidence || row.decision_confidence || 0)
     };
   }).filter((row) => row.aliasName && row.ingredientId);
 }
