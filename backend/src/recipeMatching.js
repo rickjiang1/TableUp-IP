@@ -1,5 +1,6 @@
 import { fetchCloudRecipes, fetchMatchingRules, upsertUnknownIngredients } from "./supabase.js";
 import { getSubstituteCandidates } from "./dynamicSubstitutions.js";
+import { buildIngredientResolver as buildRuleIngredientResolver } from "./ingredientMatcher.js";
 
 const requiredWeight = 1.0;
 const optionalWeight = 0.3;
@@ -13,7 +14,7 @@ export async function matchRecipesForInventory(inventoryInput, options = {}) {
     options.rules ? Promise.resolve(options.rules) : fetchMatchingRules()
   ]);
 
-  const resolver = buildIngredientResolver(rules);
+  const resolver = buildRuleIngredientResolver(rules);
   const substitutionProvider = buildSubstitutionProvider(rules);
   const inventory = normalizeInventory(inventoryInput, resolver);
   await recordUnknownIngredients(inventory, recipes, resolver);
@@ -173,7 +174,7 @@ function normalizeInventory(input, resolver) {
         unit: typeof item?.unit === "string" ? item.unit : ""
       };
     })
-    .filter((item) => item.name && item.ingredientId);
+    .filter((item) => item.name);
 }
 
 function buildIngredientResolver(rules) {

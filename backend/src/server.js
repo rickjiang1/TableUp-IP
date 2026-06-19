@@ -17,6 +17,10 @@ import {
   upsertUnknownIngredients
 } from "./supabase.js";
 import { normalizeIngredientQuantity } from "./ingredientUnitConversion.js";
+import {
+  buildIngredientResolver as buildRuleIngredientResolver,
+  rankIngredientCandidatesFromRules as rankRuleIngredientCandidatesFromRules
+} from "./ingredientMatcher.js";
 import { matchRecipesForInventory } from "./recipeMatching.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
@@ -468,10 +472,11 @@ function resolveExtractedIngredient({ names, rules, resolver }) {
     if (resolved.known) {
       return {
         ingredientId: resolved.ingredientId,
-        canonicalName: canonicalNameForIngredient(rules, resolved.ingredientId),
-        matchType: resolved.aliasMatched ? "alias" : "exact",
-        matchScore: 1,
-        matchedAlias: resolved.aliasMatched ? String(name || "").trim() : "",
+        canonicalName: resolved.canonicalName || canonicalNameForIngredient(rules, resolved.ingredientId),
+        matchType: resolved.matchType || (resolved.aliasMatched ? "alias" : "exact"),
+        matchScore: resolved.matchScore || 1,
+        matchedAlias: resolved.matchedAlias || (resolved.aliasMatched ? String(name || "").trim() : ""),
+        modifiers: resolved.modifiers || [],
         autoMatched: true
       };
     }
@@ -494,7 +499,7 @@ function bestIngredientCandidateFromRules({ queries, rules }) {
     if (!trimmedQuery) {
       continue;
     }
-    for (const candidate of rankIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: 1 })) {
+    for (const candidate of rankRuleIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: 1 })) {
       if (!best || candidate.matchScore > best.matchScore) {
         best = candidate;
       }
@@ -594,7 +599,7 @@ function normalizeExtractedAmount(quantity, unit) {
 
 async function resolveIngredientItems(inputItems) {
   const rules = await getCachedMatchingRules();
-  const resolver = buildIngredientResolver(rules);
+  const resolver = buildRuleIngredientResolver(rules);
   const items = Array.isArray(inputItems) ? inputItems : [];
 
   const resolvedItems = items
@@ -607,7 +612,11 @@ async function resolveIngredientItems(inputItems) {
         source,
         ingredientId: resolved.ingredientId,
         known: resolved.known,
-        aliasMatched: Boolean(resolved.aliasMatched)
+        aliasMatched: Boolean(resolved.aliasMatched),
+        matchType: resolved.matchType || "",
+        matchScore: resolved.matchScore || 0,
+        matchedAlias: resolved.matchedAlias || "",
+        modifiers: resolved.modifiers || []
       };
     })
     .filter((item) => item.name);
@@ -634,7 +643,7 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
   ]);
   const dictionaryById = new Map(dictionary.map((ingredient) => [ingredient.ingredient_id, ingredient]));
   const ingredientsById = new Map((rules.ingredients || []).map((ingredient) => [ingredient.ingredient_id, ingredient]));
-  return rankIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: resultLimit })
+  return rankRuleIngredientCandidatesFromRules({ query: trimmedQuery, rules, limit: resultLimit })
     .map((candidate) => {
       const localized = dictionaryById.get(candidate.ingredientId);
       const ingredient = ingredientsById.get(candidate.ingredientId);
@@ -654,7 +663,7 @@ async function findIngredientCandidates({ query, language = "en", limit = 10 }) 
 
 async function normalizeMatchedIngredientQuantity(body) {
   const rules = await getCachedMatchingRules();
-  const resolver = buildIngredientResolver(rules);
+  const resolver = buildRuleIngredientResolver(rules);
   const ingredientName = String(body?.ingredientName || body?.name || "").trim();
   const requestedIngredientId = String(body?.ingredientId || "").trim();
   let ingredientId = "";

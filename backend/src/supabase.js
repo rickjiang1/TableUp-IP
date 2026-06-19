@@ -191,9 +191,13 @@ export async function recipeCount() {
 }
 
 export async function fetchMatchingRules() {
-  const [ingredients, aliases, categories, tags, functionalProfiles, substitutionRules, verifiedSubstitutions] = await Promise.all([
+  const [ingredients, aliases, modifiers, categories, tags, functionalProfiles, substitutionRules, verifiedSubstitutions] = await Promise.all([
     restSelectAll("ingredients", "select=ingredient_id,ingredient_slug,canonical_name,category,category_id,subcategory_id,canonical_unit&order=canonical_name.asc"),
-    restSelectAll("ingredient_aliases", "select=alias_name,ingredient_id,ingredient_slug&order=alias_name.asc"),
+    fetchIngredientAliasesForMatching(),
+    restSelectAll("ingredient_modifiers", "select=modifier_text,normalized_text,modifier_type,normalized_value,language,strength,active&active=eq.true&order=normalized_text.asc").catch((error) => {
+      console.warn(`Unable to fetch ingredient modifiers: ${error.message}`);
+      return [];
+    }),
     restSelectAll("ingredient_categories", "select=id,slug,name,parent_category_id&order=slug.asc"),
     restSelectAll("ingredient_tags", "select=id,slug,name,tag_type&order=slug.asc"),
     restSelectAll("ingredient_functional_profiles", "select=ingredient_id,tag_id,weight,source,notes&order=ingredient_id.asc,tag_id.asc"),
@@ -204,12 +208,28 @@ export async function fetchMatchingRules() {
   return {
     ingredients,
     aliases,
+    modifiers,
     categories,
     tags,
     functionalProfiles,
     substitutionRules,
     verifiedSubstitutions
   };
+}
+
+async function fetchIngredientAliasesForMatching() {
+  try {
+    return await restSelectAll(
+      "ingredient_aliases",
+      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score,active&active=eq.true&order=alias_name.asc"
+    );
+  } catch (error) {
+    console.warn(`Unable to fetch active ingredient aliases, falling back to legacy alias query: ${error.message}`);
+    return await restSelectAll(
+      "ingredient_aliases",
+      "select=alias_name,ingredient_id,ingredient_slug,language,verified,confidence_score&order=alias_name.asc"
+    );
+  }
 }
 
 export async function fetchIngredientUnitConversions(ingredientId) {

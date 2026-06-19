@@ -165,11 +165,6 @@ function buildAliasRows(ingredientRows, replacementAliases = []) {
     }
     for (const alias of aliases) {
       addAlias(byAlias, ingredient, alias, 1, true);
-      if (ingredient.category === "protein" && containsCjk(alias)) {
-        for (const productAlias of chineseProteinProductAliases(alias)) {
-          addAlias(byAlias, ingredient, productAlias, 0.9, true);
-        }
-      }
     }
   }
 
@@ -483,24 +478,6 @@ function pluralize(value) {
 
 function containsCjk(value) {
   return /[\u3400-\u9fff]/.test(value);
-}
-
-function chineseProteinProductAliases(alias) {
-  const variants = new Set();
-  for (const prefix of ["美国", "澳洲", "日本", "加拿大", "美国和牛", "和牛", "冷冻", "冰鲜", "新鲜"]) {
-    variants.add(`${prefix}${alias}`);
-  }
-  for (const modifier of ["无骨", "去骨", "带骨", "去皮", "带皮", "切片", "薄切", "火锅", "烧烤"]) {
-    variants.add(`${modifier}${alias}`);
-    variants.add(`${alias}${modifier}`);
-  }
-  for (const prefix of ["美国和牛", "和牛", "冷冻", "澳洲"]) {
-    for (const modifier of ["无骨", "去骨", "带骨", "切片", "薄切", "火锅"]) {
-      variants.add(`${prefix}${modifier}${alias}`);
-      variants.add(`${prefix}${alias}${modifier}`);
-    }
-  }
-  return [...variants].filter((value) => value.length <= 96);
 }
 
 function requiredEnv(name) {
