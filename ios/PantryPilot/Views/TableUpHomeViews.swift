@@ -1,4 +1,5 @@
 import AVFoundation
+import PhotosUI
 import Speech
 import SwiftData
 import SwiftUI
@@ -29,6 +30,7 @@ struct YouliaoView: View {
     @State private var showingIngredientMatcher = false
     @State private var showingClearConfirmation = false
     @State private var cabinetOpen = false
+    @State private var cabinetDragOffset: CGFloat = 0
     @State private var locationFilter: YouliaoLocationFilter = .all
 
     init(isFloatingPanelOpen: Binding<Bool> = .constant(false)) {
@@ -134,6 +136,11 @@ struct YouliaoView: View {
 
                     if cabinetOpen {
                         VStack(alignment: .leading, spacing: 14) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.28))
+                                .frame(width: 42, height: 5)
+                                .frame(maxWidth: .infinity)
+                                .padding(.bottom, 2)
                             overview
                             inventorySectionHeader
                             locationPicker
@@ -151,6 +158,8 @@ struct YouliaoView: View {
                         .padding(.horizontal, 18)
                         .padding(.top, max(58, height * 0.14))
                         .padding(.bottom, 72)
+                        .offset(y: max(cabinetDragOffset, 0))
+                        .simultaneousGesture(cabinetCloseGesture)
                         .zIndex(4)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                         
@@ -234,7 +243,27 @@ struct YouliaoView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             showingBasketMenu = false
             cabinetOpen = false
+            cabinetDragOffset = 0
         }
+    }
+
+    private var cabinetCloseGesture: some Gesture {
+        DragGesture(minimumDistance: 18)
+            .onChanged { value in
+                guard value.translation.height > 0,
+                      abs(value.translation.height) > abs(value.translation.width) * 1.25 else { return }
+                cabinetDragOffset = min(value.translation.height, 150)
+            }
+            .onEnded { value in
+                let shouldClose = value.translation.height > 120 || value.predictedEndTranslation.height > 220
+                if shouldClose {
+                    closeFloatingPanels()
+                } else {
+                    withAnimation(.spring(response: 0.26, dampingFraction: 0.86)) {
+                        cabinetDragOffset = 0
+                    }
+                }
+            }
     }
 
     private func syncFloatingPanelState() {
@@ -583,6 +612,7 @@ private struct PhotoIngredientCaptureSheet: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     let launchMode: ScanLaunchMode
     @State private var capturedImageData: Data?
+    @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var detectedItems: [DetectedIngredient] = []
     @State private var showingCamera = false
     @State private var showingPhotoLibrary = false
@@ -613,10 +643,12 @@ private struct PhotoIngredientCaptureSheet: View {
             ImagePicker(sourceType: .camera, imageData: $capturedImageData)
                 .ignoresSafeArea()
         }
-        .sheet(isPresented: $showingPhotoLibrary, onDismiss: handlePickerDismiss) {
-            ImagePicker(sourceType: .photoLibrary, imageData: $capturedImageData)
-                .ignoresSafeArea()
-        }
+        .photosPicker(
+            isPresented: $showingPhotoLibrary,
+            selection: $selectedPhotos,
+            maxSelectionCount: 12,
+            matching: .images
+        )
         .sheet(isPresented: $showingDetectedItems) {
             DetectedItemsReviewView(items: $detectedItems) {
                 let result = await saveDetectedItems()
@@ -647,6 +679,16 @@ private struct PhotoIngredientCaptureSheet: View {
                 await extract(imageData: newValue)
             }
         }
+        .onChange(of: selectedPhotos) { _, newValue in
+            guard !newValue.isEmpty else { return }
+            Task {
+                await extract(photoItems: newValue)
+            }
+        }
+        .onChange(of: showingPhotoLibrary) { _, isPresented in
+            guard !isPresented else { return }
+            handlePickerDismiss()
+        }
     }
 
     private func launchPickerIfNeeded() {
@@ -669,14 +711,38 @@ private struct PhotoIngredientCaptureSheet: View {
     }
 
     private func handlePickerDismiss() {
-        guard capturedImageData == nil, !isExtracting, detectedItems.isEmpty else { return }
+        guard capturedImageData == nil, selectedPhotos.isEmpty, !isExtracting, detectedItems.isEmpty else { return }
         dismiss()
     }
 
     private func extract(imageData: Data) async {
+        await extract(imageDataList: [imageData])
+    }
+
+    private func extract(photoItems: [PhotosPickerItem]) async {
         isExtracting = true
+        var imageDataList: [Data] = []
+        for item in photoItems {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                imageDataList.append(data)
+            }
+        }
+
+        guard !imageDataList.isEmpty else {
+            isExtracting = false
+            selectedPhotos = []
+            alert = ScanAlertMessage(title: "Extraction failed", message: "No photos could be read. Try selecting again.")
+            return
+        }
+
+        await extract(imageDataList: imageDataList)
+    }
+
+    private func extract(imageDataList: [Data]) async {
+        isExtracting = true
+        defer { isExtracting = false }
         do {
-            let response = try await GroceryPhotoExtractor().extract(from: [imageData], language: appLanguage)
+            let response = try await GroceryPhotoExtractor().extract(from: imageDataList, language: appLanguage)
             detectedItems = response.items.map(\.detectedIngredient)
             if detectedItems.isEmpty {
                 alert = ScanAlertMessage(title: "Extraction failed", message: "No ingredients found. Try another photo.")
@@ -686,7 +752,6 @@ private struct PhotoIngredientCaptureSheet: View {
         } catch {
             alert = ScanAlertMessage(title: "Extraction failed", message: error.localizedDescription)
         }
-        isExtracting = false
     }
 
     private func saveDetectedItems() async -> ReviewSaveResult {
@@ -694,6 +759,7 @@ private struct PhotoIngredientCaptureSheet: View {
             let result = try await InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
             detectedItems = []
             capturedImageData = nil
+            selectedPhotos = []
             return ReviewSaveResult(
                 didSave: true,
                 alert: ScanAlertMessage(
@@ -775,6 +841,10 @@ private struct VoiceIngredientEntrySheet: View {
     @StateObject private var speechRecognizer = VoiceIngredientRecognizer()
     @FocusState private var isInputFocused: Bool
     @State private var transcript = ""
+    @State private var committedTranscript = ""
+    @State private var currentSpeechSegment = ""
+    @State private var detectedItems: [DetectedIngredient] = []
+    @State private var showingDetectedItems = false
     @State private var isSaving = false
     @State private var alert: ScanAlertMessage?
 
@@ -808,7 +878,24 @@ private struct VoiceIngredientEntrySheet: View {
                         .foregroundStyle(.secondary)
                 }
 
-                TextEditor(text: $transcript)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("识别文字")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            clearTranscript()
+                        } label: {
+                            Label("清除", systemImage: "xmark.circle")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.secondary.opacity(0.5) : Color.orange)
+                        .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && currentSpeechSegment.isEmpty)
+                    }
+
+                    TextEditor(text: transcriptBinding)
                     .focused($isInputFocused)
                     .frame(minHeight: 180)
                     .padding(10)
@@ -818,16 +905,17 @@ private struct VoiceIngredientEntrySheet: View {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
                     )
+                }
 
                 Button {
                     Task { await saveTranscript() }
                 } label: {
-                    Label(isSaving ? L.text("Saving...", language: appLanguage) : L.text("Save item", language: appLanguage), systemImage: "mic.fill")
+                    Label(isSaving ? "正在提取..." : L.text("Save item", language: appLanguage), systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
-                .disabled(isSaving || parsedIngredientNames.isEmpty)
+                .disabled(isSaving || !hasTranscript)
 
                 Spacer()
             }
@@ -847,11 +935,28 @@ private struct VoiceIngredientEntrySheet: View {
                 }
             }
             .onDisappear {
+                commitCurrentSpeechSegment()
                 speechRecognizer.stopRecording()
             }
             .onChange(of: speechRecognizer.transcript) { _, newValue in
-                guard !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-                transcript = newValue
+                updateTranscript(with: newValue)
+            }
+            .sheet(isPresented: $showingDetectedItems) {
+                DetectedItemsReviewView(items: $detectedItems) {
+                    let result = await saveDetectedItems()
+                    if result.didSave {
+                        showingDetectedItems = false
+                        transcript = ""
+                        committedTranscript = ""
+                        currentSpeechSegment = ""
+                        speechRecognizer.transcript = ""
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            alert = result.alert
+                        }
+                    } else {
+                        alert = result.alert
+                    }
+                }
             }
             .alert(item: $alert) { alert in
                 Alert(
@@ -865,49 +970,105 @@ private struct VoiceIngredientEntrySheet: View {
 
     private func toggleRecording() {
         if speechRecognizer.isRecording {
+            commitCurrentSpeechSegment()
             speechRecognizer.stopRecording()
         } else {
+            committedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            currentSpeechSegment = ""
+            speechRecognizer.transcript = ""
             isInputFocused = false
             speechRecognizer.startRecording(language: appLanguage)
         }
     }
 
-    private var parsedIngredientNames: [String] {
-        transcript
-            .components(separatedBy: CharacterSet(charactersIn: ",，、\n"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    private var transcriptBinding: Binding<String> {
+        Binding(
+            get: { transcript },
+            set: { newValue in
+                transcript = newValue
+                if !speechRecognizer.isRecording {
+                    committedTranscript = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    currentSpeechSegment = ""
+                }
+            }
+        )
+    }
+
+    private var hasTranscript: Bool {
+        !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func updateTranscript(with rawSegment: String) {
+        let segment = rawSegment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !segment.isEmpty else { return }
+        currentSpeechSegment = segment
+        transcript = joinedTranscript(committedTranscript, currentSpeechSegment)
+    }
+
+    private func commitCurrentSpeechSegment() {
+        let segment = currentSpeechSegment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !segment.isEmpty else { return }
+        committedTranscript = joinedTranscript(committedTranscript, segment)
+        transcript = committedTranscript
+        currentSpeechSegment = ""
+    }
+
+    private func clearTranscript() {
+        transcript = ""
+        committedTranscript = ""
+        currentSpeechSegment = ""
+        speechRecognizer.transcript = ""
+    }
+
+    private func joinedTranscript(_ first: String, _ second: String) -> String {
+        let trimmedFirst = first.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSecond = second.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedFirst.isEmpty { return trimmedSecond }
+        if trimmedSecond.isEmpty { return trimmedFirst }
+        return "\(trimmedFirst)\n\(trimmedSecond)"
     }
 
     private func saveTranscript() async {
-        let inputs = parsedIngredientNames.map {
-            IngredientInput(
-                name: $0,
-                quantity: 1,
-                unit: "piece",
-                category: .other,
-                location: .fridge
-            )
-        }
-        guard !inputs.isEmpty else { return }
+        commitCurrentSpeechSegment()
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
 
         isSaving = true
         defer { isSaving = false }
 
         do {
-            let result = try await InventoryStore.save(inputs, sourceContext: modelContext)
-            transcript = ""
-            speechRecognizer.transcript = ""
-            alert = ScanAlertMessage(
-                title: "Saved",
-                message: SaveConfirmation(
-                    items: result.savedNames,
-                    inventoryCount: result.inventoryCount,
-                    language: appLanguage
-                ).message
+            let response = try await GroceryTextExtractor().extract(from: text, language: appLanguage)
+            detectedItems = response.items.map(\.detectedIngredient)
+            if detectedItems.isEmpty {
+                alert = ScanAlertMessage(title: "Extraction failed", message: "No ingredients found. Try saying the items again.")
+            } else {
+                showingDetectedItems = true
+            }
+        } catch {
+            alert = ScanAlertMessage(title: "Extraction failed", message: error.localizedDescription)
+        }
+    }
+
+    private func saveDetectedItems() async -> ReviewSaveResult {
+        do {
+            let result = try await InventoryStore.save(detectedItems.map(\.ingredientInput), sourceContext: modelContext)
+            detectedItems = []
+            return ReviewSaveResult(
+                didSave: true,
+                alert: ScanAlertMessage(
+                    title: "Saved",
+                    message: SaveConfirmation(
+                        items: result.savedNames,
+                        inventoryCount: result.inventoryCount,
+                        language: appLanguage
+                    ).message
+                )
             )
         } catch {
-            alert = ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+            return ReviewSaveResult(
+                didSave: false,
+                alert: ScanAlertMessage(title: "Save failed", message: error.localizedDescription)
+            )
         }
     }
 }

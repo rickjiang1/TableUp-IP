@@ -84,6 +84,41 @@ struct GroceryPhotoExtractor {
     }
 }
 
+struct GroceryTextExtractor {
+    var baseURL: URL = BackendConfiguration.baseURL
+    var session: URLSession = .shared
+
+    func extract(from text: String, language: String = "en") async throws -> GroceryPhotoExtractionResponse {
+        let url = baseURL.appending(path: "api/extract-grocery-text")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 90
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(GroceryTextExtractionRequest(text: text, language: language))
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GroceryPhotoExtractorError.badResponse("Backend did not return an HTTP response.")
+        }
+
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "No response body."
+            throw GroceryPhotoExtractorError.badResponse("Backend returned \(httpResponse.statusCode): \(message)")
+        }
+
+        do {
+            return try JSONDecoder().decode(GroceryPhotoExtractionResponse.self, from: data)
+        } catch {
+            throw GroceryPhotoExtractorError.badResponse("Could not read backend response: \(error.localizedDescription)")
+        }
+    }
+}
+
+private struct GroceryTextExtractionRequest: Encodable {
+    let text: String
+    let language: String
+}
+
 enum BackendConfiguration {
     static var baseURL: URL {
         #if targetEnvironment(simulator)

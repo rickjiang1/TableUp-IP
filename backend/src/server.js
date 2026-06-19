@@ -253,6 +253,57 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (url.pathname === "/api/extract-grocery-text") {
+      if (request.method !== "POST") {
+        sendJson(response, 405, { error: "method_not_allowed", message: "Use POST application/json." });
+        return;
+      }
+
+      const startedAt = Date.now();
+      const parsed = await readJsonRequest(request, 128 * 1024);
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      const language = typeof parsed.language === "string" ? parsed.language : "en";
+
+      if (!text) {
+        sendJson(response, 400, { error: "text is required" });
+        return;
+      }
+
+      const result = await createOpenAIResponse({
+        schemaName: "grocery_extraction",
+        schema: groceryExtractionSchema,
+        maxOutputTokens: openAIExtractionMaxOutputTokens,
+        content: [
+          {
+            type: "input_text",
+            text: [
+              "Extract grocery inventory items from this dictated or typed grocery text.",
+              "Use name for the core food only, not brand, origin, grade, packaging, or preparation adjectives.",
+              "Put the full user phrase and modifiers in rawName and description when present.",
+              "Return item name, rawName, description, quantity, unit, category, storage location, confidence, and source text.",
+              "Always infer quantity and unit from the text when possible.",
+              "Use only these unit values: piece, g, kg, lb, oz, ml, l, tsp, tbsp, cup, clove, bunch, bottle, can, bag, pack.",
+              "Convert Chinese units to supported units: 克=>g, 千克/公斤=>kg, 毫升=>ml, 升=>l, 磅=>lb, 盎司=>oz, 瓶=>bottle, 罐=>can, 袋=>bag, 包=>pack, 斤=>500 g.",
+              "If the text has an item but no quantity, use quantity 1 and unit piece or pack as appropriate.",
+              `Grocery text:\n${text}`
+            ].join(" ")
+          }
+        ]
+      });
+
+      const openAICompletedAt = Date.now();
+      const normalized = await normalizeGroceryExtraction(parseStructuredOutput(result), language);
+      console.log(JSON.stringify({
+        event: "grocery_text_extraction_timing",
+        textLength: text.length,
+        openAIMs: openAICompletedAt - startedAt,
+        normalizeMs: Date.now() - openAICompletedAt,
+        totalMs: Date.now() - startedAt
+      }));
+      sendJson(response, 200, normalized);
+      return;
+    }
+
     if (url.pathname === "/api/parse-recipe") {
       if (request.method !== "POST") {
         sendJson(response, 405, { error: "method_not_allowed", message: "Use POST application/json." });
