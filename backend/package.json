@@ -13,6 +13,7 @@
     "seed:ingredient-modifiers": "node src/seed-ingredient-modifiers.js",
     "audit:ingredient-aliases": "node src/audit-ingredient-aliases.js",
     "cleanup:ingredient-aliases": "node src/cleanup-ingredient-aliases.js",
+    "mark:ingredient-aliases-review": "node src/mark-ingredient-aliases-review.js",
     "seed:dynamic-substitutions": "node src/seed-dynamic-substitutions.js",
     "enrich:ingredient-taxonomy": "node src/enrich-ingredient-taxonomy.js",
     "enrich:ingredient-nutrition": "node src/enrich-ingredient-nutrition.js",
