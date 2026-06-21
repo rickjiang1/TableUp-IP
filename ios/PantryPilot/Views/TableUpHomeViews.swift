@@ -136,11 +136,7 @@ struct YouliaoView: View {
 
                     if cabinetOpen {
                         VStack(alignment: .leading, spacing: 14) {
-                            Capsule()
-                                .fill(Color.white.opacity(0.28))
-                                .frame(width: 42, height: 5)
-                                .frame(maxWidth: .infinity)
-                                .padding(.bottom, 2)
+                            cabinetDragHandle
                             overview
                             inventorySectionHeader
                             locationPicker
@@ -159,7 +155,6 @@ struct YouliaoView: View {
                         .padding(.top, max(58, height * 0.14))
                         .padding(.bottom, 72)
                         .offset(y: max(cabinetDragOffset, 0))
-                        .simultaneousGesture(cabinetCloseGesture)
                         .zIndex(4)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                         
@@ -264,6 +259,21 @@ struct YouliaoView: View {
                     }
                 }
             }
+    }
+
+    private var cabinetDragHandle: some View {
+        VStack(spacing: 8) {
+            Capsule()
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 42, height: 5)
+            Rectangle()
+                .fill(Color.clear)
+                .frame(height: 18)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .gesture(cabinetCloseGesture)
+        .padding(.bottom, -10)
     }
 
     private func syncFloatingPanelState() {
