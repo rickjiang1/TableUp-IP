@@ -1,7 +1,574 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { query, sqlBoolean, sqlNumber, sqlString } from "./postgres.js";
 
 export async function ensureSupabaseSchema() {
   // Tables are created by the migration/bootstrap step. REST mode keeps Render off Postgres TCP.
+}
+
+export async function bootstrapHouseholdSession({ installId = "", displayName = "", existingToken = "" }) {
+  const existingAuth = existingToken ? await authenticateHouseholdToken(existingToken).catch(() => null) : null;
+  if (existingAuth) {
+    return {
+      token: existingToken,
+      user: existingAuth.user,
+      household: existingAuth.household,
+      role: existingAuth.role
+    };
+  }
+
+  const installHash = installIdHash(installId);
+  let user = installHash ? await fetchUserByInstallHash(installHash) : null;
+  if (!user) {
+    user = await createAppUser({
+      displayName: displayName || "TableUp User",
+      installHash
+    });
+  } else {
+    const updatedDisplayName = displayName || user.displayName || "TableUp User";
+    await query(`
+      update app_users
+      set display_name = ${sqlString(updatedDisplayName)},
+          last_seen_at = now(),
+          updated_at = now()
+      where id = ${sqlUuid(user.id)}
+    `);
+    user = { ...user, displayName: updatedDisplayName };
+  }
+
+  let membership = await fetchCurrentHouseholdMembership(user.id);
+  if (!membership) {
+    const household = await createHouseholdForUser(user);
+    membership = {
+      household,
+      role: "owner"
+    };
+  }
+
+  const token = await createSessionToken(user.id);
+  return {
+    token,
+    user,
+    household: membership.household,
+    role: membership.role
+  };
+}
+
+export async function authenticateHouseholdToken(token) {
+  const cleanToken = String(token || "").trim();
+  if (!cleanToken) {
+    throw new Error("Authentication token is required.");
+  }
+
+  const tokenHash = hashSecret(cleanToken);
+  const sessionRows = await query(`
+    select id::text as id,
+           user_id::text as user_id
+    from app_user_sessions
+    where token_hash = ${sqlString(tokenHash)}
+      and revoked_at is null
+    limit 1
+  `);
+  const session = sessionRows[0];
+  if (!session?.user_id) {
+    throw new Error("Invalid or expired session.");
+  }
+
+  const [userRows, membership] = await Promise.all([
+    query(`
+      select id::text as id,
+             display_name,
+             last_seen_at::text as last_seen_at
+      from app_users
+      where id = ${sqlUuid(session.user_id)}
+      limit 1
+    `),
+    fetchCurrentHouseholdMembership(session.user_id)
+  ]);
+  const userRow = userRows[0];
+  if (!userRow || !membership) {
+    throw new Error("Session user is not linked to a household.");
+  }
+
+  const now = new Date().toISOString();
+  await Promise.allSettled([
+    query(`update app_user_sessions set last_seen_at = ${sqlString(now)}::timestamptz where id = ${sqlUuid(session.id)}`),
+    query(`update app_users set last_seen_at = ${sqlString(now)}::timestamptz, updated_at = now() where id = ${sqlUuid(session.user_id)}`)
+  ]);
+
+  return {
+    sessionId: session.id,
+    user: normalizeUserRow(userRow),
+    household: membership.household,
+    role: membership.role
+  };
+}
+
+export async function createHouseholdInvite(auth) {
+  const code = await uniqueInviteCode();
+  const inviteRows = await query(`
+    insert into household_invites (household_id, code, created_by, expires_at)
+    values (${sqlUuid(auth.household.id)}, ${sqlString(code)}, ${sqlUuid(auth.user.id)}, now() + interval '7 days')
+    returning expires_at::text as expires_at
+  `);
+  const expiresAt = inviteRows[0]?.expires_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  return {
+    code,
+    householdId: auth.household.id,
+    householdName: auth.household.name,
+    expiresAt
+  };
+}
+
+export async function fetchHouseholdMembers(auth) {
+  const rows = await query(`
+    select u.id::text as user_id,
+           u.display_name,
+           u.last_seen_at::text as last_seen_at,
+           hm.role,
+           hm.joined_at::text as joined_at
+    from household_members hm
+    join app_users u on u.id = hm.user_id
+    where hm.household_id = ${sqlUuid(auth.household.id)}
+      and hm.active = true
+    order by case hm.role
+               when 'owner' then 0
+               when 'admin' then 1
+               else 2
+             end,
+             hm.joined_at asc
+  `);
+  return rows.map(normalizeHouseholdMemberRow);
+}
+
+export async function joinHouseholdWithInvite({ auth, code }) {
+  const cleanCode = normalizeInviteCode(code);
+  if (!cleanCode) {
+    throw new Error("Invite code is required.");
+  }
+
+  const inviteRows = await query(`
+    select id::text as id,
+           household_id::text as household_id,
+           code,
+           expires_at::text as expires_at,
+           used_at::text as used_at,
+           revoked_at::text as revoked_at
+    from household_invites
+    where code = ${sqlString(cleanCode)}
+    limit 1
+  `);
+  const invite = inviteRows[0];
+  if (!invite || invite.used_at || invite.revoked_at || new Date(invite.expires_at).getTime() < Date.now()) {
+    throw new Error("Invite code is invalid or expired.");
+  }
+
+  await query(`
+    insert into household_members (household_id, user_id, role, active, updated_at)
+    values (${sqlUuid(invite.household_id)}, ${sqlUuid(auth.user.id)}, 'member', true, now())
+    on conflict (household_id, user_id)
+    do update set role = excluded.role,
+                  active = true,
+                  updated_at = now()
+  `);
+
+  await query(`
+    update household_invites
+    set used_by = ${sqlUuid(auth.user.id)},
+        used_at = now()
+    where id = ${sqlUuid(invite.id)}
+  `);
+
+  const membership = await fetchHouseholdMembership(auth.user.id, invite.household_id);
+  if (!membership) {
+    throw new Error("Unable to join household.");
+  }
+  return {
+    user: auth.user,
+    household: membership.household,
+    role: membership.role
+  };
+}
+
+export async function fetchHouseholdInventory(auth) {
+  const rows = await query(`
+    select id::text as id,
+           client_id,
+           name,
+           normalized_name,
+           description_text,
+           canonical_ingredient_id::text as canonical_ingredient_id,
+           quantity::text as quantity,
+           unit,
+           canonical_quantity::text as canonical_quantity,
+           canonical_unit,
+           unit_conversion_ratio::text as unit_conversion_ratio,
+           unit_conversion_needs_review,
+           unit_conversion_review_reason,
+           category,
+           location,
+           entered_date::text as entered_date,
+           expire_date::text as expire_date,
+           created_at::text as created_at,
+           updated_at::text as updated_at
+    from household_inventory_items
+    where household_id = ${sqlUuid(auth.household.id)}
+      and deleted_at is null
+    order by location asc, expire_date asc, name asc
+  `);
+  return rows.map(normalizeInventoryRow);
+}
+
+export async function upsertHouseholdInventory(auth, items) {
+  const normalizedItems = Array.isArray(items)
+    ? items.map((item) => normalizeInventoryInput(item, auth)).filter(Boolean)
+    : [];
+
+  if (normalizedItems.length === 0) {
+    return await fetchHouseholdInventory(auth);
+  }
+
+  await upsertHouseholdInventoryRows(normalizedItems);
+  return await fetchHouseholdInventory(auth);
+}
+
+export async function deleteHouseholdInventoryItem(auth, clientId) {
+  const cleanClientId = String(clientId || "").trim();
+  if (!cleanClientId) {
+    throw new Error("clientId is required.");
+  }
+
+  await query(`
+    update household_inventory_items
+    set deleted_at = now(),
+        updated_by = ${sqlUuid(auth.user.id)},
+        updated_at = now()
+    where household_id = ${sqlUuid(auth.household.id)}
+      and client_id = ${sqlString(cleanClientId)}
+  `);
+}
+
+async function fetchUserByInstallHash(installHash) {
+  const rows = await query(`
+    select id::text as id,
+           display_name,
+           last_seen_at::text as last_seen_at
+    from app_users
+    where install_id_hash = ${sqlString(installHash)}
+    limit 1
+  `);
+  return rows[0] ? normalizeUserRow(rows[0]) : null;
+}
+
+async function createAppUser({ displayName, installHash }) {
+  const rows = await query(`
+    insert into app_users (display_name, install_id_hash)
+    values (${sqlString(String(displayName || "TableUp User").trim() || "TableUp User")}, ${sqlNullableString(installHash)})
+    returning id::text as id,
+              display_name,
+              last_seen_at::text as last_seen_at
+  `);
+  return normalizeUserRow(rows[0]);
+}
+
+async function createHouseholdForUser(user) {
+  const householdRows = await query(`
+    insert into households (name, created_by)
+    values ('我的厨房', ${sqlUuid(user.id)})
+    returning id::text as id,
+              name,
+              updated_at::text as updated_at
+  `);
+  const household = normalizeHouseholdRow(householdRows[0]);
+  await query(`
+    insert into household_members (household_id, user_id, role, active, updated_at)
+    values (${sqlUuid(household.id)}, ${sqlUuid(user.id)}, 'owner', true, now())
+    on conflict (household_id, user_id)
+    do update set role = excluded.role,
+                  active = true,
+                  updated_at = now()
+  `);
+  return household;
+}
+
+async function fetchCurrentHouseholdMembership(userId) {
+  const rows = await query(`
+    select household_id::text as household_id,
+           role,
+           joined_at::text as joined_at
+    from household_members
+    where user_id = ${sqlUuid(userId)}
+      and active = true
+    order by joined_at desc
+    limit 1
+  `);
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+  return await fetchHouseholdMembership(userId, row.household_id);
+}
+
+async function fetchHouseholdMembership(userId, householdId) {
+  const rows = await query(`
+    select hm.role,
+           h.id::text as id,
+           h.name,
+           h.updated_at::text as updated_at
+    from household_members hm
+    join households h on h.id = hm.household_id
+    where hm.user_id = ${sqlUuid(userId)}
+      and hm.household_id = ${sqlUuid(householdId)}
+      and hm.active = true
+    limit 1
+  `);
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+  return {
+    household: normalizeHouseholdRow(row),
+    role: row.role || "member"
+  };
+}
+
+async function createSessionToken(userId) {
+  const token = `tup_${randomBytes(32).toString("base64url")}`;
+  await query(`
+    insert into app_user_sessions (user_id, token_hash)
+    values (${sqlUuid(userId)}, ${sqlString(hashSecret(token))})
+  `);
+  return token;
+}
+
+async function uniqueInviteCode() {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const code = randomBytes(5).toString("base64url").replace(/[^A-Z0-9]/gi, "").slice(0, 8).toUpperCase();
+    const rows = await query(`select id::text as id from household_invites where code = ${sqlString(code)} limit 1`);
+    if (rows.length === 0) {
+      return code;
+    }
+  }
+  return randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase();
+}
+
+function installIdHash(installId) {
+  const clean = String(installId || "").trim();
+  return clean ? hashSecret(clean) : "";
+}
+
+function hashSecret(value) {
+  return createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function normalizeInviteCode(code) {
+  return String(code || "").trim().replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
+
+function normalizeUserRow(row) {
+  return {
+    id: row.id,
+    displayName: row.display_name || "TableUp User",
+    lastSeenAt: row.last_seen_at || ""
+  };
+}
+
+function normalizeHouseholdRow(row) {
+  return {
+    id: row.id,
+    name: row.name || "我的厨房",
+    updatedAt: row.updated_at || ""
+  };
+}
+
+function normalizeHouseholdMemberRow(row) {
+  return {
+    id: row.user_id,
+    userId: row.user_id,
+    displayName: row.display_name || "TableUp User",
+    role: row.role || "member",
+    joinedAt: row.joined_at || "",
+    lastSeenAt: row.last_seen_at || ""
+  };
+}
+
+function normalizeInventoryInput(item, auth) {
+  const clientId = String(item.clientId || item.id || "").trim();
+  const name = String(item.name || "").trim();
+  if (!clientId || !name) {
+    return null;
+  }
+
+  const canonicalId = String(item.canonicalIngredientId || "").trim();
+  return {
+    household_id: auth.household.id,
+    client_id: clientId,
+    name,
+    normalized_name: String(item.normalizedName || canonicalIngredientId(name)).trim(),
+    description_text: String(item.descriptionText || "").trim(),
+    canonical_ingredient_id: isUUID(canonicalId) ? canonicalId : null,
+    quantity: safeNumber(item.quantity, 1),
+    unit: String(item.unit || "piece").trim() || "piece",
+    canonical_quantity: safeNumber(item.canonicalQuantity, 0),
+    canonical_unit: String(item.canonicalUnit || "").trim(),
+    unit_conversion_ratio: safeNumber(item.unitConversionRatio, 0),
+    unit_conversion_needs_review: Boolean(item.unitConversionNeedsReview),
+    unit_conversion_review_reason: String(item.unitConversionReviewReason || "").trim(),
+    category: String(item.category || item.categoryRaw || "Other").trim() || "Other",
+    location: String(item.location || item.locationRaw || "Fridge").trim() || "Fridge",
+    entered_date: dateOnly(item.enteredDate || item.entered_date),
+    expire_date: dateOnly(item.expireDate || item.expire_date),
+    created_by: auth.user.id,
+    updated_by: auth.user.id,
+    updated_at: new Date().toISOString(),
+    deleted_at: null
+  };
+}
+
+async function upsertHouseholdInventoryRows(items) {
+  const values = items.map(sqlHouseholdInventoryValue).join(",\n");
+  await query(`
+    insert into household_inventory_items (
+      household_id,
+      client_id,
+      name,
+      normalized_name,
+      description_text,
+      canonical_ingredient_id,
+      quantity,
+      unit,
+      canonical_quantity,
+      canonical_unit,
+      unit_conversion_ratio,
+      unit_conversion_needs_review,
+      unit_conversion_review_reason,
+      category,
+      location,
+      entered_date,
+      expire_date,
+      created_by,
+      updated_by,
+      updated_at,
+      deleted_at
+    )
+    values ${values}
+    on conflict (household_id, client_id)
+    do update set
+      name = excluded.name,
+      normalized_name = excluded.normalized_name,
+      description_text = excluded.description_text,
+      canonical_ingredient_id = excluded.canonical_ingredient_id,
+      quantity = excluded.quantity,
+      unit = excluded.unit,
+      canonical_quantity = excluded.canonical_quantity,
+      canonical_unit = excluded.canonical_unit,
+      unit_conversion_ratio = excluded.unit_conversion_ratio,
+      unit_conversion_needs_review = excluded.unit_conversion_needs_review,
+      unit_conversion_review_reason = excluded.unit_conversion_review_reason,
+      category = excluded.category,
+      location = excluded.location,
+      entered_date = excluded.entered_date,
+      expire_date = excluded.expire_date,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at,
+      deleted_at = null
+  `);
+}
+
+function sqlHouseholdInventoryValue(item) {
+  return `(
+    ${sqlUuid(item.household_id)},
+    ${sqlString(item.client_id)},
+    ${sqlString(item.name)},
+    ${sqlString(item.normalized_name)},
+    ${sqlString(item.description_text)},
+    ${sqlNullableUuid(item.canonical_ingredient_id)},
+    ${sqlNumber(item.quantity, 1)},
+    ${sqlString(item.unit)},
+    ${sqlNumber(item.canonical_quantity, 0)},
+    ${sqlString(item.canonical_unit)},
+    ${sqlNumber(item.unit_conversion_ratio, 0)},
+    ${sqlBoolean(item.unit_conversion_needs_review)},
+    ${sqlString(item.unit_conversion_review_reason)},
+    ${sqlString(item.category)},
+    ${sqlString(item.location)},
+    ${sqlDate(item.entered_date)},
+    ${sqlDate(item.expire_date)},
+    ${sqlUuid(item.created_by)},
+    ${sqlUuid(item.updated_by)},
+    now(),
+    null
+  )`;
+}
+
+function normalizeInventoryRow(row) {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    name: row.name,
+    normalizedName: row.normalized_name || "",
+    descriptionText: row.description_text || "",
+    canonicalIngredientId: row.canonical_ingredient_id || "",
+    quantity: Number(row.quantity || 0),
+    unit: row.unit || "piece",
+    canonicalQuantity: Number(row.canonical_quantity || 0),
+    canonicalUnit: row.canonical_unit || "",
+    unitConversionRatio: Number(row.unit_conversion_ratio || 0),
+    unitConversionNeedsReview: sqlBooleanValue(row.unit_conversion_needs_review),
+    unitConversionReviewReason: row.unit_conversion_review_reason || "",
+    category: row.category || "Other",
+    location: row.location || "Fridge",
+    enteredDate: row.entered_date || "",
+    expireDate: row.expire_date || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || ""
+  };
+}
+
+function safeNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function sqlUuid(value) {
+  const clean = String(value || "").trim();
+  if (!isUUID(clean)) {
+    throw new Error("Invalid UUID value.");
+  }
+  return `${sqlString(clean)}::uuid`;
+}
+
+function sqlNullableUuid(value) {
+  const clean = String(value || "").trim();
+  return isUUID(clean) ? sqlUuid(clean) : "null";
+}
+
+function sqlNullableString(value) {
+  const clean = String(value || "").trim();
+  return clean ? sqlString(clean) : "null";
+}
+
+function sqlDate(value) {
+  return `${sqlString(dateOnly(value))}::date`;
+}
+
+function sqlBooleanValue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "true" || normalized === "t" || normalized === "1";
+}
+
+function dateOnly(value) {
+  if (!value) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+  return parsed.toISOString().slice(0, 10);
 }
 
 export async function fetchCloudRecipes() {

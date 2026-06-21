@@ -26,6 +26,8 @@ enum StorageLocation: String, CaseIterable, Codable, Identifiable {
 
 @Model
 final class StoredIngredient {
+    var cloudClientId: String = UUID().uuidString
+    var cloudUpdatedAt: Date?
     var name: String
     var normalizedName: String
     var descriptionText: String = ""
@@ -44,6 +46,7 @@ final class StoredIngredient {
     var createdAt: Date
 
     init(
+        cloudClientId: String = UUID().uuidString,
         name: String,
         descriptionText: String = "",
         canonicalIngredientId: String = "",
@@ -59,6 +62,7 @@ final class StoredIngredient {
         enteredDate: Date = .now,
         expireDate: Date? = nil
     ) {
+        self.cloudClientId = cloudClientId
         self.name = name
         self.normalizedName = IngredientNormalizer.normalizeName(name)
         self.descriptionText = descriptionText

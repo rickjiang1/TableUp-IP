@@ -3,36 +3,75 @@ import SwiftUI
 struct RootTabView: View {
     @State private var selectedTab: TableUpRootTab = .pantry
     @State private var pantryFloatingPanelOpen = false
+    @State private var isCheckingSession = true
+    @State private var isSignedIn = HouseholdSessionStore.hasSession
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch selectedTab {
-                case .pantry:
-                    YouliaoView(isFloatingPanelOpen: $pantryFloatingPanelOpen)
-                case .meal:
-                    KaifanView()
-                case .settings:
-                    SettingsView()
+        ZStack {
+            if isCheckingSession {
+                TableUpTheme.background
+                    .ignoresSafeArea()
+                    .overlay {
+                        ProgressView()
+                            .tint(TableUpTheme.softOrange)
+                    }
+            } else if isSignedIn {
+                ZStack(alignment: .bottom) {
+                    Group {
+                        switch selectedTab {
+                        case .pantry:
+                            YouliaoView(isFloatingPanelOpen: $pantryFloatingPanelOpen)
+                        case .meal:
+                            KaifanView()
+                        case .settings:
+                            SettingsView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 44)
+                            .onEnded { value in
+                                handleTabSwipe(value)
+                            }
+                    )
+
+                    TableUpBottomNavigation(selectedTab: $selectedTab)
+                        .padding(.horizontal, 26)
+                        .padding(.bottom, 12)
+                }
+                .background(TableUpTheme.background.ignoresSafeArea())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .ignoresSafeArea(edges: .bottom)
+                .statusBarHidden(selectedTab == .pantry)
+            } else {
+                TableUpLoginView {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isSignedIn = true
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 44)
-                    .onEnded { value in
-                        handleTabSwipe(value)
-                    }
-            )
-            
-            TableUpBottomNavigation(selectedTab: $selectedTab)
-                .padding(.horizontal, 26)
-                .padding(.bottom, 12)
         }
-        .background(TableUpTheme.background.ignoresSafeArea())
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .ignoresSafeArea(edges: .bottom)
-        .statusBarHidden(selectedTab == .pantry)
+        .task {
+            await refreshSession()
+        }
+    }
+
+    private func refreshSession() async {
+        guard HouseholdSessionStore.hasSession else {
+            isCheckingSession = false
+            isSignedIn = false
+            return
+        }
+
+        do {
+            _ = try await HouseholdSyncService().refreshSession()
+            isSignedIn = true
+        } catch {
+            HouseholdSessionStore.clear()
+            isSignedIn = false
+        }
+        isCheckingSession = false
     }
 
     private func handleTabSwipe(_ value: DragGesture.Value) {

@@ -26,9 +26,12 @@ struct YouliaoView: View {
     @Query(sort: \StoredIngredient.categoryRaw) private var ingredients: [StoredIngredient]
     @Binding private var isFloatingPanelOpen: Bool
     @State private var activeFoodEntryMode: FoodEntryMode?
+    @State private var showingManualEntry = false
     @State private var showingBasketMenu = false
     @State private var showingIngredientMatcher = false
+    @State private var showingFamilyInventory = false
     @State private var showingClearConfirmation = false
+    @State private var storageAlert: StorageAlertMessage?
     @State private var cabinetOpen = false
     @State private var cabinetDragOffset: CGFloat = 0
     @State private var locationFilter: YouliaoLocationFilter = .all
@@ -196,17 +199,23 @@ struct YouliaoView: View {
                     case .photoLibrary:
                         PhotoIngredientCaptureSheet(launchMode: .photoLibrary)
                     case .manual:
-                        ManualIngredientEntrySheet()
-                            .presentationDetents([.large])
-                            .presentationDragIndicator(.visible)
+                        EmptyView()
                     case .voice:
                         VoiceIngredientEntrySheet()
-                            .presentationDetents([.medium, .large])
+                            .presentationDetents([.fraction(0.90), .large])
                             .presentationDragIndicator(.visible)
                     }
                 }
+                .sheet(isPresented: $showingManualEntry) {
+                    ManualIngredientEntrySheet()
+                        .presentationDetents([.fraction(0.90), .large])
+                        .presentationDragIndicator(.visible)
+                }
                 .sheet(isPresented: $showingIngredientMatcher) {
                     StorageView(initialTab: .unmatched, showsTabPicker: false)
+                }
+                .sheet(isPresented: $showingFamilyInventory) {
+                    FamilyInventoryView()
                 }
                 .confirmationDialog(
                     L.text("Clear all storage?", language: appLanguage),
@@ -219,6 +228,13 @@ struct YouliaoView: View {
                     Button(L.text("Cancel", language: appLanguage), role: .cancel) {}
                 } message: {
                     Text(L.text("This will remove every saved ingredient.", language: appLanguage))
+                }
+                .alert(item: $storageAlert) { alert in
+                    Alert(
+                        title: Text(L.text(alert.title, language: appLanguage)),
+                        message: Text(alert.message),
+                        dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+                    )
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
@@ -371,7 +387,11 @@ struct YouliaoView: View {
             withAnimation(.easeInOut(duration: 0.18)) {
                 showingBasketMenu = false
             }
-            activeFoodEntryMode = mode
+            if mode == .manual {
+                showingManualEntry = true
+            } else {
+                activeFoodEntryMode = mode
+            }
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
@@ -498,6 +518,20 @@ struct YouliaoView: View {
             .disabled(ingredients.isEmpty)
             .accessibilityLabel(L.text("Clear All", language: appLanguage))
 
+            Button {
+                showingFamilyInventory = true
+            } label: {
+                Label("家庭库存", systemImage: "person.2.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TableUpTheme.softOrange)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(TableUpTheme.softOrange.opacity(0.14))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("家庭库存")
+
             Text("\(filteredIngredients.count) 种")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(TableUpTheme.softOrange)
@@ -557,6 +591,13 @@ struct YouliaoView: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button {
+                            Task { await addToFamilyInventory(ingredient) }
+                        } label: {
+                            Label("加入家庭", systemImage: "person.2.badge.plus")
+                        }
+                        .tint(TableUpTheme.orange)
+
                         Button(role: .destructive) {
                             deleteIngredient(ingredient)
                         } label: {
@@ -597,6 +638,19 @@ struct YouliaoView: View {
         withAnimation(.easeInOut(duration: 0.18)) {
             ingredients.forEach(modelContext.delete)
             try? modelContext.save()
+        }
+    }
+
+    @MainActor
+    private func addToFamilyInventory(_ ingredient: StoredIngredient) async {
+        do {
+            _ = try await HouseholdSyncService().addToFamilyInventory(ingredient)
+            storageAlert = StorageAlertMessage(
+                title: "Saved",
+                message: "\(ingredient.name) 已加入家庭库存。"
+            )
+        } catch {
+            storageAlert = StorageAlertMessage(title: "Save failed", message: error.localizedDescription)
         }
     }
 
@@ -800,49 +854,16 @@ private struct ManualIngredientEntrySheet: View {
     @State private var alert: ScanAlertMessage?
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { proxy in
-                ZStack {
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.043, green: 0.035, blue: 0.024),
-                            Color(red: 0.067, green: 0.063, blue: 0.051)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-
-                    ScrollView {
-                        ManualIngredientForm { input in
-                            await save(input)
-                        }
-                        .padding(.top, 4)
-                        .padding(.bottom, 30)
-                        .frame(minHeight: proxy.size.height, alignment: .top)
-                    }
-                    .scrollIndicators(.hidden)
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .dismissKeyboardOnTap()
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L.text("Cancel", language: appLanguage)) {
-                        dismiss()
-                    }
-                }
-            }
-            .alert(item: $alert) { alert in
-                Alert(
-                    title: Text(L.text(alert.title, language: appLanguage)),
-                    message: Text(alert.message),
-                    dismissButton: .default(Text(L.text("OK", language: appLanguage)))
-                )
-            }
+        ManualIngredientForm(onCancel: { dismiss() }) { input in
+            await save(input)
+        }
+        .ignoresSafeArea()
+        .alert(item: $alert) { alert in
+            Alert(
+                title: Text(L.text(alert.title, language: appLanguage)),
+                message: Text(alert.message),
+                dismissButton: .default(Text(L.text("OK", language: appLanguage)))
+            )
         }
     }
 
@@ -881,85 +902,39 @@ private struct VoiceIngredientEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("说出食材")
-                        .font(.title3.weight(.semibold))
-                    Text("点击录音后说出食材，可以用逗号、顿号或停顿分开多个食材。")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+            GeometryReader { proxy in
+                ZStack(alignment: .top) {
+                    Color(red: 0.018, green: 0.016, blue: 0.012)
+                        .ignoresSafeArea()
 
-                Button {
-                    toggleRecording()
-                } label: {
-                    Label(
-                        speechRecognizer.isRecording ? "停止录音" : "开始录音",
-                        systemImage: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.circle.fill"
-                    )
-                    .font(.headline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(speechRecognizer.isRecording ? .red : .orange)
+                    Image("VoiceLedgerBackground")
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .scaleEffect(1.02)
+                        .offset(y: 0)
+                        .clipped()
+                        .ignoresSafeArea()
 
-                if !speechRecognizer.statusMessage.isEmpty {
-                    Text(speechRecognizer.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                    VStack(spacing: 0) {
+                        voiceTopBar
+                            .padding(.horizontal, 22)
+                            .padding(.top, 12)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("识别文字")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            clearTranscript()
-                        } label: {
-                            Label("清除", systemImage: "xmark.circle")
-                                .font(.caption.weight(.semibold))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color.secondary.opacity(0.5) : Color.orange)
-                        .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && currentSpeechSegment.isEmpty)
+                        Spacer(minLength: voicePanelTopSpacing(for: proxy.size.height))
+
+                        voiceInputPanel(width: proxy.size.width, height: proxy.size.height)
+
+                        Spacer(minLength: 22)
                     }
-
-                    TextEditor(text: transcriptBinding)
-                    .focused($isInputFocused)
-                    .frame(minHeight: 180)
-                    .padding(10)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
-                    )
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 }
-
-                Button {
-                    Task { await saveTranscript() }
-                } label: {
-                    Label(isSaving ? "正在提取..." : L.text("Save item", language: appLanguage), systemImage: "sparkles")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-                .disabled(isSaving || !hasTranscript)
-
-                Spacer()
             }
-            .padding()
-            .navigationTitle("语音输入")
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L.text("Cancel", language: appLanguage)) {
-                        dismiss()
-                    }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     isInputFocused = true
@@ -999,6 +974,157 @@ private struct VoiceIngredientEntrySheet: View {
         }
     }
 
+    private var voiceTopBar: some View {
+        HStack {
+            Button {
+                dismiss()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.left")
+                        .font(.title3.weight(.semibold))
+                    Text(L.text("Cancel", language: appLanguage))
+                        .font(.headline.weight(.medium))
+                }
+                .foregroundStyle(voiceGold)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+    }
+
+    private func voiceInputPanel(width: CGFloat, height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: height < 790 ? 12 : 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("语音录入")
+                    .font(.system(size: 26, weight: .semibold, design: .serif))
+                    .foregroundStyle(voiceGold)
+                Text("说出食材，系统会整理成可确认的信息")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(voiceGold.opacity(0.64))
+            }
+
+            Button {
+                toggleRecording()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: speechRecognizer.isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                        .font(.title3.weight(.semibold))
+                    Text(speechRecognizer.isRecording ? "停止录音" : "开始录音")
+                        .font(.headline.weight(.semibold))
+                    Spacer()
+                    if speechRecognizer.isRecording {
+                        Text("录音中")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color(red: 1.0, green: 0.40, blue: 0.32))
+                    }
+                }
+                .foregroundStyle(speechRecognizer.isRecording ? Color(red: 1.0, green: 0.52, blue: 0.42) : voiceGold)
+                .padding(.horizontal, 15)
+                .frame(height: 50)
+                .background(.ultraThinMaterial.opacity(0.16))
+                .background(Color.black.opacity(0.30))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke((speechRecognizer.isRecording ? Color(red: 1.0, green: 0.46, blue: 0.34) : voiceGold).opacity(0.58), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            if !speechRecognizer.statusMessage.isEmpty {
+                Text(speechRecognizer.statusMessage)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(voiceGold.opacity(0.58))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("识别文字")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(voiceGold.opacity(0.70))
+                    Spacer()
+                    Button {
+                        clearTranscript()
+                    } label: {
+                        Label("清除", systemImage: "xmark.circle")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? voiceGold.opacity(0.35) : voiceGold)
+                    .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && currentSpeechSegment.isEmpty)
+                }
+
+                TextEditor(text: transcriptBinding)
+                    .focused($isInputFocused)
+                    .scrollContentBackground(.hidden)
+                    .foregroundStyle(voicePaper)
+                    .font(.body.weight(.medium))
+                    .frame(minHeight: height < 790 ? 126 : 150)
+                    .padding(12)
+                    .background(.ultraThinMaterial.opacity(0.12))
+                    .background(Color.black.opacity(0.28))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(voiceGold.opacity(0.42), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            Button {
+                Task { await saveTranscript() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "sparkles")
+                        .font(.headline.weight(.semibold))
+                    Text(isSaving ? "正在提取..." : "提取食材")
+                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                }
+                .foregroundStyle(Color(red: 0.12, green: 0.075, blue: 0.03))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    LinearGradient(
+                        colors: [Color(red: 0.88, green: 0.70, blue: 0.43), Color(red: 0.68, green: 0.48, blue: 0.25)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: voiceGold.opacity(0.18), radius: 15, y: 6)
+            }
+            .buttonStyle(.plain)
+            .disabled(isSaving || !hasTranscript)
+            .opacity((isSaving || !hasTranscript) ? 0.58 : 1)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 18)
+        .frame(width: min(width - 32, 404))
+        .background(.ultraThinMaterial.opacity(0.40))
+        .background(Color(red: 0.018, green: 0.016, blue: 0.012).opacity(0.74))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [voiceGold.opacity(0.74), voiceGold.opacity(0.20), voiceGold.opacity(0.58)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.34), radius: 26, y: 14)
+    }
+
+    private func voicePanelTopSpacing(for height: CGFloat) -> CGFloat {
+        min(max(170, height * 0.23), 228)
+    }
+
     private func toggleRecording() {
         if speechRecognizer.isRecording {
             commitCurrentSpeechSegment()
@@ -1028,6 +1154,9 @@ private struct VoiceIngredientEntrySheet: View {
     private var hasTranscript: Bool {
         !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    private var voiceGold: Color { Color(red: 0.73, green: 0.55, blue: 0.32) }
+    private var voicePaper: Color { Color(red: 0.86, green: 0.70, blue: 0.46) }
 
     private func updateTranscript(with rawSegment: String) {
         let segment = rawSegment.trimmingCharacters(in: .whitespacesAndNewlines)

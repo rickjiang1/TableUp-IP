@@ -29,6 +29,9 @@
 		100000000000000000000014 /* FridgeRescueScorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* FridgeRescueScorer.swift */; };
 		100000000000000000000016 /* InventoryQuantityFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* InventoryQuantityFormatter.swift */; };
 		100000000000000000000017 /* TableUpHomeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* TableUpHomeViews.swift */; };
+		100000000000000000000018 /* HouseholdSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* HouseholdSyncService.swift */; };
+		100000000000000000000019 /* TableUpLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* TableUpLoginView.swift */; };
+		10000000000000000000001A /* FamilyInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000001A /* FamilyInventoryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +59,9 @@
 		200000000000000000000015 /* FridgeRescueScorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FridgeRescueScorer.swift; sourceTree = "<group>"; };
 		200000000000000000000016 /* InventoryQuantityFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InventoryQuantityFormatter.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* TableUpHomeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableUpHomeViews.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* HouseholdSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HouseholdSyncService.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* TableUpLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableUpLoginView.swift; sourceTree = "<group>"; };
+		20000000000000000000001A /* FamilyInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyInventoryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +111,7 @@
 			children = (
 				200000000000000000000012 /* GroceryPhotoExtractor.swift */,
 				200000000000000000000015 /* FridgeRescueScorer.swift */,
+				200000000000000000000018 /* HouseholdSyncService.swift */,
 				20000000000000000000000F /* IngredientNormalizer.swift */,
 				200000000000000000000016 /* InventoryQuantityFormatter.swift */,
 				200000000000000000000010 /* RecipeMatcher.swift */,
@@ -118,6 +125,7 @@
 			children = (
 				20000000000000000000000E /* CanCookView.swift */,
 				20000000000000000000000D /* CookingModeView.swift */,
+				20000000000000000000001A /* FamilyInventoryView.swift */,
 				200000000000000000000007 /* IngredientDetailView.swift */,
 				200000000000000000000008 /* ImagePicker.swift */,
 				20000000000000000000000A /* ManualIngredientForm.swift */,
@@ -125,6 +133,7 @@
 				20000000000000000000000C /* RootTabView.swift */,
 				200000000000000000000005 /* ScanView.swift */,
 				200000000000000000000006 /* SettingsView.swift */,
+				200000000000000000000019 /* TableUpLoginView.swift */,
 				20000000000000000000000B /* StorageView.swift */,
 				200000000000000000000017 /* TableUpHomeViews.swift */,
 			);
@@ -229,6 +238,9 @@
 				100000000000000000000014 /* FridgeRescueScorer.swift in Sources */,
 				100000000000000000000016 /* InventoryQuantityFormatter.swift in Sources */,
 				100000000000000000000017 /* TableUpHomeViews.swift in Sources */,
+				100000000000000000000018 /* HouseholdSyncService.swift in Sources */,
+				100000000000000000000019 /* TableUpLoginView.swift in Sources */,
+				10000000000000000000001A /* FamilyInventoryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

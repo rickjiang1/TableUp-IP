@@ -1,19 +1,27 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import {
+  authenticateHouseholdToken,
+  bootstrapHouseholdSession,
+  createHouseholdInvite,
+  deleteHouseholdInventoryItem,
   deleteCloudRecipe,
   fetchCloudRecipes,
+  fetchHouseholdInventory,
+  fetchHouseholdMembers,
   fetchIngredientUnitConversions,
   fetchIngredientStorageLifeRules,
   fetchUnitAliases,
   fetchIngredientDictionary,
   fetchMatchingRules,
   fetchPendingUnknownIngredients,
+  joinHouseholdWithInvite,
   markUnknownIngredientResolved,
   readVolumeFile,
   uploadVolumeFile,
   upsertCloudRecipe,
   upsertIngredientAliasSuggestion,
+  upsertHouseholdInventory,
   upsertUnknownIngredients
 } from "./supabase.js";
 import { normalizeIngredientQuantity } from "./ingredientUnitConversion.js";
@@ -52,6 +60,76 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/health") {
       sendJson(response, 200, { ok: true, env: appEnv });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/session/bootstrap") {
+      const body = await readJsonRequest(request, 128 * 1024);
+      const session = await bootstrapHouseholdSession({
+        installId: body.installId,
+        displayName: body.displayName,
+        existingToken: bearerToken(request)
+      });
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/session/me") {
+      const auth = await requireHouseholdAuth(request);
+      sendJson(response, 200, {
+        user: auth.user,
+        household: auth.household,
+        role: auth.role
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/household/invites") {
+      const auth = await requireHouseholdAuth(request);
+      const invite = await createHouseholdInvite(auth);
+      sendJson(response, 201, { invite });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/household/members") {
+      const auth = await requireHouseholdAuth(request);
+      const members = await fetchHouseholdMembers(auth);
+      sendJson(response, 200, { members });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/household/join") {
+      const auth = await requireHouseholdAuth(request);
+      const body = await readJsonRequest(request, 128 * 1024);
+      const joined = await joinHouseholdWithInvite({ auth, code: body.code });
+      const session = {
+        token: bearerToken(request),
+        ...joined
+      };
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/inventory") {
+      const auth = await requireHouseholdAuth(request);
+      const items = await fetchHouseholdInventory(auth);
+      sendJson(response, 200, { items });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/inventory/sync") {
+      const auth = await requireHouseholdAuth(request);
+      const body = await readJsonRequest(request, 1024 * 1024);
+      const items = await upsertHouseholdInventory(auth, body.items);
+      sendJson(response, 200, { items });
+      return;
+    }
+
+    const inventoryMatch = url.pathname.match(/^\/api\/inventory\/([^/]+)$/);
+    if (inventoryMatch && request.method === "DELETE") {
+      const auth = await requireHouseholdAuth(request);
+      await deleteHouseholdInventoryItem(auth, decodeURIComponent(inventoryMatch[1]));
+      sendJson(response, 200, { ok: true });
       return;
     }
 
@@ -354,6 +432,10 @@ const server = createServer(async (request, response) => {
     sendJson(response, 404, { error: "not_found" });
   } catch (error) {
     console.error(error);
+    if (error.statusCode === 401) {
+      sendJson(response, 401, { error: "unauthorized", message: error.message });
+      return;
+    }
     sendJson(response, 500, { error: "internal_error", message: error.message });
   }
 });
@@ -389,7 +471,7 @@ function loadEnv() {
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", allowedOrigin);
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 function sendJson(response, status, body) {
@@ -456,6 +538,31 @@ function invalidateMatchingCaches() {
 
 function invalidateRecipeCaches() {
   cloudRecipesCache = { expiresAt: 0, value: null, promise: null };
+}
+
+async function requireHouseholdAuth(request) {
+  const token = bearerToken(request);
+  if (!token) {
+    throw new AuthError("Authentication token is required.");
+  }
+  try {
+    return await authenticateHouseholdToken(token);
+  } catch (error) {
+    throw new AuthError(error.message || "Invalid authentication token.");
+  }
+}
+
+function bearerToken(request) {
+  const header = request.headers.authorization || request.headers.Authorization || "";
+  const match = String(header).match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+class AuthError extends Error {
+  constructor(message) {
+    super(message);
+    this.statusCode = 401;
+  }
 }
 
 async function getCachedIngredientDictionary(language = "en") {

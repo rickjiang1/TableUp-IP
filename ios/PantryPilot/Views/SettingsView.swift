@@ -35,6 +35,17 @@ enum L {
         "days": "天",
         "Cloud storage": "云存储",
         "Local only is the default. Cloud sync can be added after the local app is stable.": "默认只保存在本地。等本地版本稳定后，可以再加入云同步。",
+        "Family kitchen": "家庭厨房",
+        "Current household": "当前家庭",
+        "Sync family inventory": "刷新家庭库存",
+        "Create invite code": "生成邀请码",
+        "Invite code": "邀请码",
+        "Enter invite code": "输入邀请码",
+        "Join": "加入",
+        "Family inventory is ready.": "家庭库存已就绪。",
+        "Family inventory synced.": "家庭库存已刷新。",
+        "Share this code with a family member.": "把这个邀请码发给家人即可加入。",
+        "Joined family kitchen.": "已加入家庭厨房。",
         "AI extraction": "AI 提取",
         "AI extraction will call your backend, not OpenAI directly from the app.": "AI 提取会调用你的 backend，不会在 app 里直接调用 OpenAI。",
         "Storage view": "库存视图",
@@ -360,10 +371,17 @@ extension View {
 }
 
 struct SettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @AppStorage("almostCookThreshold") private var threshold = 0.7
     @AppStorage("cloudStorageProvider") private var cloudStorageProvider = "Local only"
     @AppStorage("expirationReminderDays") private var expirationReminderDays = 3
+    @State private var householdName = HouseholdSessionStore.householdName
+    @State private var householdRole = HouseholdSessionStore.householdRole
+    @State private var inviteCode = ""
+    @State private var joinCode = ""
+    @State private var householdStatus = ""
+    @State private var isHouseholdBusy = false
 
     private let cloudOptions = [
         "Local only",
@@ -408,6 +426,55 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section(L.text("Family kitchen", language: appLanguage)) {
+                    LabeledContent(L.text("Current household", language: appLanguage)) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(householdName)
+                            Text(householdRole)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button {
+                        Task { await syncHouseholdInventory() }
+                    } label: {
+                        Label(L.text("Sync family inventory", language: appLanguage), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(isHouseholdBusy)
+
+                    Button {
+                        Task { await createHouseholdInvite() }
+                    } label: {
+                        Label(L.text("Create invite code", language: appLanguage), systemImage: "person.badge.plus")
+                    }
+                    .disabled(isHouseholdBusy)
+
+                    if !inviteCode.isEmpty {
+                        LabeledContent(L.text("Invite code", language: appLanguage)) {
+                            Text(inviteCode)
+                                .font(.headline.monospaced())
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    HStack {
+                        TextField(L.text("Enter invite code", language: appLanguage), text: $joinCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        Button(L.text("Join", language: appLanguage)) {
+                            Task { await joinHousehold() }
+                        }
+                        .disabled(joinCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isHouseholdBusy)
+                    }
+
+                    if !householdStatus.isEmpty {
+                        Text(householdStatus)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section(L.text("AI extraction", language: appLanguage)) {
                     Text(L.text("AI extraction will call your backend, not OpenAI directly from the app.", language: appLanguage))
                         .font(.footnote)
@@ -415,6 +482,60 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle(L.text("Settings", language: appLanguage))
+            .task {
+                await refreshHouseholdSession()
+            }
+        }
+    }
+
+    private func refreshHouseholdSession() async {
+        do {
+            let session = try await HouseholdSyncService().bootstrapIfNeeded()
+            householdName = session.household.name
+            householdRole = session.role
+            householdStatus = L.text("Family inventory is ready.", language: appLanguage)
+        } catch {
+            householdStatus = error.localizedDescription
+        }
+    }
+
+    private func syncHouseholdInventory() async {
+        isHouseholdBusy = true
+        defer { isHouseholdBusy = false }
+        do {
+            let items = try await HouseholdSyncService().syncInventory(modelContext: modelContext)
+            householdName = HouseholdSessionStore.householdName
+            householdRole = HouseholdSessionStore.householdRole
+            householdStatus = "\(L.text("Family inventory synced.", language: appLanguage)) \(items.count) \(appLanguage == AppLanguage.chinese.rawValue ? "种食材" : "item(s)")"
+        } catch {
+            householdStatus = error.localizedDescription
+        }
+    }
+
+    private func createHouseholdInvite() async {
+        isHouseholdBusy = true
+        defer { isHouseholdBusy = false }
+        do {
+            let invite = try await HouseholdSyncService().createInvite()
+            inviteCode = invite.code
+            householdStatus = L.text("Share this code with a family member.", language: appLanguage)
+        } catch {
+            householdStatus = error.localizedDescription
+        }
+    }
+
+    private func joinHousehold() async {
+        isHouseholdBusy = true
+        defer { isHouseholdBusy = false }
+        do {
+            let session = try await HouseholdSyncService().joinHousehold(code: joinCode)
+            householdName = session.household.name
+            householdRole = session.role
+            joinCode = ""
+            _ = try? await HouseholdSyncService().syncInventory(modelContext: modelContext)
+            householdStatus = L.text("Joined family kitchen.", language: appLanguage)
+        } catch {
+            householdStatus = error.localizedDescription
         }
     }
 }
