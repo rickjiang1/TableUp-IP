@@ -14,11 +14,11 @@ struct ManualIngredientForm: View {
     let onSave: (IngredientInput) async -> Bool
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 9) {
             Text(text("点击输入食材名称、数量等信息", "Enter ingredient name, quantity, and details"))
-                .font(.headline.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(manualInk)
-                .padding(.top, 2)
+                .padding(.top, 1)
 
             manualField(icon: "ManualIconName", title: L.text("Ingredient name", language: appLanguage)) {
                 TextField(L.text("Ingredient name", language: appLanguage), text: $name)
@@ -117,23 +117,23 @@ struct ManualIngredientForm: View {
                             .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
                     }
                 }
-                .frame(height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(isSaving)
             .opacity(isSaving ? 0.72 : 1)
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
-        .padding(16)
+        .padding(12)
         .background(manualParchment)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color(red: 0.48, green: 0.32, blue: 0.16).opacity(0.36), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.34), radius: 18, y: 10)
+        .shadow(color: .black.opacity(0.34), radius: 14, y: 8)
         .onAppear {
             refreshExpireDate()
         }
@@ -196,23 +196,23 @@ struct ManualIngredientForm: View {
             Image(icon)
                 .resizable()
                 .scaledToFit()
-                .frame(width: 42, height: 42)
+                .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.footnote.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(manualInk.opacity(0.78))
                 content()
-                    .font(.body.weight(.medium))
+                    .font(.callout.weight(.medium))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(Color(red: 0.97, green: 0.86, blue: 0.62).opacity(0.48))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .stroke(Color(red: 0.34, green: 0.22, blue: 0.12).opacity(0.16), lineWidth: 1)
         )
     }

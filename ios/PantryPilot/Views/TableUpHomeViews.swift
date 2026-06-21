@@ -136,10 +136,14 @@ struct YouliaoView: View {
 
                     if cabinetOpen {
                         VStack(alignment: .leading, spacing: 14) {
-                            cabinetDragHandle
-                            overview
-                            inventorySectionHeader
-                            locationPicker
+                            VStack(alignment: .leading, spacing: 14) {
+                                cabinetDragHandle
+                                overview
+                                inventorySectionHeader
+                                locationPicker
+                            }
+                            .contentShape(Rectangle())
+                            .gesture(cabinetCloseGesture)
                             
                             inventoryList
                         }
@@ -272,7 +276,6 @@ struct YouliaoView: View {
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .gesture(cabinetCloseGesture)
         .padding(.bottom, -10)
     }
 
@@ -798,10 +801,13 @@ private struct ManualIngredientEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            GeometryReader { proxy in
+                ZStack(alignment: .topLeading) {
                 Image("ManualEntryBackground")
                     .resizable()
                     .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
                     .ignoresSafeArea()
 
                 LinearGradient(
@@ -818,9 +824,13 @@ private struct ManualIngredientEntrySheet: View {
                     ManualIngredientForm { input in
                         await save(input)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 64)
-                    .padding(.bottom, 28)
+                    .frame(width: min(proxy.size.width * 0.72, 320), alignment: .leading)
+                    .padding(.leading, 18)
+                    .padding(.top, max(88, proxy.size.height * 0.36))
+                    .padding(.bottom, 24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollIndicators(.hidden)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
