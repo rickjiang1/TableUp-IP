@@ -22,6 +22,8 @@ services:
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
         sync: false
+      - key: SUPABASE_DATABASE_URL
+        sync: false
       - key: ALLOWED_ORIGIN
         value: "*"
 
@@ -47,6 +49,8 @@ services:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_DATABASE_URL
         sync: false
       - key: ALLOWED_ORIGIN
         value: "*"
