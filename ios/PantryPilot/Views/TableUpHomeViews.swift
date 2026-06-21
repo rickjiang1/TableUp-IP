@@ -798,16 +798,36 @@ private struct ManualIngredientEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                ManualIngredientForm { input in
-                    await save(input)
+            ZStack {
+                Image("ManualEntryBackground")
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.1),
+                        Color.black.opacity(0.58)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    ManualIngredientForm { input in
+                        await save(input)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 64)
+                    .padding(.bottom, 28)
                 }
-                .padding()
             }
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
             .navigationTitle("手动录入")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L.text("Cancel", language: appLanguage)) {

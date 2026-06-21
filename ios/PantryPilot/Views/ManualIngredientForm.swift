@@ -14,46 +14,77 @@ struct ManualIngredientForm: View {
     let onSave: (IngredientInput) async -> Bool
 
     var body: some View {
-        VStack(spacing: 12) {
-            TextField(L.text("Ingredient name", language: appLanguage), text: $name)
-                .textFieldStyle(.roundedBorder)
+        VStack(spacing: 14) {
+            Text(text("点击输入食材名称、数量等信息", "Enter ingredient name, quantity, and details"))
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(manualInk)
+                .padding(.top, 2)
 
-            HStack {
-                TextField(L.text("Quantity", language: appLanguage), value: $quantity, format: .number)
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.decimalPad)
-                Picker(L.text("Unit", language: appLanguage), selection: $unit) {
-                    ForEach(IngredientUnit.allCases) { unit in
-                        Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+            manualField(icon: "ManualIconName", title: L.text("Ingredient name", language: appLanguage)) {
+                TextField(L.text("Ingredient name", language: appLanguage), text: $name)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(manualInk)
+                    .submitLabel(.done)
+            }
+
+            manualField(icon: "ManualIconQuantity", title: L.text("Quantity", language: appLanguage)) {
+                HStack(spacing: 10) {
+                    TextField(L.text("Quantity", language: appLanguage), value: $quantity, format: .number)
+                        .textFieldStyle(.plain)
+                        .keyboardType(.decimalPad)
+                        .foregroundStyle(manualInk)
+
+                    Picker(L.text("Unit", language: appLanguage), selection: $unit) {
+                        ForEach(IngredientUnit.allCases) { unit in
+                            Text(unit.displayName(language: appLanguage)).tag(unit.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .id(appLanguage)
+                    .tint(manualInk)
+                    .fixedSize()
+                }
+            }
+
+            manualField(icon: "ManualIconCategory", title: L.text("Category", language: appLanguage)) {
+                Picker(L.text("Category", language: appLanguage), selection: $category) {
+                    ForEach(IngredientCategory.allCases) { category in
+                        Text(category.displayName(language: appLanguage)).tag(category)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .id(appLanguage)
+                .tint(manualInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Picker(L.text("Category", language: appLanguage), selection: $category) {
-                ForEach(IngredientCategory.allCases) { category in
-                    Text(category.displayName(language: appLanguage)).tag(category)
+            manualField(icon: "ManualIconStorage", title: text("储存方式", "Storage method")) {
+                Picker(L.text("Location", language: appLanguage), selection: $location) {
+                    ForEach(StorageLocation.selectableCases) { location in
+                        Text(location.displayName(language: appLanguage)).tag(location)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(manualInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            manualField(icon: "ManualIconDate", title: L.text("Date", language: appLanguage)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    DatePicker(L.text("Enter date", language: appLanguage), selection: $enteredDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .environment(\.locale, datePickerLocale)
+                        .tint(manualInk)
+                    DatePicker(L.text("Expire date", language: appLanguage), selection: $expireDate, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .environment(\.locale, datePickerLocale)
+                        .tint(manualInk)
                 }
             }
-            .pickerStyle(.menu)
 
-            Picker(L.text("Location", language: appLanguage), selection: $location) {
-                ForEach(StorageLocation.selectableCases) { location in
-                    Text(location.displayName(language: appLanguage)).tag(location)
-                }
-            }
-            .pickerStyle(.menu)
-
-            DatePicker(L.text("Enter date", language: appLanguage), selection: $enteredDate, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .environment(\.locale, datePickerLocale)
-            DatePicker(L.text("Expire date", language: appLanguage), selection: $expireDate, displayedComponents: .date)
-                .datePickerStyle(.compact)
-                .environment(\.locale, datePickerLocale)
-
-            Button(isSaving ? L.text("Saving...", language: appLanguage) : L.text("Save item", language: appLanguage)) {
+            Button {
                 guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 isSaving = true
                 Task {
@@ -74,11 +105,35 @@ struct ManualIngredientForm: View {
                     quantity = 1
                     unit = "piece"
                 }
+            } label: {
+                ZStack {
+                    Image("ManualSaveButtonBackground")
+                        .resizable()
+                        .scaledToFill()
+                    if isSaving {
+                        Text(L.text("Saving...", language: appLanguage))
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                    }
+                }
+                .frame(height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .buttonStyle(.plain)
             .disabled(isSaving)
+            .opacity(isSaving ? 0.72 : 1)
+            .padding(.top, 4)
         }
+        .padding(16)
+        .background(manualParchment)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color(red: 0.48, green: 0.32, blue: 0.16).opacity(0.36), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.34), radius: 18, y: 10)
         .onAppear {
             refreshExpireDate()
         }
@@ -111,5 +166,54 @@ struct ManualIngredientForm: View {
 
     private var datePickerLocale: Locale {
         Locale(identifier: appLanguage == AppLanguage.chinese.rawValue ? "zh_Hans_US" : "en_US")
+    }
+
+    private var manualInk: Color {
+        Color(red: 0.18, green: 0.13, blue: 0.08)
+    }
+
+    private var manualParchment: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                Color(red: 0.91, green: 0.77, blue: 0.52).opacity(0.9),
+                Color(red: 0.73, green: 0.52, blue: 0.27).opacity(0.82)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func text(_ zh: String, _ en: String) -> String {
+        appLanguage == AppLanguage.chinese.rawValue ? zh : en
+    }
+
+    private func manualField<Content: View>(
+        icon: String,
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .center, spacing: 13) {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 42, height: 42)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(manualInk.opacity(0.78))
+                content()
+                    .font(.body.weight(.medium))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(red: 0.97, green: 0.86, blue: 0.62).opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(red: 0.34, green: 0.22, blue: 0.12).opacity(0.16), lineWidth: 1)
+        )
     }
 }
