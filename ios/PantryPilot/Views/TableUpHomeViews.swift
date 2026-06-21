@@ -197,7 +197,7 @@ struct YouliaoView: View {
                         PhotoIngredientCaptureSheet(launchMode: .photoLibrary)
                     case .manual:
                         ManualIngredientEntrySheet()
-                            .presentationDetents([.medium, .large])
+                            .presentationDetents([.large])
                             .presentationDragIndicator(.visible)
                     case .voice:
                         VoiceIngredientEntrySheet()
@@ -802,40 +802,31 @@ private struct ManualIngredientEntrySheet: View {
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
-                ZStack(alignment: .topLeading) {
-                Image("ManualEntryBackground")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
+                ZStack {
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.043, green: 0.035, blue: 0.024),
+                            Color(red: 0.067, green: 0.063, blue: 0.051)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                     .ignoresSafeArea()
 
-                LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.1),
-                        Color.black.opacity(0.58)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-
-                ScrollView {
-                    ManualIngredientForm { input in
-                        await save(input)
+                    ScrollView {
+                        ManualIngredientForm { input in
+                            await save(input)
+                        }
+                        .padding(.top, 4)
+                        .padding(.bottom, 30)
+                        .frame(minHeight: proxy.size.height, alignment: .top)
                     }
-                    .frame(width: min(proxy.size.width * 0.72, 320), alignment: .leading)
-                    .padding(.leading, 18)
-                    .padding(.top, max(88, proxy.size.height * 0.36))
-                    .padding(.bottom, 24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .scrollIndicators(.hidden)
+                    .scrollIndicators(.hidden)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
             .dismissKeyboardOnTap()
-            .navigationTitle("手动录入")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
