@@ -99,8 +99,12 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/auth/magic-link") {
       const body = await readJsonRequest(request, 128 * 1024);
+      const email = String(body.email || "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new ClientError("A valid email address is required.");
+      }
       await sendSupabaseMagicLink({
-        email: body.email,
+        email,
         redirectTo: body.redirectTo
       });
       sendJson(response, 200, { ok: true });
@@ -481,6 +485,10 @@ const server = createServer(async (request, response) => {
       sendJson(response, 401, { error: "unauthorized", message: error.message });
       return;
     }
+    if (error.statusCode === 400) {
+      sendJson(response, 400, { error: "invalid_request", message: error.message });
+      return;
+    }
     sendJson(response, 500, { error: "internal_error", message: error.message });
   }
 });
@@ -607,6 +615,13 @@ class AuthError extends Error {
   constructor(message) {
     super(message);
     this.statusCode = 401;
+  }
+}
+
+class ClientError extends Error {
+  constructor(message) {
+    super(message);
+    this.statusCode = 400;
   }
 }
 
