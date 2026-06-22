@@ -21,7 +21,8 @@ export async function bootstrapHouseholdSession({ installId = "", displayName = 
   if (!user) {
     user = await createAppUser({
       displayName: displayName || "TableUp User",
-      installHash
+      installHash,
+      authProvider: "guest"
     });
   } else {
     const updatedDisplayName = displayName || user.displayName || "TableUp User";
@@ -29,7 +30,8 @@ export async function bootstrapHouseholdSession({ installId = "", displayName = 
       update app_users
       set display_name = ${sqlString(updatedDisplayName)},
           last_seen_at = now(),
-          updated_at = now()
+          updated_at = now(),
+          auth_provider = coalesce(nullif(auth_provider, ''), 'guest')
       where id = ${sqlUuid(user.id)}
     `);
     user = { ...user, displayName: updatedDisplayName };
@@ -42,6 +44,101 @@ export async function bootstrapHouseholdSession({ installId = "", displayName = 
       household,
       role: "owner"
     };
+  }
+
+  const token = await createSessionToken(user.id);
+  return {
+    token,
+    user,
+    household: membership.household,
+    role: membership.role
+  };
+}
+
+export function buildSupabaseOAuthUrl({ provider = "", redirectTo = "" }) {
+  const cleanProvider = normalizeAuthProvider(provider);
+  if (!["apple", "google"].includes(cleanProvider)) {
+    throw new Error("Unsupported OAuth provider.");
+  }
+  const config = supabaseRestConfig();
+  const url = new URL(`${config.url}/auth/v1/authorize`);
+  url.searchParams.set("provider", cleanProvider);
+  url.searchParams.set("redirect_to", normalizeRedirectUrl(redirectTo));
+  return url.toString();
+}
+
+export async function sendSupabaseMagicLink({ email = "", redirectTo = "" }) {
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) {
+    throw new Error("Email is required.");
+  }
+  const config = supabaseRestConfig();
+  const response = await fetch(`${config.url}/auth/v1/otp`, {
+    method: "POST",
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${config.key}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email: cleanEmail,
+      type: "magiclink",
+      options: {
+        email_redirect_to: normalizeRedirectUrl(redirectTo)
+      }
+    })
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `Supabase magic link failed with ${response.status}`);
+  }
+  return { ok: true };
+}
+
+export async function authenticateSupabaseAuthSession({
+  accessToken = "",
+  provider = "",
+  installId = "",
+  displayName = ""
+}) {
+  const cleanToken = String(accessToken || "").trim();
+  if (!cleanToken) {
+    throw new Error("Supabase access token is required.");
+  }
+
+  const supabaseUser = await fetchSupabaseAuthUser(cleanToken);
+  const authProvider = normalizeAuthProvider(provider || supabaseUser?.app_metadata?.provider || "email");
+  const installHash = installIdHash(installId);
+  let user = await fetchUserBySupabaseAuthId(supabaseUser.id);
+  if (!user && installHash) {
+    user = await fetchUserByInstallHash(installHash);
+  }
+  if (!user && supabaseUser.email) {
+    user = await fetchUserByEmail(supabaseUser.email);
+  }
+  if (!user) {
+    user = await createAppUser({
+      displayName: displayNameFromSupabaseUser(supabaseUser, displayName),
+      installHash,
+      email: supabaseUser.email,
+      avatarUrl: avatarUrlFromSupabaseUser(supabaseUser),
+      authProvider,
+      supabaseAuthUserId: supabaseUser.id
+    });
+  } else {
+    user = await linkAppUserToSupabaseAuth({
+      user,
+      supabaseUser,
+      installHash,
+      displayName,
+      authProvider
+    });
+  }
+
+  let membership = await fetchCurrentHouseholdMembership(user.id);
+  if (!membership) {
+    const household = await createHouseholdForUser(user);
+    membership = { household, role: "owner" };
   }
 
   const token = await createSessionToken(user.id);
@@ -77,6 +174,9 @@ export async function authenticateHouseholdToken(token) {
     query(`
       select id::text as id,
              display_name,
+             email,
+             avatar_url,
+             auth_provider,
              last_seen_at::text as last_seen_at
       from app_users
       where id = ${sqlUuid(session.user_id)}
@@ -252,6 +352,9 @@ async function fetchUserByInstallHash(installHash) {
   const rows = await query(`
     select id::text as id,
            display_name,
+           email,
+           avatar_url,
+           auth_provider,
            last_seen_at::text as last_seen_at
     from app_users
     where install_id_hash = ${sqlString(installHash)}
@@ -260,12 +363,95 @@ async function fetchUserByInstallHash(installHash) {
   return rows[0] ? normalizeUserRow(rows[0]) : null;
 }
 
-async function createAppUser({ displayName, installHash }) {
+async function fetchUserBySupabaseAuthId(authUserId) {
+  if (!isUUID(authUserId)) {
+    return null;
+  }
   const rows = await query(`
-    insert into app_users (display_name, install_id_hash)
-    values (${sqlString(String(displayName || "TableUp User").trim() || "TableUp User")}, ${sqlNullableString(installHash)})
+    select id::text as id,
+           display_name,
+           email,
+           avatar_url,
+           auth_provider,
+           last_seen_at::text as last_seen_at
+    from app_users
+    where supabase_auth_user_id = ${sqlUuid(authUserId)}
+    limit 1
+  `);
+  return rows[0] ? normalizeUserRow(rows[0]) : null;
+}
+
+async function fetchUserByEmail(email) {
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanEmail) {
+    return null;
+  }
+  const rows = await query(`
+    select id::text as id,
+           display_name,
+           email,
+           avatar_url,
+           auth_provider,
+           last_seen_at::text as last_seen_at
+    from app_users
+    where lower(email) = ${sqlString(cleanEmail)}
+    limit 1
+  `);
+  return rows[0] ? normalizeUserRow(rows[0]) : null;
+}
+
+async function createAppUser({
+  displayName,
+  installHash,
+  email = "",
+  avatarUrl = "",
+  authProvider = "guest",
+  supabaseAuthUserId = ""
+}) {
+  const rows = await query(`
+    insert into app_users (
+      display_name,
+      install_id_hash,
+      email,
+      avatar_url,
+      auth_provider,
+      supabase_auth_user_id
+    )
+    values (
+      ${sqlString(String(displayName || "TableUp User").trim() || "TableUp User")},
+      ${sqlNullableString(installHash)},
+      ${sqlNullableString(normalizeEmail(email))},
+      ${sqlNullableString(avatarUrl)},
+      ${sqlString(normalizeAuthProvider(authProvider))},
+      ${sqlNullableUuid(supabaseAuthUserId)}
+    )
     returning id::text as id,
               display_name,
+              email,
+              avatar_url,
+              auth_provider,
+              last_seen_at::text as last_seen_at
+  `);
+  return normalizeUserRow(rows[0]);
+}
+
+async function linkAppUserToSupabaseAuth({ user, supabaseUser, installHash, displayName, authProvider }) {
+  const rows = await query(`
+    update app_users
+    set email = ${sqlNullableString(normalizeEmail(supabaseUser.email))},
+        avatar_url = ${sqlNullableString(avatarUrlFromSupabaseUser(supabaseUser))},
+        display_name = ${sqlString(displayNameFromSupabaseUser(supabaseUser, displayName || user.displayName))},
+        auth_provider = ${sqlString(normalizeAuthProvider(authProvider))},
+        supabase_auth_user_id = ${sqlUuid(supabaseUser.id)},
+        install_id_hash = coalesce(install_id_hash, ${sqlNullableString(installHash)}),
+        last_seen_at = now(),
+        updated_at = now()
+    where id = ${sqlUuid(user.id)}
+    returning id::text as id,
+              display_name,
+              email,
+              avatar_url,
+              auth_provider,
               last_seen_at::text as last_seen_at
   `);
   return normalizeUserRow(rows[0]);
@@ -369,8 +555,66 @@ function normalizeUserRow(row) {
   return {
     id: row.id,
     displayName: row.display_name || "TableUp User",
+    email: row.email || "",
+    avatarUrl: row.avatar_url || "",
+    authProvider: row.auth_provider || "guest",
     lastSeenAt: row.last_seen_at || ""
   };
+}
+
+async function fetchSupabaseAuthUser(accessToken) {
+  const config = supabaseRestConfig();
+  const response = await fetch(`${config.url}/auth/v1/user`, {
+    method: "GET",
+    headers: {
+      apikey: config.key,
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `Supabase user lookup failed with ${response.status}`);
+  }
+  const user = text ? JSON.parse(text) : null;
+  if (!user?.id || !isUUID(user.id)) {
+    throw new Error("Supabase Auth did not return a valid user.");
+  }
+  return user;
+}
+
+function normalizeAuthProvider(provider) {
+  const clean = String(provider || "").trim().toLowerCase();
+  if (clean === "apple" || clean === "google" || clean === "email") {
+    return clean;
+  }
+  return "guest";
+}
+
+function normalizeEmail(email) {
+  const clean = String(email || "").trim().toLowerCase();
+  return clean.includes("@") ? clean : "";
+}
+
+function normalizeRedirectUrl(redirectTo) {
+  const clean = String(redirectTo || "").trim();
+  return clean || process.env.SUPABASE_AUTH_REDIRECT_URL || "tableup://auth-callback";
+}
+
+function displayNameFromSupabaseUser(user, fallback = "") {
+  const metadata = user?.user_metadata || {};
+  return String(
+    metadata.full_name ||
+    metadata.name ||
+    metadata.display_name ||
+    fallback ||
+    user?.email ||
+    "TableUp User"
+  ).trim();
+}
+
+function avatarUrlFromSupabaseUser(user) {
+  const metadata = user?.user_metadata || {};
+  return String(metadata.avatar_url || metadata.picture || "").trim();
 }
 
 function normalizeHouseholdRow(row) {

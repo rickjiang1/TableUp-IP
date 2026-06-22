@@ -26,6 +26,7 @@
     "drop:ingredients-default-unit": "node src/apply-drop-ingredients-default-unit.js",
     "seed:storage-life-rules": "node src/seed-storage-life-rules.js",
     "migrate:household-user": "node src/apply-household-user-mvp-migration.js",
+    "migrate:supabase-auth": "node src/apply-supabase-auth-mvp-migration.js",
     "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js"
   },
   "dependencies": {

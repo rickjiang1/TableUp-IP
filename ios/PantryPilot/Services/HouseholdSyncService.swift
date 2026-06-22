@@ -1,6 +1,8 @@
+import AuthenticationServices
 import Foundation
 import Security
 import SwiftData
+import UIKit
 
 struct HouseholdSession: Codable {
     let token: String
@@ -12,6 +14,9 @@ struct HouseholdSession: Codable {
 struct HouseholdUser: Codable {
     let id: String
     let displayName: String
+    let email: String?
+    let avatarUrl: String?
+    let authProvider: String?
     let lastSeenAt: String?
 }
 
@@ -65,6 +70,87 @@ struct HouseholdSyncService {
         request.httpBody = try JSONEncoder().encode(SessionBootstrapRequest(
             installId: installId,
             displayName: displayName
+        ))
+
+        let householdSession: HouseholdSession = try await send(request)
+        HouseholdSessionStore.save(householdSession)
+        return householdSession
+    }
+
+    func continueAsGuest() async throws -> HouseholdSession {
+        let installId = HouseholdSessionStore.installId()
+        var request = URLRequest(url: baseURL.appending(path: "api/auth/guest"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = HouseholdSessionStore.sessionToken, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(SessionBootstrapRequest(
+            installId: installId,
+            displayName: "Guest"
+        ))
+
+        let householdSession: HouseholdSession = try await send(request)
+        HouseholdSessionStore.save(householdSession)
+        return householdSession
+    }
+
+    func signInWithOAuth(provider: SupabaseAuthProvider) async throws -> HouseholdSession {
+        let redirectURL = authRedirectURL
+        var components = URLComponents(
+            url: baseURL.appending(path: "api/auth/oauth-url"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "provider", value: provider.rawValue),
+            URLQueryItem(name: "redirectTo", value: redirectURL.absoluteString)
+        ]
+        guard let endpoint = components.url else {
+            throw HouseholdSyncError.badResponse("Unable to build OAuth URL.")
+        }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        let response: OAuthURLResponse = try await send(request)
+        guard let authURL = URL(string: response.url) else {
+            throw HouseholdSyncError.badResponse("Backend returned an invalid OAuth URL.")
+        }
+
+        let callbackURL = try await OAuthSessionRunner.shared.start(
+            url: authURL,
+            callbackURLScheme: redirectURL.scheme ?? "tableup"
+        )
+        return try await completeSupabaseCallback(url: callbackURL, provider: provider)
+    }
+
+    func sendMagicLink(email: String) async throws {
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanEmail.isEmpty else {
+            throw HouseholdSyncError.badResponse("请输入邮箱。")
+        }
+        var request = URLRequest(url: baseURL.appending(path: "api/auth/magic-link"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(MagicLinkRequest(
+            email: cleanEmail,
+            redirectTo: authRedirectURL.absoluteString
+        ))
+        let _: MagicLinkResponse = try await send(request)
+    }
+
+    func completeSupabaseCallback(url: URL, provider: SupabaseAuthProvider = .email) async throws -> HouseholdSession {
+        guard let accessToken = url.authCallbackValue("access_token"), !accessToken.isEmpty else {
+            throw HouseholdSyncError.badResponse("登录回调缺少 access token。")
+        }
+
+        var request = URLRequest(url: baseURL.appending(path: "api/auth/supabase-session"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(SupabaseSessionRequest(
+            accessToken: accessToken,
+            provider: provider.rawValue,
+            installId: HouseholdSessionStore.installId(),
+            displayName: "TableUp User"
         ))
 
         let householdSession: HouseholdSession = try await send(request)
@@ -230,6 +316,17 @@ struct HouseholdSyncService {
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }
+
+    private var authRedirectURL: URL {
+        URL(string: "tableup://auth-callback")!
+    }
+}
+
+enum SupabaseAuthProvider: String {
+    case guest
+    case apple
+    case google
+    case email
 }
 
 enum HouseholdSessionStore {
@@ -341,6 +438,26 @@ private struct SessionBootstrapRequest: Encodable {
     let displayName: String
 }
 
+private struct OAuthURLResponse: Decodable {
+    let url: String
+}
+
+private struct MagicLinkRequest: Encodable {
+    let email: String
+    let redirectTo: String
+}
+
+private struct MagicLinkResponse: Decodable {
+    let ok: Bool
+}
+
+private struct SupabaseSessionRequest: Encodable {
+    let accessToken: String
+    let provider: String
+    let installId: String
+    let displayName: String
+}
+
 private struct SessionMeResponse: Decodable {
     let user: HouseholdUser
     let household: Household
@@ -357,6 +474,54 @@ private struct HouseholdMembersResponse: Decodable {
 
 private struct HouseholdJoinRequest: Encodable {
     let code: String
+}
+
+@MainActor
+private final class OAuthSessionRunner: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = OAuthSessionRunner()
+    private var session: ASWebAuthenticationSession?
+
+    func start(url: URL, callbackURLScheme: String) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme) { [weak self] callbackURL, error in
+                defer { self?.session = nil }
+                if let callbackURL {
+                    continuation.resume(returning: callbackURL)
+                } else {
+                    continuation.resume(throwing: error ?? HouseholdSyncError.badResponse("登录已取消。"))
+                }
+            }
+            session?.presentationContextProvider = self
+            session?.prefersEphemeralWebBrowserSession = false
+            if session?.start() != true {
+                session = nil
+                continuation.resume(throwing: HouseholdSyncError.badResponse("无法打开登录窗口。"))
+            }
+        }
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+    }
+}
+
+private extension URL {
+    func authCallbackValue(_ name: String) -> String? {
+        if let value = URLComponents(url: self, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == name })?
+            .value {
+            return value
+        }
+        guard let fragment, !fragment.isEmpty,
+              let components = URLComponents(string: "?\(fragment)") else {
+            return nil
+        }
+        return components.queryItems?.first(where: { $0.name == name })?.value
+    }
 }
 
 private struct CloudInventorySyncRequest: Encodable {
@@ -390,7 +555,8 @@ struct HouseholdInventoryItem: Codable, Identifiable {
 
     init(_ ingredient: StoredIngredient) {
         id = nil
-        clientId = ingredient.cloudClientId
+        let trimmedClientId = ingredient.cloudClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        clientId = trimmedClientId.isEmpty ? UUID().uuidString : trimmedClientId
         name = ingredient.name
         normalizedName = ingredient.normalizedName
         descriptionText = ingredient.descriptionText

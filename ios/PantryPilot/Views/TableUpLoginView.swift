@@ -2,30 +2,30 @@ import SwiftUI
 
 struct TableUpLoginView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @State private var displayName = ""
-    @State private var inviteCode = ""
+    @State private var email = ""
     @State private var isSigningIn = false
     @State private var errorMessage = ""
-    @FocusState private var focusedField: LoginField?
+    @State private var successMessage = ""
+    @FocusState private var isEmailFocused: Bool
 
     let onSignedIn: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Image("TableUpYouliaoMockBackground")
+                Image("LoginKitchenBackground")
                     .resizable()
                     .scaledToFill()
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
-                    .overlay(Color.black.opacity(0.42))
+                    .overlay(Color.black.opacity(0.30))
                     .ignoresSafeArea()
 
                 LinearGradient(
                     colors: [
                         Color.black.opacity(0.08),
-                        TableUpTheme.background.opacity(0.72),
-                        Color.black.opacity(0.92)
+                        TableUpTheme.background.opacity(0.54),
+                        Color.black.opacity(0.86)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -39,16 +39,6 @@ struct TableUpLoginView: View {
                         Text("TableUp")
                             .font(.system(size: 42, weight: .semibold, design: .serif))
                             .foregroundStyle(TableUpTheme.inkText)
-
-                        Text(text("一家人的厨房账本", "A shared kitchen ledger"))
-                            .font(.headline.weight(.medium))
-                            .foregroundStyle(TableUpTheme.softOrange)
-
-                        Text(text("先告诉我怎么称呼你。之后你可以把个人库存加入家庭库存，一家人一起看。", "Tell TableUp your name. You can keep personal inventory private, then add items to the family kitchen when ready."))
-                            .font(.footnote)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(TableUpTheme.mutedText)
-                            .padding(.horizontal, 18)
                     }
 
                     loginCard
@@ -60,85 +50,76 @@ struct TableUpLoginView: View {
             }
         }
         .dismissKeyboardOnTap()
-        .onAppear {
-            if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                displayName = text("我", "Me")
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                focusedField = .name
-            }
-        }
     }
 
     private var loginCard: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Label(text("你的名字", "Your name"), systemImage: "person.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(TableUpTheme.softOrange)
-
-                TextField(text("例如：Rick", "For example: Rick"), text: $displayName)
-                    .focused($focusedField, equals: .name)
-                    .textInputAutocapitalization(.words)
-                    .submitLabel(.next)
-                    .onSubmit { focusedField = .invite }
-                    .loginInputStyle()
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Label(text("家庭邀请码（可选）", "Family invite code (optional)"), systemImage: "person.2.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(TableUpTheme.softOrange)
-
-                TextField(text("有邀请码就填这里", "Enter an invite code if you have one"), text: $inviteCode)
-                    .focused($focusedField, equals: .invite)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .submitLabel(.go)
-                    .onSubmit { Task { await signIn() } }
-                    .loginInputStyle()
-            }
-
             if !errorMessage.isEmpty {
                 Text(errorMessage)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(TableUpTheme.warningRed)
             }
-
-            Button {
-                Task { await signIn() }
-            } label: {
-                HStack {
-                    if isSigningIn {
-                        ProgressView()
-                            .tint(Color(red: 0.15, green: 0.09, blue: 0.04))
-                    } else {
-                        Image(systemName: inviteCodeTrimmed.isEmpty ? "arrow.right.circle.fill" : "person.2.badge.plus.fill")
-                    }
-                    Text(inviteCodeTrimmed.isEmpty ? text("进入我的厨房", "Enter my kitchen") : text("加入家庭厨房", "Join family kitchen"))
-                        .font(.headline.weight(.semibold))
-                }
-                .foregroundStyle(Color(red: 0.15, green: 0.09, blue: 0.04))
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(
-                    LinearGradient(
-                        colors: [TableUpTheme.softOrange, TableUpTheme.orange],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            if !successMessage.isEmpty {
+                Text(successMessage)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(TableUpTheme.softOrange)
             }
-            .buttonStyle(.plain)
-            .disabled(isSigningIn)
-            .opacity(isSigningIn ? 0.72 : 1)
 
-            Text(text("MVP 使用本机安全 token 登录；真正邮箱/Apple 登录可以在下一阶段接上。", "MVP sign-in uses a secure device token. Email or Apple sign-in can be added next."))
-                .font(.caption)
-                .foregroundStyle(TableUpTheme.mutedText.opacity(0.82))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            VStack(spacing: 10) {
+                loginProviderButton(
+                    title: "游客模式继续",
+                    systemImage: "person.crop.circle",
+                    style: .gold
+                ) {
+                    Task { await continueAsGuest() }
+                }
+
+                loginProviderButton(
+                    title: "使用 Apple 继续",
+                    systemImage: "apple.logo",
+                    style: .dark
+                ) {
+                    Task { await signInWithOAuth(.apple) }
+                }
+
+                loginProviderButton(
+                    title: "使用 Google 继续",
+                    systemImage: "g.circle.fill",
+                    style: .light
+                ) {
+                    Task { await signInWithOAuth(.google) }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("邮箱 Magic Link", systemImage: "envelope.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(TableUpTheme.softOrange)
+
+                HStack(spacing: 10) {
+                    TextField("输入邮箱", text: $email)
+                        .focused($isEmailFocused)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.send)
+                        .onSubmit { Task { await sendMagicLink() } }
+                        .loginInputStyle()
+
+                    Button {
+                        Task { await sendMagicLink() }
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.15, green: 0.09, blue: 0.04))
+                            .frame(width: 50, height: 50)
+                            .background(TableUpTheme.softOrange)
+                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSigningIn)
+                }
+            }
         }
         .padding(20)
         .background(.ultraThinMaterial.opacity(0.28))
@@ -151,37 +132,121 @@ struct TableUpLoginView: View {
         .shadow(color: .black.opacity(0.45), radius: 28, y: 16)
     }
 
-    private func signIn() async {
+    private func loginProviderButton(
+        title: String,
+        systemImage: String,
+        style: LoginProviderButtonStyle,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.headline.weight(.semibold))
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .opacity(0.72)
+            }
+            .foregroundStyle(style.foreground)
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+            .background(style.background)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(style.stroke, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isSigningIn)
+        .opacity(isSigningIn ? 0.72 : 1)
+    }
+
+    private func continueAsGuest() async {
         guard !isSigningIn else { return }
         isSigningIn = true
         errorMessage = ""
+        successMessage = ""
         defer { isSigningIn = false }
 
         do {
-            let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let service = HouseholdSyncService()
-            _ = try await service.bootstrapIfNeeded(displayName: name.isEmpty ? "TableUp User" : name)
-            if !inviteCodeTrimmed.isEmpty {
-                _ = try await service.joinHousehold(code: inviteCodeTrimmed)
-            }
+            _ = try await HouseholdSyncService().continueAsGuest()
             onSignedIn()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private var inviteCodeTrimmed: String {
-        inviteCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func signInWithOAuth(_ provider: SupabaseAuthProvider) async {
+        guard !isSigningIn else { return }
+        isSigningIn = true
+        errorMessage = ""
+        successMessage = ""
+        defer { isSigningIn = false }
+
+        do {
+            _ = try await HouseholdSyncService().signInWithOAuth(provider: provider)
+            onSignedIn()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func sendMagicLink() async {
+        guard !isSigningIn else { return }
+        isSigningIn = true
+        errorMessage = ""
+        successMessage = ""
+        defer { isSigningIn = false }
+
+        do {
+            try await HouseholdSyncService().sendMagicLink(email: email)
+            successMessage = "登录链接已发送，请检查邮箱。"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func text(_ zh: String, _ en: String) -> String {
-        appLanguage == AppLanguage.chinese.rawValue ? zh : en
+        zh
     }
 }
 
-private enum LoginField: Hashable {
-    case name
-    case invite
+private enum LoginProviderButtonStyle {
+    case dark
+    case light
+    case gold
+
+    var foreground: Color {
+        switch self {
+        case .dark:
+            return TableUpTheme.inkText
+        case .light, .gold:
+            return Color(red: 0.15, green: 0.09, blue: 0.04)
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .dark:
+            return Color.black.opacity(0.44)
+        case .light:
+            return Color(red: 0.95, green: 0.86, blue: 0.70).opacity(0.92)
+        case .gold:
+            return TableUpTheme.softOrange.opacity(0.96)
+        }
+    }
+
+    var stroke: Color {
+        switch self {
+        case .dark:
+            return TableUpTheme.softOrange.opacity(0.28)
+        case .light, .gold:
+            return Color.white.opacity(0.28)
+        }
+    }
 }
 
 private extension View {

@@ -644,6 +644,16 @@ struct YouliaoView: View {
     @MainActor
     private func addToFamilyInventory(_ ingredient: StoredIngredient) async {
         do {
+            let currentClientId = ingredient.cloudClientId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let localItems = try modelContext.fetch(FetchDescriptor<StoredIngredient>())
+            let duplicateClientIdCount = localItems.filter {
+                !$0.cloudClientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                $0.cloudClientId == currentClientId
+            }.count
+            if currentClientId.isEmpty || duplicateClientIdCount > 1 {
+                ingredient.cloudClientId = UUID().uuidString
+                try modelContext.save()
+            }
             _ = try await HouseholdSyncService().addToFamilyInventory(ingredient)
             storageAlert = StorageAlertMessage(
                 title: "Saved",
@@ -911,8 +921,8 @@ private struct VoiceIngredientEntrySheet: View {
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height)
-                        .scaleEffect(1.02)
-                        .offset(y: 0)
+                        .scaleEffect(0.94)
+                        .offset(y: 6)
                         .clipped()
                         .ignoresSafeArea()
 

@@ -2,7 +2,9 @@ import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import {
   authenticateHouseholdToken,
+  authenticateSupabaseAuthSession,
   bootstrapHouseholdSession,
+  buildSupabaseOAuthUrl,
   createHouseholdInvite,
   deleteHouseholdInventoryItem,
   deleteCloudRecipe,
@@ -18,6 +20,7 @@ import {
   joinHouseholdWithInvite,
   markUnknownIngredientResolved,
   readVolumeFile,
+  sendSupabaseMagicLink,
   uploadVolumeFile,
   upsertCloudRecipe,
   upsertIngredientAliasSuggestion,
@@ -69,6 +72,48 @@ const server = createServer(async (request, response) => {
         installId: body.installId,
         displayName: body.displayName,
         existingToken: bearerToken(request)
+      });
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/guest") {
+      const body = await readJsonRequest(request, 128 * 1024);
+      const session = await bootstrapHouseholdSession({
+        installId: body.installId,
+        displayName: body.displayName || "Guest",
+        existingToken: bearerToken(request)
+      });
+      sendJson(response, 200, session);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/auth/oauth-url") {
+      const oauthUrl = buildSupabaseOAuthUrl({
+        provider: url.searchParams.get("provider") || "",
+        redirectTo: url.searchParams.get("redirectTo") || ""
+      });
+      sendJson(response, 200, { url: oauthUrl });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/magic-link") {
+      const body = await readJsonRequest(request, 128 * 1024);
+      await sendSupabaseMagicLink({
+        email: body.email,
+        redirectTo: body.redirectTo
+      });
+      sendJson(response, 200, { ok: true });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/supabase-session") {
+      const body = await readJsonRequest(request, 256 * 1024);
+      const session = await authenticateSupabaseAuthSession({
+        accessToken: body.accessToken,
+        provider: body.provider,
+        installId: body.installId,
+        displayName: body.displayName
       });
       sendJson(response, 200, session);
       return;

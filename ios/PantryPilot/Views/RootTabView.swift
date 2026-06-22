@@ -55,6 +55,11 @@ struct RootTabView: View {
         .task {
             await refreshSession()
         }
+        .onOpenURL { url in
+            Task {
+                await completeAuthCallback(url)
+            }
+        }
     }
 
     private func refreshSession() async {
@@ -91,6 +96,21 @@ struct RootTabView: View {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                 selectedTab = .pantry
             }
+        }
+    }
+
+    private func completeAuthCallback(_ url: URL) async {
+        guard url.scheme == "tableup", url.host == "auth-callback" else { return }
+        do {
+            _ = try await HouseholdSyncService().completeSupabaseCallback(url: url, provider: .email)
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isSignedIn = true
+                isCheckingSession = false
+            }
+        } catch {
+            HouseholdSessionStore.clear()
+            isSignedIn = false
+            isCheckingSession = false
         }
     }
 }

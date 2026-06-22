@@ -10,15 +10,19 @@ struct FamilyInventoryView: View {
     @State private var errorMessage = ""
 
     private var groupedItems: [(StorageLocation, [HouseholdInventoryItem])] {
-        StorageLocation.displayOrder.compactMap { location in
+        let knownLocations = Set(StorageLocation.displayOrder.map(\.rawValue))
+        return StorageLocation.displayOrder.compactMap { location in
             let filtered = items
-                .filter { $0.location == location.rawValue }
+                .filter {
+                    $0.location == location.rawValue ||
+                    (location == .pantry && !knownLocations.contains($0.location))
+                }
                 .sorted { lhs, rhs in
                     if lhs.expireDate != rhs.expireDate {
                         return lhs.expireDate < rhs.expireDate
                     }
                     return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                }
+            }
             return filtered.isEmpty ? nil : (location, filtered)
         }
     }
