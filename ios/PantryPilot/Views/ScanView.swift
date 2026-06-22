@@ -597,6 +597,7 @@ struct DetectedItemsReviewView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
     @State private var isSaving = false
     @State private var unitConversionsByItem: [UUID: [IngredientUnitConversionRule]] = [:]
+    @State private var resolvedUnitIngredientIdsByItem: [UUID: String] = [:]
     let save: () async -> Void
 
     var body: some View {
@@ -722,9 +723,6 @@ struct DetectedItemsReviewView: View {
                         item.expireDate = estimatedExpireDate(for: item)
                     }
                 }
-                .onDelete { indexSet in
-                    items.remove(atOffsets: indexSet)
-                }
             }
             .onAppear {
                 for index in items.indices {
@@ -836,7 +834,7 @@ struct DetectedItemsReviewView: View {
 
     @MainActor
     private func loadUnitConversions(for item: DetectedIngredient) async {
-        let ingredientId = unitLookupIngredientId(for: item)
+        let ingredientId = await resolveUnitLookupIngredientId(for: item)
         guard !ingredientId.isEmpty else {
             unitConversionsByItem[item.id] = []
             return
@@ -862,7 +860,7 @@ struct DetectedItemsReviewView: View {
     }
 
     private func unitLookupKey(for item: DetectedIngredient) -> String {
-        "\(item.canonicalIngredientId)|\(item.suggestedCanonicalIngredientId)|\(item.unit)"
+        "\(item.canonicalIngredientId)|\(item.suggestedCanonicalIngredientId)|\(item.name)|\(item.rawName)|\(item.sourceText)|\(item.unit)"
     }
 
     private func unitLookupIngredientId(for item: DetectedIngredient) -> String {
@@ -870,6 +868,51 @@ struct DetectedItemsReviewView: View {
         if !canonical.isEmpty {
             return canonical
         }
-        return item.suggestedCanonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suggested = item.suggestedCanonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !suggested.isEmpty {
+            return suggested
+        }
+        return resolvedUnitIngredientIdsByItem[item.id, default: ""].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @MainActor
+    private func resolveUnitLookupIngredientId(for item: DetectedIngredient) async -> String {
+        let existing = unitLookupIngredientId(for: item)
+        if !existing.isEmpty {
+            return existing
+        }
+
+        let queries = uniqueLookupQueries(for: item)
+        guard !queries.isEmpty else { return "" }
+
+        do {
+            let results = try await UnknownIngredientClient().fetchIngredientCandidateBatch(
+                queries: queries,
+                language: appLanguage == AppLanguage.chinese.rawValue ? "zh" : "en",
+                limit: 1
+            )
+            guard let bestCandidate = results
+                .flatMap(\.candidates)
+                .filter({ $0.score >= 0.60 })
+                .max(by: { $0.score < $1.score })
+            else {
+                return ""
+            }
+            resolvedUnitIngredientIdsByItem[item.id] = bestCandidate.ingredientId
+            return bestCandidate.ingredientId
+        } catch {
+            return ""
+        }
+    }
+
+    private func uniqueLookupQueries(for item: DetectedIngredient) -> [String] {
+        var seen = Set<String>()
+        let rawValues = [item.name, item.rawName, item.sourceText]
+        return rawValues.compactMap { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !seen.contains(trimmed) else { return nil }
+            seen.insert(trimmed)
+            return trimmed
+        }
     }
 }
