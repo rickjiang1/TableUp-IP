@@ -329,6 +329,7 @@ export async function upsertHouseholdInventory(auth, items) {
   }
 
   await upsertHouseholdInventoryRows(normalizedItems);
+  await markHouseholdRecommendationCacheStale(auth.household.id);
   return await fetchHouseholdInventory(auth);
 }
 
@@ -345,6 +346,35 @@ export async function deleteHouseholdInventoryItem(auth, clientId) {
         updated_at = now()
     where household_id = ${sqlUuid(auth.household.id)}
       and client_id = ${sqlString(cleanClientId)}
+  `);
+  await markHouseholdRecommendationCacheStale(auth.household.id);
+}
+
+async function markHouseholdRecommendationCacheStale(householdId) {
+  await query(`
+    insert into household_inventory_state (
+      household_id,
+      inventory_version,
+      recommendation_cache_status,
+      recalculation_started_at,
+      recalculation_finished_at,
+      updated_at
+    )
+    values (
+      ${sqlUuid(householdId)},
+      1,
+      'stale',
+      null,
+      null,
+      now()
+    )
+    on conflict (household_id)
+    do update set
+      inventory_version = household_inventory_state.inventory_version + 1,
+      recommendation_cache_status = 'stale',
+      recalculation_started_at = null,
+      recalculation_finished_at = null,
+      updated_at = now()
   `);
 }
 

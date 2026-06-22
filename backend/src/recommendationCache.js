@@ -20,6 +20,7 @@ export function recipeLibraryVersion(recipes) {
 
 export async function recommendationsForInventory({
   userId,
+  householdId,
   inventory,
   recipes,
   rules,
@@ -35,24 +36,45 @@ export async function recommendationsForInventory({
   if (!isUUID(cleanUserId)) {
     throw new Error("Valid user_id is required for recommendation cache.");
   }
+  const cleanHouseholdId = String(householdId || "").trim();
+  if (!isUUID(cleanHouseholdId)) {
+    throw new Error("Valid household_id is required for recommendation cache.");
+  }
 
   const cacheMinMatchScore = recommendationCacheMinMatchScore();
   const algorithmVersion = recommendationAlgorithmVersion();
   const currentInventoryHash = inventoryHash(inventory);
   const currentRecipeLibraryVersion = recipeLibraryVersion(recipes);
-  const cachedRows = await fetchCachedRecommendationRows({
-    userId: cleanUserId,
+  const cacheState = await ensureHouseholdInventoryState(cleanHouseholdId);
+  const currentInventoryVersion = Number(cacheState.inventory_version || 0);
+  const cacheReady = isCacheStateReady(cacheState, {
+    inventoryVersion: currentInventoryVersion,
     inventoryHash: currentInventoryHash,
     recipeLibraryVersion: currentRecipeLibraryVersion,
-    algorithmVersion,
-    cacheMinMatchScore
+    algorithmVersion
   });
+  const cachedRows = cacheReady
+    ? await fetchCachedRecommendationRows({
+        userId: cleanUserId,
+        householdId: cleanHouseholdId,
+        inventoryVersion: currentInventoryVersion,
+        inventoryHash: currentInventoryHash,
+        recipeLibraryVersion: currentRecipeLibraryVersion,
+        algorithmVersion,
+        cacheMinMatchScore
+      })
+    : [];
 
-  const cacheHit = cachedRows.length > 0;
-  const rows = cacheHit
-    ? cachedRows
+  const cacheHit = cacheReady;
+  const result = cacheHit
+    ? {
+        rows: cachedRows,
+        inventoryVersion: currentInventoryVersion,
+        status: "ready"
+      }
     : await refreshRecommendationCache({
         userId: cleanUserId,
+        householdId: cleanHouseholdId,
         inventory,
         recipes,
         rules,
@@ -61,6 +83,7 @@ export async function recommendationsForInventory({
         cacheMinMatchScore,
         algorithmVersion
       });
+  const rows = result.rows;
 
   const filtered = filterAndSortRows(rows, {
     sort,
@@ -78,9 +101,11 @@ export async function recommendationsForInventory({
     cache: {
       hit: cacheHit,
       inventoryHash: currentInventoryHash,
+      inventoryVersion: result.inventoryVersion,
       recipeLibraryVersion: currentRecipeLibraryVersion,
       algorithmVersion,
       cacheMinMatchScore,
+      status: result.status,
       cachedCount: rows.length,
       returnedCount: page.length
     }
@@ -89,6 +114,7 @@ export async function recommendationsForInventory({
 
 async function refreshRecommendationCache({
   userId,
+  householdId,
   inventory,
   recipes,
   rules,
@@ -97,6 +123,8 @@ async function refreshRecommendationCache({
   cacheMinMatchScore,
   algorithmVersion
 }) {
+  const calculationState = await markHouseholdRecommendationCacheRunning(householdId);
+  const startInventoryVersion = Number(calculationState.inventory_version || 0);
   const matches = await matchRecipesForInventory(inventory, { recipes, rules });
   const inventoryByIngredientId = buildInventoryByIngredientId(inventory);
   const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
@@ -106,6 +134,8 @@ async function refreshRecommendationCache({
       recipe: recipeById.get(match.recipe_id),
       inventoryByIngredientId,
       userId,
+      householdId,
+      inventoryVersion: startInventoryVersion,
       inventoryHash,
       recipeLibraryVersion,
       algorithmVersion
@@ -122,13 +152,20 @@ async function refreshRecommendationCache({
     .map((row, index) => ({ ...row, rank: index + 1 }));
   const cacheRows = allRows.filter((row) => row.match_score >= cacheMinMatchScore);
 
-  await replaceCachedRecommendations({
+  const writeAccepted = await replaceCachedRecommendations({
     userId,
+    householdId,
+    inventoryVersion: startInventoryVersion,
     inventoryHash,
     recipeLibraryVersion,
+    algorithmVersion,
     rows: cacheRows
   });
-  return cacheRows;
+  return {
+    rows: writeAccepted ? cacheRows : [],
+    inventoryVersion: startInventoryVersion,
+    status: writeAccepted ? "refreshed" : "stale"
+  };
 }
 
 function scoredRecommendationRow({
@@ -136,6 +173,8 @@ function scoredRecommendationRow({
   recipe,
   inventoryByIngredientId,
   userId,
+  householdId,
+  inventoryVersion,
   inventoryHash,
   recipeLibraryVersion,
   algorithmVersion
@@ -165,6 +204,7 @@ function scoredRecommendationRow({
 
   return {
     user_id: userId,
+    household_id: householdId,
     recipe_id: match.recipe_id,
     recipe_name: match.recipe_name,
     rank: 0,
@@ -176,6 +216,7 @@ function scoredRecommendationRow({
     leftover_score: roundOne(leftoverScore),
     reason_json: reasonJson,
     match_details_json: match,
+    inventory_version: inventoryVersion,
     inventory_hash: inventoryHash,
     recipe_library_version: recipeLibraryVersion,
     algorithm_version: algorithmVersion
@@ -221,6 +262,8 @@ function filterAndSortRows(rows, filters) {
 
 async function fetchCachedRecommendationRows({
   userId,
+  householdId,
+  inventoryVersion,
   inventoryHash,
   recipeLibraryVersion,
   algorithmVersion,
@@ -237,12 +280,15 @@ async function fetchCachedRecommendationRows({
            leftover_score::text as leftover_score,
            reason_json::text as reason_json,
            match_details_json::text as match_details_json,
+           inventory_version::text as inventory_version,
            inventory_hash,
            recipe_library_version,
            algorithm_version,
            calculated_at::text as calculated_at
     from user_recommendation_cache
     where user_id = ${sqlUuid(userId)}
+      and household_id = ${sqlUuid(householdId)}
+      and inventory_version = ${sqlNumber(inventoryVersion, 0)}
       and inventory_hash = ${sqlString(inventoryHash)}
       and recipe_library_version = ${sqlString(recipeLibraryVersion)}
       and algorithm_version = ${sqlString(algorithmVersion)}
@@ -254,21 +300,39 @@ async function fetchCachedRecommendationRows({
 
 async function replaceCachedRecommendations({
   userId,
+  householdId,
+  inventoryVersion,
   inventoryHash,
   recipeLibraryVersion,
+  algorithmVersion,
   rows
 }) {
+  const state = await fetchHouseholdInventoryState(householdId);
+  if (Number(state?.inventory_version || 0) !== Number(inventoryVersion)) {
+    return false;
+  }
+
   await query(`
     delete from user_recommendation_cache
     where user_id = ${sqlUuid(userId)}
+      and household_id = ${sqlUuid(householdId)}
+      and inventory_version = ${sqlNumber(inventoryVersion, 0)}
   `);
 
   if (rows.length === 0) {
-    return;
+    await markHouseholdRecommendationCacheReady({
+      householdId,
+      inventoryVersion,
+      inventoryHash,
+      recipeLibraryVersion,
+      algorithmVersion
+    });
+    return true;
   }
 
   const values = rows.map((row) => `(
     ${sqlUuid(row.user_id)},
+    ${sqlUuid(row.household_id)},
     ${sqlString(row.recipe_id)},
     ${sqlNumber(row.rank, 0)},
     ${sqlNumber(row.match_score, 0)},
@@ -279,6 +343,7 @@ async function replaceCachedRecommendations({
     ${sqlNumber(row.leftover_score, 0)},
     ${sqlJson(row.reason_json)}::jsonb,
     ${sqlJson(row.match_details_json)}::jsonb,
+    ${sqlNumber(row.inventory_version, 0)},
     ${sqlString(inventoryHash)},
     ${sqlString(recipeLibraryVersion)},
     ${sqlString(row.algorithm_version)},
@@ -289,6 +354,7 @@ async function replaceCachedRecommendations({
   await query(`
     insert into user_recommendation_cache (
       user_id,
+      household_id,
       recipe_id,
       rank,
       match_score,
@@ -299,6 +365,7 @@ async function replaceCachedRecommendations({
       leftover_score,
       reason_json,
       match_details_json,
+      inventory_version,
       inventory_hash,
       recipe_library_version,
       algorithm_version,
@@ -308,6 +375,7 @@ async function replaceCachedRecommendations({
     values ${values}
     on conflict (user_id, recipe_id, inventory_hash, recipe_library_version, algorithm_version)
     do update set
+      household_id = excluded.household_id,
       rank = excluded.rank,
       match_score = excluded.match_score,
       fridge_rescue_score = excluded.fridge_rescue_score,
@@ -317,9 +385,18 @@ async function replaceCachedRecommendations({
       leftover_score = excluded.leftover_score,
       reason_json = excluded.reason_json,
       match_details_json = excluded.match_details_json,
+      inventory_version = excluded.inventory_version,
       calculated_at = excluded.calculated_at,
       updated_at = now()
   `);
+  await markHouseholdRecommendationCacheReady({
+    householdId,
+    inventoryVersion,
+    inventoryHash,
+    recipeLibraryVersion,
+    algorithmVersion
+  });
+  return true;
 }
 
 function rowToRecommendation(row) {
@@ -334,6 +411,7 @@ function rowToRecommendation(row) {
     difficulty: row.difficulty,
     leftover_score: row.leftover_score,
     reason_json: row.reason_json,
+    inventory_version: row.inventory_version,
     match: row.match_details_json
   };
 }
@@ -352,10 +430,105 @@ function normalizeCachedRow(row) {
     leftover_score: Number(row.leftover_score || 0),
     reason_json: parseJson(row.reason_json, {}),
     match_details_json: match,
+    inventory_version: Number(row.inventory_version || 0),
     inventory_hash: row.inventory_hash,
     recipe_library_version: row.recipe_library_version,
     algorithm_version: row.algorithm_version,
     calculated_at: row.calculated_at || ""
+  };
+}
+
+async function ensureHouseholdInventoryState(householdId) {
+  const rows = await query(`
+    insert into household_inventory_state (household_id, inventory_version, recommendation_cache_status, updated_at)
+    values (${sqlUuid(householdId)}, 0, 'stale', now())
+    on conflict (household_id)
+    do update set updated_at = household_inventory_state.updated_at
+    returning household_id::text as household_id,
+              inventory_version::text as inventory_version,
+              recommendation_cache_status,
+              inventory_hash,
+              recipe_library_version,
+              algorithm_version
+  `);
+  return normalizeInventoryState(rows[0]);
+}
+
+async function fetchHouseholdInventoryState(householdId) {
+  const rows = await query(`
+    select household_id::text as household_id,
+           inventory_version::text as inventory_version,
+           recommendation_cache_status,
+           inventory_hash,
+           recipe_library_version,
+           algorithm_version
+    from household_inventory_state
+    where household_id = ${sqlUuid(householdId)}
+  `);
+  return rows[0] ? normalizeInventoryState(rows[0]) : null;
+}
+
+async function markHouseholdRecommendationCacheRunning(householdId) {
+  const rows = await query(`
+    insert into household_inventory_state (
+      household_id,
+      inventory_version,
+      recommendation_cache_status,
+      recalculation_started_at,
+      updated_at
+    )
+    values (${sqlUuid(householdId)}, 0, 'running', now(), now())
+    on conflict (household_id)
+    do update set
+      recommendation_cache_status = 'running',
+      recalculation_started_at = now(),
+      updated_at = now()
+    returning household_id::text as household_id,
+              inventory_version::text as inventory_version,
+              recommendation_cache_status,
+              inventory_hash,
+              recipe_library_version,
+              algorithm_version
+  `);
+  return normalizeInventoryState(rows[0]);
+}
+
+async function markHouseholdRecommendationCacheReady({
+  householdId,
+  inventoryVersion,
+  inventoryHash,
+  recipeLibraryVersion,
+  algorithmVersion
+}) {
+  await query(`
+    update household_inventory_state
+    set recommendation_cache_status = 'ready',
+        inventory_hash = ${sqlString(inventoryHash)},
+        recipe_library_version = ${sqlString(recipeLibraryVersion)},
+        algorithm_version = ${sqlString(algorithmVersion)},
+        recalculation_finished_at = now(),
+        updated_at = now()
+    where household_id = ${sqlUuid(householdId)}
+      and inventory_version = ${sqlNumber(inventoryVersion, 0)}
+  `);
+}
+
+function isCacheStateReady(state, versions) {
+  return state?.recommendation_cache_status === "ready"
+    && Number(state.inventory_version || 0) === Number(versions.inventoryVersion || 0)
+    && state.inventory_hash === versions.inventoryHash
+    && state.recipe_library_version === versions.recipeLibraryVersion
+    && state.algorithm_version === versions.algorithmVersion;
+}
+
+function normalizeInventoryState(row) {
+  return {
+    household_id: row?.household_id || "",
+    inventory_version: Number(row?.inventory_version || 0),
+    recommendation_cache_status: row?.recommendation_cache_status || "stale",
+    inventory_hash: row?.inventory_hash || "",
+    recipe_library_version: row?.recipe_library_version || "",
+    algorithm_version: row?.algorithm_version || ""
   };
 }
 

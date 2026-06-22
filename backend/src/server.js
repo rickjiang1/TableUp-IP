@@ -198,6 +198,7 @@ const server = createServer(async (request, response) => {
       ]);
       const recommendations = await recommendationsForInventory({
         userId: auth.user.id,
+        householdId: auth.household.id,
         inventory,
         recipes,
         rules,
@@ -222,6 +223,7 @@ const server = createServer(async (request, response) => {
       ]);
       const recommendations = await recommendationsForInventory({
         userId: auth.user.id,
+        householdId: auth.household.id,
         inventory: body.inventory,
         recipes,
         rules,

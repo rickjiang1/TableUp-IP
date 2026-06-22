@@ -3,8 +3,15 @@ import { query } from "./postgres.js";
 
 loadEnv();
 
-const sql = readFileSync(new URL("../migrations/20260622_user_recommendation_cache.sql", import.meta.url), "utf8");
-await query(sql);
+const migrations = [
+  "../migrations/20260622_user_recommendation_cache.sql",
+  "../migrations/20260622_recommendation_inventory_version.sql"
+];
+
+for (const migration of migrations) {
+  const sql = readFileSync(new URL(migration, import.meta.url), "utf8");
+  await query(sql);
+}
 console.log("Applied recommendation cache migration.");
 
 function loadEnv() {
