@@ -18,6 +18,7 @@ Use Chinese family kitchen cues: fridge shelves, bowls, steam, cutting boards, m
 - Fish Uncle: deep blue, white, sea-wave patterns.
 - Egg Xiaohuang: cream, yolk yellow, soft orange blush.
 - Chili Sis: vivid red, black leather, gold accessories, green stem.
+- Onion Bro: purple onion skin, beige/gray robe, dark round glasses, tea brown accents.
 
 ## Rendering Guidelines
 
@@ -29,3 +30,4 @@ Use Chinese family kitchen cues: fridge shelves, bowls, steam, cutting boards, m
 ## Animation Readiness
 
 Each character should support: neutral pose, talking pose, thinking pose, surprise, confidence, failure beat, and celebration. Costumes should be detailed but not so complex that motion becomes visually noisy.
+

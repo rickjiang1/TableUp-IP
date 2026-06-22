@@ -23,6 +23,10 @@ This repository does not contain business application code. It stores long-term 
 - 鸡蛋小黄 / Egg Xiaohuang: the anxious but lovable fresh-egg mascot.
 - 辣椒姐 / Chili Sis: the fiery energy booster.
 
+## Extended Characters
+
+- 洋葱哥 / Onion Bro: a calm, Buddhist-style onion wisdom character. The supplied reference sheet is stored in `characters/onion_bro/reference/onion_bro.png`.
+
 ## Repository Map
 
 - `docs/`: world building, character bible, naming rules, and visual style guide.
@@ -39,3 +43,9 @@ This repository does not contain business application code. It stores long-term 
 3. When creating new images, record the prompt, model, date, and intended usage.
 4. Preserve each character’s silhouette, personality, color palette, and catchphrases across all media.
 5. Use branch and commit messages that describe brand changes clearly.
+
+## Current Asset Mapping Notes
+
+- Character images were mapped by the role name and visible design in each image, not by upload order.
+- 姜姐 / Ginger Sis currently has a Character Bible and prompts, but no matching source reference image was provided.
+- 洋葱哥 / Onion Bro was provided as a source image and has been added as an extended character.

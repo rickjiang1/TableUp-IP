@@ -30,3 +30,9 @@ Examples:
 - 鱼叔 / Fish Uncle
 - 鸡蛋小黄 / Egg Xiaohuang
 - 辣椒姐 / Chili Sis
+
+## Extended Canon Candidates
+
+- 洋葱哥 / Onion Bro
+
+When a supplied visual asset does not match the requested core folder list, map it by the character name shown in the image and store it as an extended character or AI reference. Do not assign a mismatched visual to another character just to fill a folder.
