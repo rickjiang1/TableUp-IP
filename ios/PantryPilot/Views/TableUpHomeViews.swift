@@ -905,6 +905,7 @@ private struct VoiceIngredientEntrySheet: View {
     @State private var transcript = ""
     @State private var committedTranscript = ""
     @State private var currentSpeechSegment = ""
+    @State private var ignoresStaleSpeechUpdates = false
     @State private var detectedItems: [DetectedIngredient] = []
     @State private var showingDetectedItems = false
     @State private var isSaving = false
@@ -1142,6 +1143,7 @@ private struct VoiceIngredientEntrySheet: View {
         } else {
             committedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             currentSpeechSegment = ""
+            ignoresStaleSpeechUpdates = false
             speechRecognizer.transcript = ""
             isInputFocused = false
             speechRecognizer.startRecording(language: appLanguage)
@@ -1169,7 +1171,8 @@ private struct VoiceIngredientEntrySheet: View {
     private var voicePaper: Color { Color(red: 0.86, green: 0.70, blue: 0.46) }
 
     private func updateTranscript(with rawSegment: String) {
-        let segment = rawSegment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ignoresStaleSpeechUpdates else { return }
+        let segment = correctedVoiceTranscript(rawSegment).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !segment.isEmpty else { return }
         currentSpeechSegment = segment
         transcript = joinedTranscript(committedTranscript, currentSpeechSegment)
@@ -1184,6 +1187,8 @@ private struct VoiceIngredientEntrySheet: View {
     }
 
     private func clearTranscript() {
+        ignoresStaleSpeechUpdates = true
+        speechRecognizer.stopRecording()
         transcript = ""
         committedTranscript = ""
         currentSpeechSegment = ""
@@ -1198,9 +1203,53 @@ private struct VoiceIngredientEntrySheet: View {
         return "\(trimmedFirst)\n\(trimmedSecond)"
     }
 
+    private func correctedVoiceTranscript(_ text: String) -> String {
+        var corrected = text
+        let directCorrections: [(String, String)] = [
+            ("一棒牛肉", "一磅牛肉"),
+            ("一棒猪肉", "一磅猪肉"),
+            ("一棒羊肉", "一磅羊肉"),
+            ("一棒鸡肉", "一磅鸡肉"),
+            ("一棒鱼肉", "一磅鱼肉"),
+            ("一棒虾", "一磅虾"),
+            ("一半牛肉", "一磅牛肉"),
+            ("一半猪肉", "一磅猪肉"),
+            ("一半羊肉", "一磅羊肉"),
+            ("一半鸡肉", "一磅鸡肉"),
+            ("一半鱼肉", "一磅鱼肉"),
+            ("一半虾", "一磅虾"),
+            ("两棒", "两磅"),
+            ("二棒", "二磅"),
+            ("三棒", "三磅"),
+            ("四棒", "四磅"),
+            ("五棒", "五磅"),
+            ("六棒", "六磅"),
+            ("七棒", "七磅"),
+            ("八棒", "八磅"),
+            ("九棒", "九磅"),
+            ("十棒", "十磅"),
+            ("1棒", "1磅"),
+            ("2棒", "2磅"),
+            ("3棒", "3磅"),
+            ("4棒", "4磅"),
+            ("5棒", "5磅"),
+            ("6棒", "6磅"),
+            ("7棒", "7磅"),
+            ("8棒", "8磅"),
+            ("9棒", "9磅"),
+            ("10棒", "10磅")
+        ]
+
+        for (wrong, right) in directCorrections {
+            corrected = corrected.replacingOccurrences(of: wrong, with: right)
+        }
+
+        return corrected
+    }
+
     private func saveTranscript() async {
         commitCurrentSpeechSegment()
-        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = correctedVoiceTranscript(transcript).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
         isSaving = true

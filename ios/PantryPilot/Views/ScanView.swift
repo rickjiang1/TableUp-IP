@@ -706,7 +706,7 @@ struct DetectedItemsReviewView: View {
                             .datePickerStyle(.compact)
                             .environment(\.locale, datePickerLocale)
                     }
-                    .task(id: item.canonicalIngredientId) {
+                    .task(id: unitLookupKey(for: item)) {
                         await loadUnitConversions(for: item)
                     }
                     .onChange(of: item.category) { _, _ in
@@ -792,14 +792,14 @@ struct DetectedItemsReviewView: View {
 
     private func availableUnits(for item: DetectedIngredient) -> [String] {
         let currentUnit = IngredientUnit.normalizedSelection(for: item.unit)
-        guard !item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !unitLookupIngredientId(for: item).isEmpty else {
             return currentUnit.isEmpty ? [] : [currentUnit]
         }
 
         let units = unitConversionsByItem[item.id, default: []]
             .map { IngredientUnit.normalizedSelection(for: $0.fromUnit) }
             .filter { !$0.isEmpty }
-        let databaseUnits = uniqueUnits(units, preferredUnit: "")
+        let databaseUnits = uniqueUnits(units, preferredUnit: currentUnit)
         return databaseUnits.isEmpty ? (currentUnit.isEmpty ? [] : [currentUnit]) : databaseUnits
     }
 
@@ -836,7 +836,7 @@ struct DetectedItemsReviewView: View {
 
     @MainActor
     private func loadUnitConversions(for item: DetectedIngredient) async {
-        let ingredientId = item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ingredientId = unitLookupIngredientId(for: item)
         guard !ingredientId.isEmpty else {
             unitConversionsByItem[item.id] = []
             return
@@ -859,5 +859,17 @@ struct DetectedItemsReviewView: View {
         } catch {
             unitConversionsByItem[item.id] = []
         }
+    }
+
+    private func unitLookupKey(for item: DetectedIngredient) -> String {
+        "\(item.canonicalIngredientId)|\(item.suggestedCanonicalIngredientId)|\(item.unit)"
+    }
+
+    private func unitLookupIngredientId(for item: DetectedIngredient) -> String {
+        let canonical = item.canonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !canonical.isEmpty {
+            return canonical
+        }
+        return item.suggestedCanonicalIngredientId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

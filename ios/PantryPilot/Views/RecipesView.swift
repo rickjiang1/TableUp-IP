@@ -1036,9 +1036,11 @@ private struct RecipeFolderGlassCard: View {
     @ViewBuilder
     private var folderVisual: some View {
         if let imageData, let image = UIImage(data: imageData) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 90, height: 90)
+                .clipped()
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -1059,6 +1061,7 @@ private struct RecipeFolderGlassCard: View {
                     .font(.title3.weight(.medium))
                     .foregroundStyle(TableUpTheme.orange.opacity(0.72))
             }
+            .frame(width: 90, height: 90)
         }
     }
 
