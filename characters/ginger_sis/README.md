@@ -46,3 +46,7 @@ Anthropomorphic ginger sister, warm yellow ginger-root body with expressive eyes
 - Expression sheets go in expressions/.
 - Comic panels and poses go in comic/.
 - Animation turnarounds, pose sheets, and motion notes go in nimation/.
+
+## Reference Image
+
+- `reference/ginger_sis.png` is the current source reference sheet for 姜姐.

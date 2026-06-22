@@ -47,5 +47,6 @@ This repository does not contain business application code. It stores long-term 
 ## Current Asset Mapping Notes
 
 - Character images were mapped by the role name and visible design in each image, not by upload order.
-- 姜姐 / Ginger Sis currently has a Character Bible and prompts, but no matching source reference image was provided.
+- 姜姐 / Ginger Sis source reference image is stored in `characters/ginger_sis/reference/ginger_sis.png`.
 - 洋葱哥 / Onion Bro was provided as a source image and has been added as an extended character.
+
