@@ -3,7 +3,8 @@ import SwiftUI
 
 struct CanCookView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @AppStorage("almostCookThreshold") private var threshold = 0.7
+    private let readyThreshold = 0.8
+    private let almostLowerThreshold = 0.5
     @Query private var ingredients: [StoredIngredient]
     @Query private var recipes: [Recipe]
     @State private var cloudMatches: [CloudRecipeMatch] = []
@@ -16,19 +17,19 @@ struct CanCookView: View {
     }
 
     private var ready: [CookAssessment] {
-        assessments.filter { $0.matchRatio >= threshold }
+        assessments.filter { $0.matchRatio >= readyThreshold }
     }
 
     private var almostReady: [CookAssessment] {
-        assessments.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }
+        assessments.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold }
     }
 
     private var cloudReady: [CloudRecipeMatch] {
-        cloudMatches.filter { $0.matchRatio >= threshold }
+        cloudMatches.filter { $0.matchRatio >= readyThreshold }
     }
 
     private var cloudAlmostReady: [CloudRecipeMatch] {
-        cloudMatches.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }
+        cloudMatches.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold }
     }
 
     private var useCloudMatches: Bool {
@@ -219,9 +220,9 @@ struct CanCookView: View {
 
     private var emptyAlmostReadyText: String {
         if appLanguage == AppLanguage.chinese.rawValue {
-            return "还没有 30%-\(Int(threshold * 100))% 的匹配食谱。"
+            return "还没有 50%-79% 的匹配食谱。"
         }
-        return "No 30%-\(Int(threshold * 100))% matches yet."
+        return "No 50%-79% matches yet."
     }
 
     private func refreshCloudMatches() async {
@@ -272,7 +273,7 @@ struct CookAssessmentRow: View {
     let assessment: CookAssessment
     let fridgeRescueScore: Int
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @AppStorage("almostCookThreshold") private var threshold = 0.7
+    private let readyThreshold = 0.8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -287,7 +288,7 @@ struct CookAssessmentRow: View {
 
                 Spacer()
 
-                if assessment.matchRatio >= threshold {
+                if assessment.matchRatio >= readyThreshold {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
@@ -373,7 +374,7 @@ struct CloudCookAssessmentRow: View {
     let recipe: Recipe?
     let fridgeRescueScore: Int?
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @AppStorage("almostCookThreshold") private var threshold = 0.7
+    private let readyThreshold = 0.8
 
     var body: some View {
         HStack(spacing: 12) {
@@ -421,7 +422,7 @@ struct CloudCookAssessmentRow: View {
             Spacer()
 
             VStack(spacing: 8) {
-                if match.matchRatio >= threshold {
+                if match.matchRatio >= readyThreshold {
                     Text(L.text("Ready", language: appLanguage))
                         .font(.caption)
                         .fontWeight(.semibold)
@@ -444,7 +445,13 @@ struct CloudRecipeMatcher {
     var session: URLSession = .shared
 
     func matchRecipes(inventory: [StoredIngredient]) async throws -> [CloudRecipeMatch] {
-        let url = baseURL.appending(path: "api/recipe-matches")
+        let url = baseURL
+            .appending(path: "api/recommendations")
+            .appending(queryItems: [
+                URLQueryItem(name: "sort", value: "match_score"),
+                URLQueryItem(name: "min_match_score", value: "50"),
+                URLQueryItem(name: "limit", value: "100")
+            ])
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 60
@@ -464,7 +471,8 @@ struct CloudRecipeMatcher {
             throw GroceryPhotoExtractorError.badResponse("Backend returned \(httpResponse.statusCode): \(message)")
         }
 
-        return try JSONDecoder().decode(CloudRecipeMatchResponse.self, from: data).matches
+        let recommendationResponse = try JSONDecoder().decode(CloudRecommendationResponse.self, from: data)
+        return recommendationResponse.recommendations.map(\.match)
     }
 }
 
@@ -508,6 +516,14 @@ struct CloudRecipeMatchRequest: Encodable {
 
 struct CloudRecipeMatchResponse: Decodable {
     let matches: [CloudRecipeMatch]
+}
+
+struct CloudRecommendationResponse: Decodable {
+    let recommendations: [CloudRecommendation]
+}
+
+struct CloudRecommendation: Decodable {
+    let match: CloudRecipeMatch
 }
 
 struct CloudRecipeMatch: Decodable {

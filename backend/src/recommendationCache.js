@@ -27,6 +27,7 @@ export async function recommendationsForInventory({
   limit = 20,
   offset = 0,
   minMatchScore = null,
+  maxMatchScore = null,
   difficulty = "",
   minLeftoverScore = null
 }) {
@@ -35,7 +36,7 @@ export async function recommendationsForInventory({
     throw new Error("Valid user_id is required for recommendation cache.");
   }
 
-  const threshold = recommendationThreshold();
+  const cacheMinMatchScore = recommendationCacheMinMatchScore();
   const algorithmVersion = recommendationAlgorithmVersion();
   const currentInventoryHash = inventoryHash(inventory);
   const currentRecipeLibraryVersion = recipeLibraryVersion(recipes);
@@ -44,7 +45,7 @@ export async function recommendationsForInventory({
     inventoryHash: currentInventoryHash,
     recipeLibraryVersion: currentRecipeLibraryVersion,
     algorithmVersion,
-    threshold
+    cacheMinMatchScore
   });
 
   const cacheHit = cachedRows.length > 0;
@@ -57,13 +58,14 @@ export async function recommendationsForInventory({
         rules,
         inventoryHash: currentInventoryHash,
         recipeLibraryVersion: currentRecipeLibraryVersion,
-        threshold,
+        cacheMinMatchScore,
         algorithmVersion
       });
 
   const filtered = filterAndSortRows(rows, {
     sort,
     minMatchScore,
+    maxMatchScore,
     difficulty,
     minLeftoverScore
   });
@@ -78,7 +80,7 @@ export async function recommendationsForInventory({
       inventoryHash: currentInventoryHash,
       recipeLibraryVersion: currentRecipeLibraryVersion,
       algorithmVersion,
-      threshold,
+      cacheMinMatchScore,
       cachedCount: rows.length,
       returnedCount: page.length
     }
@@ -92,13 +94,13 @@ async function refreshRecommendationCache({
   rules,
   inventoryHash,
   recipeLibraryVersion,
-  threshold,
+  cacheMinMatchScore,
   algorithmVersion
 }) {
   const matches = await matchRecipesForInventory(inventory, { recipes, rules });
   const inventoryByIngredientId = buildInventoryByIngredientId(inventory);
   const recipeById = new Map(recipes.map((recipe) => [recipe.id, recipe]));
-  const rows = matches
+  const allRows = matches
     .map((match) => scoredRecommendationRow({
       match,
       recipe: recipeById.get(match.recipe_id),
@@ -108,7 +110,6 @@ async function refreshRecommendationCache({
       recipeLibraryVersion,
       algorithmVersion
     }))
-    .filter((row) => row.tonight_score >= threshold)
     .sort((left, right) => {
       if (right.tonight_score !== left.tonight_score) {
         return right.tonight_score - left.tonight_score;
@@ -119,14 +120,15 @@ async function refreshRecommendationCache({
       return left.recipe_name.localeCompare(right.recipe_name);
     })
     .map((row, index) => ({ ...row, rank: index + 1 }));
+  const cacheRows = allRows.filter((row) => row.match_score >= cacheMinMatchScore);
 
   await replaceCachedRecommendations({
     userId,
     inventoryHash,
     recipeLibraryVersion,
-    rows
+    rows: cacheRows
   });
-  return rows;
+  return cacheRows;
 }
 
 function scoredRecommendationRow({
@@ -183,9 +185,13 @@ function scoredRecommendationRow({
 function filterAndSortRows(rows, filters) {
   const cleanDifficulty = String(filters.difficulty || "").trim().toLowerCase();
   const minMatchScore = numberOrNull(filters.minMatchScore);
+  const maxMatchScore = numberOrNull(filters.maxMatchScore);
   const minLeftoverScore = numberOrNull(filters.minLeftoverScore);
   const filtered = rows.filter((row) => {
     if (minMatchScore !== null && row.match_score < minMatchScore) {
+      return false;
+    }
+    if (maxMatchScore !== null && row.match_score > maxMatchScore) {
       return false;
     }
     if (minLeftoverScore !== null && row.leftover_score < minLeftoverScore) {
@@ -218,7 +224,7 @@ async function fetchCachedRecommendationRows({
   inventoryHash,
   recipeLibraryVersion,
   algorithmVersion,
-  threshold
+  cacheMinMatchScore
 }) {
   const rows = await query(`
     select recipe_id,
@@ -240,7 +246,7 @@ async function fetchCachedRecommendationRows({
       and inventory_hash = ${sqlString(inventoryHash)}
       and recipe_library_version = ${sqlString(recipeLibraryVersion)}
       and algorithm_version = ${sqlString(algorithmVersion)}
-      and tonight_score >= ${sqlNumber(threshold, 80)}
+      and match_score >= ${sqlNumber(cacheMinMatchScore, 50)}
     order by rank asc, tonight_score desc
   `);
   return rows.map(normalizeCachedRow);
@@ -490,13 +496,13 @@ function sqlUuid(value) {
   return `${sqlString(clean)}::uuid`;
 }
 
-function recommendationThreshold() {
-  const value = Number(process.env.RECOMMENDATION_CACHE_MIN_TONIGHT_SCORE || 80);
-  return Number.isFinite(value) ? value : 80;
+function recommendationCacheMinMatchScore() {
+  const value = Number(process.env.RECOMMENDATION_CACHE_MIN_MATCH_SCORE || 50);
+  return Number.isFinite(value) ? value : 50;
 }
 
 function recommendationAlgorithmVersion() {
-  return process.env.RECOMMENDATION_ALGORITHM_VERSION || "tableup-dinner-v1";
+  return process.env.RECOMMENDATION_ALGORITHM_VERSION || "tableup-dinner-v2";
 }
 
 function isUUID(value) {

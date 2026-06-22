@@ -1518,7 +1518,8 @@ private enum YouliaoLocationFilter: String, CaseIterable, Identifiable {
 
 struct KaifanView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.english.rawValue
-    @AppStorage("almostCookThreshold") private var threshold = 0.7
+    private let readyThreshold = 0.8
+    private let almostLowerThreshold = 0.5
     @Query private var ingredients: [StoredIngredient]
     @Query(sort: \Recipe.createdAt, order: .reverse) private var recipes: [Recipe]
     @State private var selectedFilter: KaifanFilter = .recommended
@@ -1543,11 +1544,11 @@ struct KaifanView: View {
     private var localFilteredAssessments: [CookAssessment] {
         switch selectedFilter {
         case .recommended:
-            return hasMatched ? assessments.filter { $0.matchRatio >= 0.3 }.prefixArray(8) : []
+            return hasMatched ? assessments.filter { $0.matchRatio >= almostLowerThreshold }.prefixArray(8) : []
         case .ready:
-            return hasMatched ? assessments.filter { $0.matchRatio >= threshold } : []
+            return hasMatched ? assessments.filter { $0.matchRatio >= readyThreshold } : []
         case .almost:
-            return hasMatched ? assessments.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold } : []
+            return hasMatched ? assessments.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold } : []
         case .all:
             return assessments
         case .favorite:
@@ -1559,11 +1560,11 @@ struct KaifanView: View {
         let sorted = cloudMatches.sorted { $0.matchScorePercent > $1.matchScorePercent }
         switch selectedFilter {
         case .recommended:
-            return hasMatched ? Array(sorted.filter { $0.matchRatio >= 0.3 }.prefix(8)) : []
+            return hasMatched ? Array(sorted.filter { $0.matchRatio >= almostLowerThreshold }.prefix(8)) : []
         case .ready:
-            return hasMatched ? sorted.filter { $0.matchRatio >= threshold } : []
+            return hasMatched ? sorted.filter { $0.matchRatio >= readyThreshold } : []
         case .almost:
-            return hasMatched ? sorted.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold } : []
+            return hasMatched ? sorted.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold } : []
         case .all:
             return sorted
         case .favorite:
@@ -1868,7 +1869,7 @@ struct KaifanView: View {
                             matchPercent: Int((assessment.matchRatio * 100).rounded()),
                             time: assessment.recipe.totalTimeMinutes,
                             missing: assessment.missing.map(\.name),
-                            isReady: assessment.matchRatio >= threshold,
+                            isReady: assessment.matchRatio >= readyThreshold,
                             ingredientNames: assessment.recipe.ingredients.map(\.name)
                         )
                     }
@@ -1891,7 +1892,7 @@ struct KaifanView: View {
                         matchPercent: Int(match.matchScorePercent.rounded()),
                         time: recipe.totalTimeMinutes,
                         missing: match.missingRequiredIngredients.map(\.recipeIngredient),
-                        isReady: match.matchRatio >= threshold,
+                        isReady: match.matchRatio >= readyThreshold,
                         ingredientNames: recipe.ingredients.map(\.name)
                     )
                 }
@@ -1906,7 +1907,7 @@ struct KaifanView: View {
                         matchPercent: Int(match.matchScorePercent.rounded()),
                         time: nil,
                         missing: match.missingRequiredIngredients.map(\.recipeIngredient),
-                        isReady: match.matchRatio >= threshold,
+                        isReady: match.matchRatio >= readyThreshold,
                         ingredientNames: match.matchedIngredients.map(\.recipeIngredient)
                     )
                 }
@@ -2446,17 +2447,17 @@ struct KaifanView: View {
     private var readyCount: Int {
         guard hasMatched else { return 0 }
         if !cloudMatches.isEmpty {
-            return cloudMatches.filter { $0.matchRatio >= threshold }.count
+            return cloudMatches.filter { $0.matchRatio >= readyThreshold }.count
         }
-        return assessments.filter { $0.matchRatio >= threshold }.count
+        return assessments.filter { $0.matchRatio >= readyThreshold }.count
     }
     
     private var almostCount: Int {
         guard hasMatched else { return 0 }
         if !cloudMatches.isEmpty {
-            return cloudMatches.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }.count
+            return cloudMatches.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold }.count
         }
-        return assessments.filter { $0.matchRatio >= 0.3 && $0.matchRatio < threshold }.count
+        return assessments.filter { $0.matchRatio >= almostLowerThreshold && $0.matchRatio < readyThreshold }.count
     }
     
     private var expiringSoonCount: Int {

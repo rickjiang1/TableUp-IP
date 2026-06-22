@@ -205,6 +205,7 @@ const server = createServer(async (request, response) => {
         limit: Number(url.searchParams.get("limit") || 20),
         offset: Number(url.searchParams.get("offset") || 0),
         minMatchScore: url.searchParams.get("min_match_score"),
+        maxMatchScore: url.searchParams.get("max_match_score"),
         difficulty: url.searchParams.get("difficulty") || "",
         minLeftoverScore: url.searchParams.get("min_leftover_score")
       });
@@ -228,6 +229,7 @@ const server = createServer(async (request, response) => {
         limit: Number(url.searchParams.get("limit") || body.limit || 20),
         offset: Number(url.searchParams.get("offset") || body.offset || 0),
         minMatchScore: url.searchParams.get("min_match_score") || body.minMatchScore,
+        maxMatchScore: url.searchParams.get("max_match_score") || body.maxMatchScore,
         difficulty: url.searchParams.get("difficulty") || body.difficulty || "",
         minLeftoverScore: url.searchParams.get("min_leftover_score") || body.minLeftoverScore
       });
