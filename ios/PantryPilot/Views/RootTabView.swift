@@ -4,7 +4,8 @@ struct RootTabView: View {
     @State private var selectedTab: TableUpRootTab = .pantry
     @State private var pantryFloatingPanelOpen = false
     @State private var isCheckingSession = true
-    @State private var isSignedIn = HouseholdSessionStore.hasSession
+    @State private var isSignedIn = false
+    private let showLoginOnLaunchForTesting = true
 
     var body: some View {
         ZStack {
@@ -71,7 +72,7 @@ struct RootTabView: View {
 
         do {
             _ = try await HouseholdSyncService().refreshSession()
-            isSignedIn = true
+            isSignedIn = !showLoginOnLaunchForTesting
         } catch {
             HouseholdSessionStore.clear()
             isSignedIn = false

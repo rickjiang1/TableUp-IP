@@ -31,7 +31,7 @@ struct ManualIngredientForm: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .scaleEffect(1.03)
-                    .offset(y: 30)
+                    .offset(y: 48)
                     .clipped()
                     .ignoresSafeArea()
 
