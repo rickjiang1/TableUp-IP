@@ -27,7 +27,8 @@
     "seed:storage-life-rules": "node src/seed-storage-life-rules.js",
     "migrate:household-user": "node src/apply-household-user-mvp-migration.js",
     "migrate:supabase-auth": "node src/apply-supabase-auth-mvp-migration.js",
-    "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js"
+    "migrate:recipe-primary-method": "node src/apply-recipe-primary-method-migration.js",
+    "migrate:recommendation-cache": "node src/apply-recommendation-cache-migration.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

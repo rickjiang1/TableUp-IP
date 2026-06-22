@@ -33,6 +33,7 @@ import {
   rankIngredientCandidatesFromRules as rankRuleIngredientCandidatesFromRules
 } from "./ingredientMatcher.js";
 import { matchRecipesForInventory } from "./recipeMatching.js";
+import { recommendationsForInventory } from "./recommendationCache.js";
 import { groceryExtractionSchema, recipeExtractionSchema } from "./schemas.js";
 
 loadEnv();
@@ -185,6 +186,52 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/api/recipes") {
       const recipes = await getCachedCloudRecipes();
       sendJson(response, 200, { recipes });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/recommendations") {
+      const auth = await requireHouseholdAuth(request);
+      const [inventory, recipes, rules] = await Promise.all([
+        fetchHouseholdInventory(auth),
+        getCachedCloudRecipes(),
+        getCachedMatchingRules()
+      ]);
+      const recommendations = await recommendationsForInventory({
+        userId: auth.user.id,
+        inventory,
+        recipes,
+        rules,
+        sort: url.searchParams.get("sort") || "tonight_score",
+        limit: Number(url.searchParams.get("limit") || 20),
+        offset: Number(url.searchParams.get("offset") || 0),
+        minMatchScore: url.searchParams.get("min_match_score"),
+        difficulty: url.searchParams.get("difficulty") || "",
+        minLeftoverScore: url.searchParams.get("min_leftover_score")
+      });
+      sendJson(response, 200, recommendations);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/recommendations") {
+      const auth = await requireHouseholdAuth(request);
+      const body = await readJsonRequest(request, 1024 * 1024);
+      const [recipes, rules] = await Promise.all([
+        getCachedCloudRecipes(),
+        getCachedMatchingRules()
+      ]);
+      const recommendations = await recommendationsForInventory({
+        userId: auth.user.id,
+        inventory: body.inventory,
+        recipes,
+        rules,
+        sort: url.searchParams.get("sort") || body.sort || "tonight_score",
+        limit: Number(url.searchParams.get("limit") || body.limit || 20),
+        offset: Number(url.searchParams.get("offset") || body.offset || 0),
+        minMatchScore: url.searchParams.get("min_match_score") || body.minMatchScore,
+        difficulty: url.searchParams.get("difficulty") || body.difficulty || "",
+        minLeftoverScore: url.searchParams.get("min_leftover_score") || body.minLeftoverScore
+      });
+      sendJson(response, 200, recommendations);
       return;
     }
 

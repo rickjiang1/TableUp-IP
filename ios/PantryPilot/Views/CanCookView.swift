@@ -449,6 +449,9 @@ struct CloudRecipeMatcher {
         request.httpMethod = "POST"
         request.timeoutInterval = 60
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = HouseholdSessionStore.sessionToken, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.httpBody = try JSONEncoder().encode(CloudRecipeMatchRequest(inventory: inventory))
 
         let (data, response) = try await session.data(for: request)
@@ -476,7 +479,8 @@ struct CloudRecipeMatchRequest: Encodable {
                 quantity: $0.quantity,
                 unit: $0.unit,
                 canonicalQuantity: $0.canonicalQuantity,
-                canonicalUnit: $0.canonicalUnit
+                canonicalUnit: $0.canonicalUnit,
+                expireDate: $0.expireDate
             )
         }
     }
@@ -488,6 +492,7 @@ struct CloudRecipeMatchRequest: Encodable {
         let unit: String
         let canonicalQuantity: Double
         let canonicalUnit: String
+        let expireDate: Date
 
         enum CodingKeys: String, CodingKey {
             case name
@@ -496,6 +501,7 @@ struct CloudRecipeMatchRequest: Encodable {
             case unit
             case canonicalQuantity = "canonical_quantity"
             case canonicalUnit = "canonical_unit"
+            case expireDate = "expire_date"
         }
     }
 }
