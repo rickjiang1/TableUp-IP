@@ -37,3 +37,10 @@ Tomato Zai is a hot-blooded tomato companion in the Fridge Jianghu / TableUp Foo
 
 Profile: `docs/characters/tomato_zai.md`
 Concept sheet: `assets/characters/tomato_zai/tomato_zai_concept_sheet.png`
+
+## Companion Character: 牛大壮 / Niu Dazhuang
+
+Niu Dazhuang is a reliable hard-bodied companion in the Fridge Jianghu / TableUp Food Universe. He is steady, direct, loyal, and protective, bringing physical support and dependable warmth to cooking battles. His role is to reassure the team, defend weaker companions, and turn kitchen chaos into practical action.
+
+Profile: `docs/characters/niu_dazhuang.md`
+Concept sheet: `assets/characters/niu_dazhuang/niu_dazhuang_concept_sheet.png`
