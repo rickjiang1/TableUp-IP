@@ -50,3 +50,11 @@ This repository does not contain business application code. It stores long-term 
 - 姜姐 / Ginger Sis source reference image is stored in `characters/ginger_sis/reference/ginger_sis.png`.
 - 洋葱哥 / Onion Bro was provided as a source image and has been added as an extended character.
 
+
+## Character Asset Standard
+
+All character assets now use a unified folder pattern:
+
+`characters/<character_id>/README.md`, `prompts.md`, `reference/<character_id>_concept_sheet.png`, `expressions/`, `comic/`, and `animation/`.
+
+See `docs/character_asset_standard.md` for the full rule.

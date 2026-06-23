@@ -7,7 +7,7 @@
 * Universe: Fridge Jianghu / TableUp Food Universe
 * Character type: Reliable hard-bodied companion
 * Role: Defensive teammate, physical support, and hearty energy provider for cooking battles.
-* Asset: `assets/characters/niu_dazhuang/niu_dazhuang_concept_sheet.png`
+* Asset: `characters/niu_dazhuang/reference/niu_dazhuang_concept_sheet.png`
 
 ## Personality
 
@@ -53,3 +53,4 @@ His growth is about balancing toughness with tenderness, and learning when to de
 ## AI Prompt
 
 Anthropomorphic young ox companion, strong compact body, warm brown patterned skin, curved horns, thick expressive eyebrows, large eyes, confident smile, red headband with ox emblem, cream Chinese-style martial vest, red waist sash, wrist wraps, sturdy shoes, heroic but cute, reliable protective teammate, Fridge Jianghu cooking adventure universe, 3D picture-book character concept sheet, expressive poses, warm parchment background, family-friendly, animation-ready design.
+

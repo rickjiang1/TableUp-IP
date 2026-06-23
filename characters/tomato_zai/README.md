@@ -39,4 +39,5 @@ Through cooking battles, he learns that true strength comes from teamwork, timin
 
 ## Asset
 
-* Concept sheet: `assets/characters/tomato_zai/tomato_zai_concept_sheet.png`
+* Concept sheet: `characters/tomato_zai/reference/tomato_zai_concept_sheet.png`
+
