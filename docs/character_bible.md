@@ -30,3 +30,10 @@ All character prompts should include: anthropomorphic ingredient, warm Chinese f
 Onion Bro is a calm, Buddhist-style onion wisdom character. He works best as a cooling presence in chaotic kitchen scenes, a one-line comic closer, and a relaxed supporting role who helps the team stop overthinking.
 
 Canon note: Onion Bro is preserved as an extended character because a reference image was supplied, while the requested core cast uses 姜姐 / Ginger Sis as one of the eight primary folders.
+
+## Starting Ingredient Companion: 番茄仔 / Tomato Zai
+
+Tomato Zai is a hot-blooded tomato companion in the Fridge Jianghu / TableUp Food Universe. He first appears in Season 1, Episode 1 as part of the starting team with Egg Xiao Huang, Scallion Bro, and Garlic Master. His story role is to bring emotional momentum to the first cooking battle and help turn egg, scallion, garlic, and tomato into tomato scrambled eggs under Fridge Master’s guidance.
+
+Profile: `docs/characters/tomato_zai.md`
+Concept sheet: `assets/characters/tomato_zai/tomato_zai_concept_sheet.png`
