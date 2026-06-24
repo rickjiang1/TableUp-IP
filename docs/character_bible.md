@@ -14,10 +14,11 @@ See `docs/character_asset_standard.md`.
 * [Meat Bro / 肉哥](../characters/meat_bro/README.md): protein protector and dependable muscle.
 * [Fish Uncle / 鱼叔](../characters/fish_uncle/README.md): calm seafood sage.
 * [Egg Xiaohuang / 鸡蛋小黄](../characters/egg_xiaohuang/README.md): anxious but lovable fresh-egg mascot.
-* [Chili Sis / 辣椒姐](../characters/chili_sis/README.md): fiery appetite and energy booster.
+* [Chili Sis / 辣椒姐](../characters/chili_sis/README.md): fiery spice core, explosive teammate, and morale igniter.
 * [Onion Bro / 洋葱哥](../characters/onion_bro/README.md): calm wisdom companion.
 * [Tomato Zai / 番茄仔](../characters/tomato_zai/README.md): hot-blooded tomato companion.
 * [Niu Dazhuang / 牛大壮](../characters/niu_dazhuang/README.md): reliable hard-bodied companion.
 * [Huajiao Xiaoma / 花椒小麻](../characters/huajiao_xiaoma/README.md): nimble Sichuan pepper aroma spirit.
 * [Pixian Zhanggui / 郫县掌柜](../characters/pixian_zhanggui/README.md): doubanjiang base-flavor master.
+
 
