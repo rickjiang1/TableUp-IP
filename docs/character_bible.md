@@ -20,5 +20,5 @@ See `docs/character_asset_standard.md`.
 * [Niu Dazhuang / 牛大壮](../characters/niu_dazhuang/README.md): reliable hard-bodied companion.
 * [Huajiao Xiaoma / 花椒小麻](../characters/huajiao_xiaoma/README.md): nimble Sichuan pepper aroma spirit.
 * [Pixian Zhanggui / 郫县掌柜](../characters/pixian_zhanggui/README.md): doubanjiang base-flavor master.
-
+* [Dou Xiaobai / 豆小白](../characters/dou_xiaobai/README.md): tender tofu flavor carrier and gentle support companion.
 
