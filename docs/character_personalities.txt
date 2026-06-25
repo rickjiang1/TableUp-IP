@@ -1,0 +1,130 @@
+﻿TableUp Character Personalities
+Generated from characters/*/README.md
+
+========================================
+炒鸡叔 / Chaoji Shu
+ID: chaoji_shu
+
+热情豪爽，幽默乐观，见人就招呼，见锅就来劲。
+炒鸡叔不怕场面乱，反而越热闹越兴奋；他相信没有什么烦恼是一锅爆炒解决不了的。
+他看起来夸张又爱表现，但本质上很会照顾大家的胃口和情绪，是团队里的开心火力和厨房节奏担当。
+
+他的核心情绪是“锅气一到，烦恼全跑”：用笑声、火候和香气把低落场面重新炒热。
+
+========================================
+辣椒姐 / Chili Sis
+ID: chili_sis
+
+自信张扬，敢爱敢恨，直率嘴亮，嘴甜心辣。
+她看似强势不服输，实际非常重情重义，愿意为伙伴两肋插刀。
+她的核心情绪是“热血不退”：越是遇到挑战，越要用行动把全场点燃。
+
+========================================
+豆小白 / Dou Xiaobai
+ID: dou_xiaobai
+
+外表柔软，内心善良，有点怕生但很认真。
+豆小白说话轻轻的，遇到大场面会紧张，但关键时刻不会掉链子。
+他不喜欢抢风头，却总能把大家的味道接住、融合好，是团队里让人安心的温柔力量。
+
+他的核心情绪是“柔软但可靠”：看起来容易被碰碎，实际上很有承受力，也愿意替伙伴分担压力。
+
+========================================
+鸡蛋小黄 / Egg Xiaohuang
+ID: egg_xiaohuang
+
+胆小、话痨、敏感、容易焦虑，但善良又渴望被需要。
+
+========================================
+鱼叔 / Fish Uncle
+ID: fish_uncle
+
+沉着冷静，经验丰富，话不多但句句在理，懂得等待。
+
+========================================
+冰箱天师 / Fridge Tianshi
+ID: fridge_tianshi
+
+沉稳睿智，仙风道骨，温和但有原则，关键时刻一语点醒。
+
+========================================
+大蒜爷 / Garlic Master
+ID: garlic_master
+
+沉默寡言，慢热，稳重，关键时刻准狠发言。
+
+========================================
+姜姐 / Ginger Sis
+ID: ginger_sis
+
+干练爽快，嘴上犀利但心很热，擅长把混乱变成步骤。
+
+========================================
+锅盖猪 / Guogai Zhu
+ID: guogai_zhu
+
+胆大心粗，话多先行，容易上头，但心地不坏。
+他爱热闹、讲义气，遇到危险会第一个冲出去挡在伙伴前面。
+虽然常常看起来莽撞，其实特别在意大家有没有吃饱、有没有被欺负。
+
+他的核心情绪是“越战越香”：越遇到压力，越能把热锅气、肉香和勇气一起爆出来。
+
+========================================
+Huajiao Xiaoma
+ID: huajiao_xiaoma
+
+Huajiao Xiaoma is nimble, playful, quick-witted, curious, and a little mischievous.
+She reacts fast, jokes easily, and loves surprising others with a delayed burst of numbing flavor.
+She can seem cheeky on the surface, but she is reliable when timing matters and will always jump in when a friend needs help.
+
+Her core emotional trait is lively precision: she looks chaotic, but her best moments come from knowing exactly when to release the spark.
+She must learn that good flavor is not only about being noticed, but about arriving at the right second.
+
+========================================
+肉哥 / Meat Bro
+ID: meat_bro
+
+豪爽直接，重情义，外表凶悍内心柔软，讲义气护伙伴。
+
+========================================
+Niu Dazhuang
+ID: niu_dazhuang
+
+Niu Dazhuang is steady, reliable, direct, warm-hearted, and deeply loyal.
+He does not show off with clever words, but he always appears when the team needs help.
+He is brave without being reckless, serious when protecting friends, and gentle when someone is hungry or tired.
+
+His core emotional trait is dependable warmth: he wants everyone to feel safe, fed, and supported.
+He believes promises matter, teamwork matters, and no teammate should be left behind.
+
+========================================
+洋葱哥 / Onion Bro
+ID: onion_bro
+
+佛系、淡定、看透一切、不争不抢。平时慢悠悠，关键时刻能一句话点醒大家。
+
+========================================
+Pixian Zhanggui
+ID: pixian_zhanggui
+
+Pixian Zhanggui is steady, seasoned, principled, observant, and quietly formidable.
+He speaks slowly, rarely wastes a word, and cares deeply about rules, timing, and proper foundations.
+He can look stern, but his strictness comes from craft pride and a desire to help younger ingredients understand depth.
+
+His core emotional trait is patient authority: he believes flavor cannot be rushed.
+He teaches others that true aroma is built through time, heat control, and respect for ingredients.
+
+========================================
+大葱哥 / Scallion Bro
+ID: scallion_bro
+
+热心八卦，嘴快心直，讲义气，风风火火但靠谱。
+
+========================================
+Tomato Zai
+ID: tomato_zai
+
+Tomato Zai is energetic, impulsive, proud, loyal, and a little dramatic.
+He wants to prove that tomato is not just a side ingredient.
+He often acts brave first and thinks later, but deep down he is warm-hearted and cares about his friends.
+
