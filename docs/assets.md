@@ -18,4 +18,5 @@ This document records production asset paths for the TableUp / Fridge Jianghu br
 * Pixian Zhanggui / 郫县掌柜: `characters/pixian_zhanggui/reference/pixian_zhanggui_concept_sheet.png`
 * Dou Xiaobai / 豆小白: `characters/dou_xiaobai/reference/dou_xiaobai_concept_sheet.png`
 * Guogai Zhu / 锅盖猪: `characters/guogai_zhu/reference/guogai_zhu_concept_sheet.png`
+* Chaoji Shu / 炒鸡叔: `characters/chaoji_shu/reference/chaoji_shu_concept_sheet.png`
 

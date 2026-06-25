@@ -22,4 +22,5 @@ See `docs/character_asset_standard.md`.
 * [Pixian Zhanggui / 郫县掌柜](../characters/pixian_zhanggui/README.md): doubanjiang base-flavor master.
 * [Dou Xiaobai / 豆小白](../characters/dou_xiaobai/README.md): tender tofu flavor carrier and gentle support companion.
 * [Guogai Zhu / 锅盖猪](../characters/guogai_zhu/README.md): hot-headed pork shield fighter and wok-energy companion.
+* [Chaoji Shu / 炒鸡叔](../characters/chaoji_shu/README.md): street-chef rooster uncle and explosive wok-energy morale booster.
 
